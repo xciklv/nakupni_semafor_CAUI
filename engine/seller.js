@@ -11,9 +11,39 @@ function registrable(host) {
   return labels.slice(-n).join('.');
 }
 
+function sellerDecode(s) {
+  return s.replace(/&(nbsp|amp|lt|gt|quot|#\d{1,7}|#x[0-9a-f]{1,6});/gi, (all, n) => {
+    const k = n.toLowerCase();
+    if (k === 'nbsp') return ' ';
+    if (k === 'amp') return '&';
+    if (k === 'lt') return '<';
+    if (k === 'gt') return '>';
+    if (k === 'quot') return '"';
+    const cp = k.charAt(1) === 'x' ? parseInt(k.slice(2), 16) : parseInt(k.slice(1), 10);
+    return cp > 0 && cp <= 0x10ffff && !(cp >= 0xd800 && cp <= 0xdfff) ? String.fromCodePoint(cp) : ' ';
+  });
+}
+
+// Text prvního <p>...</p> v řetězci (indexOf, každý znak nejvýše jednou); bez uzavření vrací ''.
+function sellerFirstP(rest) {
+  let pos = 0;
+  for (;;) {
+    const i = rest.indexOf('<p', pos);
+    if (i === -1) return '';
+    const c = rest.charAt(i + 2);
+    if (c !== '>' && !/\s/.test(c)) { pos = i + 2; continue; }
+    const gt = rest.indexOf('>', i);
+    if (gt === -1) return '';
+    const close = rest.indexOf('</p>', gt + 1);
+    if (close === -1) return '';
+    return sellerDecode(rest.slice(gt + 1, close).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+  }
+}
+
 // Lineární parser: stránka se rozdělí na úseky podle začátků list_titles, každý znak se čte nejvýše jednou.
+// Výsledek je objekt bez prototypu (klíče jako constructor nejsou zásah).
 function parseCoi(html) {
-  const list = {};
+  const list = Object.create(null);
   const src = String(html);
   const startRe = /<p class\s*=\s*"list_titles">/g;
   const starts = [];
@@ -28,17 +58,17 @@ function parseCoi(html) {
     let rest = seg.slice(titleEnd + 4);
     const artEnd = rest.indexOf('</article>');
     if (artEnd !== -1) rest = rest.slice(0, artEnd);
-    const reason = /<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/.exec(rest);
-    const text = reason ? reason[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
-    span[1].split(/[,;\s]+/).map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '')).filter((d) => /\./.test(d)).forEach((d) => { list[d] = text; });
+    const text = sellerFirstP(rest);
+    sellerDecode(span[1]).split(/[,;\s]+/).map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '')).filter((d) => /\./.test(d)).forEach((d) => { list[d] = text; });
   }
   return list;
 }
 
 function rdapAgeDays(rdap, nowMs) {
   const ev = rdap && Array.isArray(rdap.events) ? rdap.events.find((e) => e.eventAction === 'registration') : null;
-  const t = ev ? Date.parse(ev.eventDate) : NaN;
-  return Number.isFinite(t) ? Math.floor((nowMs - t) / 86400000) : null;
+  const t = ev && typeof ev.eventDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(ev.eventDate) ? Date.parse(ev.eventDate) : NaN;
+  const age = Number.isFinite(t) ? Math.floor((nowMs - t) / 86400000) : null;
+  return age !== null && age >= 0 ? age : null;
 }
 
 function isValidIco(s) {
@@ -53,6 +83,7 @@ function isValidIco(s) {
 
 function rdapUrl(host) {
   const h = registrable(host);
+  if (h.indexOf('.') === -1) return null;
   return h.endsWith('.cz') ? 'https://rdap.nic.cz/domain/' + h : 'https://rdap.org/domain/' + h;
 }
 
@@ -63,7 +94,7 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
   const s = x.prodejce;
 
   if (rezim === 'eshop' && host) {
-    try {
+    if (registrable(host).indexOf('.') !== -1) try {
       const age = rdapAgeDays(await fetchers.rdap(host), nowMs);
       if (age != null) {
         checks++;
@@ -73,7 +104,7 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
     } catch (e) { /* zdroj nedostupný: nezapočítá se do kontrol */ }
     if (coiList) {
       checks++;
-      const key = [host.toLowerCase().replace(/^www\./, ''), registrable(host)].find((k) => coiList[k] !== undefined);
+      const key = [host.toLowerCase().replace(/^www\./, ''), registrable(host)].find((k) => Object.prototype.hasOwnProperty.call(coiList, k));
       if (key) add('coi_seznam', 'high', 'E-shop je na seznamu rizikových webů ČOI', coiList[key] || 'Web je uveden na seznamu České obchodní inspekce.', 'ČOI', true);
     }
   }
@@ -83,9 +114,10 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
     else {
       try {
         const body = await fetchers.ares(s.ico);
+        if (body !== null && (typeof body !== 'object' || Array.isArray(body))) throw new Error('ARES: neplatná odpověď');
         checks++;
         if (body === null) add('ico_neexistuje', 'high', 'IČO neexistuje v registru', 'IČO ' + s.ico + ' nebylo v ARES nalezeno.', 'ARES');
-        else if (body.datumZaniku) add('subjekt_zanikl', 'high', 'Uvedený subjekt zanikl', (body.obchodniJmeno || s.ico) + ' zanikl dne ' + body.datumZaniku + '.', 'ARES');
+        else if (typeof body.datumZaniku === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.datumZaniku)) add('subjekt_zanikl', 'high', 'Uvedený subjekt zanikl', (body.obchodniJmeno || s.ico) + ' zanikl dne ' + body.datumZaniku + '.', 'ARES');
       } catch (e) { /* ARES nedostupný */ }
     }
   }

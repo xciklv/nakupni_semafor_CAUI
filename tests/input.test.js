@@ -177,3 +177,15 @@ for (const [label, html] of PATHOLOGICAL) {
     assert.ok(dt < 1000, `trvalo ${dt} ms`);
   });
 }
+
+test('hostname bez tečky (kromě IP literálů) → ok:false', () => {
+  for (const raw of ['https://constructor', 'https://__proto__', 'https://toString/x', 'https://intranet', 'http://hasOwnProperty/']) {
+    const r = normalizeUrl(raw);
+    assert.equal(r.ok, false, raw);
+    assert.equal(r.duvod, 'neplatná adresa', raw);
+  }
+});
+
+test('alza.cz a veřejné IP literály zůstávají ok', () => {
+  for (const raw of ['https://alza.cz', 'http://93.184.216.34/', 'http://[2001:db8::1]/']) assert.equal(normalizeUrl(raw).ok, true, raw);
+});

@@ -89,6 +89,7 @@ function normalizeUrl(raw) {
   let host = u.hostname.toLowerCase();
   if (host.endsWith('.')) host = host.slice(0, -1);
   if (inpIsBlockedHost(host)) return { ok: false, duvod: 'odkaz míří na interní nebo neveřejnou adresu' };
+  if (host.charAt(0) !== '[' && host.indexOf('.') === -1) return { ok: false, duvod: 'neplatná adresa' };
   host = host.replace(/^www\./, '');
   const inList = (list) => list.some((d) => host === d || host.endsWith('.' + d));
   if (inList(SHORTENERS)) return { ok: false, duvod: 'zkrácený odkaz – vložte plný odkaz nebo screenshot' };

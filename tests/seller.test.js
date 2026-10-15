@@ -151,3 +151,60 @@ test('provozovatel_uveden:false a odeslání z CN → jen mimo_eu_bez_kontaktu',
   assert.deepEqual(ids(r), ['mimo_eu_bez_kontaktu']);
   assert.equal(r.status, 'ok');
 });
+
+test('dědičné klíče objektů nejsou zásah v seznamu ČOI', async () => {
+  const parsed = parseCoi(COI_HTML);
+  for (const host of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    for (const coiList of [{}, parsed]) {
+      const r = await sellerSignals({ x: X(), rezim: 'eshop', host, nowMs: NOW, fetchers: { rdap: async () => rdap('2000-01-01T00:00:00+00:00') }, coiList });
+      assert.ok(!ids(r).includes('coi_seznam'), host);
+    }
+  }
+});
+
+test('parseCoi: nezavřené <p> za list_titles je lineární', () => {
+  for (const open of ['<p>', '<p x>']) {
+    const t0 = Date.now();
+    const l = parseCoi('<p class="list_titles"><span>a.cz</span></p>' + open.repeat(100000));
+    assert.ok(Date.now() - t0 < 1000, open);
+    assert.equal(l['a.cz'], '');
+  }
+});
+
+test('parseCoi dekóduje entity v důvodu a dělí domény i podle &nbsp;', () => {
+  const l = parseCoi('<article><p class="list_titles"><span>a.cz&nbsp;b.cz</span></p><p>A&nbsp;&amp;&nbsp;B &lt;x&gt; &quot;q&quot; &#65;&#x42;</p></article>');
+  assert.equal(l['a.cz'], 'A & B <x> "q" AB');
+  assert.equal(l['b.cz'], 'A & B <x> "q" AB');
+});
+
+test('ARES: ne-objekt je nedostupný zdroj, datumZaniku musí být datum', async () => {
+  const run = (body) => sellerSignals({
+    x: X({ ico: '27082440' }), rezim: 'eshop', host: 'x.cz', nowMs: NOW,
+    fetchers: { rdap: async () => { throw new Error('down'); }, ares: async () => body }, coiList: null,
+  });
+  for (const body of [undefined, 'oops', 5]) {
+    const r = await run(body);
+    assert.equal(r.status, 'unchecked');
+    assert.deepEqual(r.signals, []);
+  }
+  const bad = await run({ obchodniJmeno: 'X', datumZaniku: 'ne datum' });
+  assert.deepEqual(bad.signals, []);
+  assert.equal(bad.status, 'ok');
+  const good = await run({ obchodniJmeno: 'X', datumZaniku: '2020-01-01' });
+  assert.deepEqual(ids(good), ['subjekt_zanikl']);
+});
+
+test('rdapAgeDays: budoucí a neplatné datum → null', () => {
+  assert.equal(rdapAgeDays(rdap('2027-01-01T00:00:00+00:00'), NOW), null);
+  assert.equal(rdapAgeDays(rdap('October 5 2026'), NOW), null);
+  assert.equal(rdapAgeDays(rdap('1'), NOW), null);
+  assert.equal(rdapAgeDays(rdap('2026-10-05'), NOW), 10);
+});
+
+test('doména bez tečky: RDAP se nevolá a rdapUrl vrací null', async () => {
+  let called = false;
+  const r = await sellerSignals({ x: X(), rezim: 'eshop', host: 'intranet', nowMs: NOW, fetchers: { rdap: async () => { called = true; return {}; } }, coiList: null });
+  assert.equal(called, false);
+  assert.equal(r.status, 'unchecked');
+  assert.equal(rdapUrl('intranet'), null);
+});
