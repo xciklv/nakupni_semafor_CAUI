@@ -36,7 +36,7 @@ function sellerFirstP(rest) {
     if (gt === -1) return '';
     const close = rest.indexOf('</p>', gt + 1);
     if (close === -1) return '';
-    return sellerDecode(rest.slice(gt + 1, close).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+    return sellerDecode(rest.slice(gt + 1, close).replace(/<[^<>]*>/g, ' ').replace(/[<>]/g, ' ')).replace(/\s+/g, ' ').trim();
   }
 }
 
@@ -53,13 +53,16 @@ function parseCoi(html) {
     const seg = src.slice(starts[i].bodyAt, i + 1 < starts.length ? starts[i + 1].at : src.length);
     const titleEnd = seg.indexOf('</p>');
     if (titleEnd === -1) continue;
-    const span = /<span>([\s\S]*?)<\/span>/.exec(seg.slice(0, titleEnd));
-    if (!span) continue;
+    const spanAt = seg.indexOf('<span>');
+    if (spanAt === -1 || spanAt >= titleEnd) continue;
+    const spanEnd = seg.indexOf('</span>', spanAt + 6);
+    if (spanEnd === -1 || spanEnd >= titleEnd) continue;
+    const spanText = seg.slice(spanAt + 6, spanEnd);
     let rest = seg.slice(titleEnd + 4);
     const artEnd = rest.indexOf('</article>');
     if (artEnd !== -1) rest = rest.slice(0, artEnd);
     const text = sellerFirstP(rest);
-    sellerDecode(span[1]).split(/[,;\s]+/).map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '')).filter((d) => /\./.test(d)).forEach((d) => { list[d] = text; });
+    sellerDecode(spanText).split(/[,;\s]+/).map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '')).filter((d) => /\./.test(d)).forEach((d) => { list[d] = text; });
   }
   return list;
 }

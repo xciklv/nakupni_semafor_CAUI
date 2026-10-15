@@ -208,3 +208,21 @@ test('doména bez tečky: RDAP se nevolá a rdapUrl vrací null', async () => {
   assert.equal(r.status, 'unchecked');
   assert.equal(rdapUrl('intranet'), null);
 });
+
+const coiWrap = (title, reason) => '<article><p class = "list_titles"><br>' + title + '</p><p>' + reason + '</p></article>';
+const fast = (name, html) => test('parseCoi lineární: ' + name, () => {
+  const t0 = Date.now();
+  assert.doesNotThrow(() => parseCoi(html));
+  assert.ok(Date.now() - t0 < 1000);
+});
+fast('"<" x100000 v důvodu', coiWrap('<span>a.cz</span>', '<'.repeat(100000)));
+fast('"<span>" x100000 bez uzavření v list_titles', coiWrap('<span>'.repeat(100000), 'x'));
+fast('"<span>a.cz" x50000 bez uzavření', coiWrap('<span>a.cz'.repeat(50000), 'x'));
+fast('"<a" x100000 v důvodu', coiWrap('<span>a.cz</span>', '<a'.repeat(100000)));
+
+test('parseCoi: běžný záznam se dvěma doménami a značkami v důvodu', () => {
+  const l = parseCoi(coiWrap('<span>a.cz, b.cz</span>', '<b>x</b>'));
+  assert.equal(l['a.cz'], 'x');
+  assert.equal(l['b.cz'], 'x');
+  assert.deepEqual(Object.keys(l).sort(), ['a.cz', 'b.cz']);
+});
