@@ -390,18 +390,26 @@ test('stránka nemá žádnou externí adresu (http/https) ani zdroje mimo volá
 });
 
 // Fake DOM: jen to, co stránka používá. Eviduje zápisy innerHTML/outerHTML a atributy všech elementů.
-function makeFakeDom() {
+function makeFakeDom(opts = {}) {
   const all = [];
   const byId = {};
+  const log = opts.log || [];
+  const ctx2d = {
+    set fillStyle(v) { log.push('fillStyle:' + v); },
+    fillRect() { log.push('fillRect'); },
+    drawImage() { log.push('drawImage'); },
+  };
   class FakeEl {
     constructor(tag) {
       this.tagName = tag; this.children = []; this.textContent = ''; this.className = '';
-      this.attrs = {}; this.htmlWrites = 0; this.files = []; this.value = ''; this.disabled = false;
+      this.attrs = {}; this.htmlWrites = 0; this.files = []; this.value = ''; this.disabled = false; this.listeners = {};
       all.push(this);
     }
     append(...nodes) { this.children.push(...nodes); }
     replaceChildren(...nodes) { this.children = nodes; }
-    addEventListener() {}
+    addEventListener(type, fn) { this.listeners[type] = fn; }
+    getContext() { return opts.noCtx ? null : ctx2d; }
+    toDataURL() { return opts.dataUrl !== undefined ? opts.dataUrl : 'data:image/jpeg;base64,' + 'A'.repeat(200); }
     setAttribute(name, v) { this.attrs[name] = String(v); }
     set innerHTML(v) { this.htmlWrites++; }
     set outerHTML(v) { this.htmlWrites++; }
@@ -417,16 +425,33 @@ function texts(node, acc = []) {
   node.children.forEach((c) => texts(c, acc));
   return acc;
 }
-function loadPage() {
+// opts: noCtx (canvas bez 2d kontextu), dataUrl (co vrátí toDataURL), imgError (Image.onerror), fetchFail (síťová chyba)
+function loadPage(opts = {}) {
   const m = /<script>([\s\S]*?)<\/script>/.exec(pageHtml());
   assert.ok(m, 'chybí <script>');
-  const dom = makeFakeDom();
+  const log = [];
+  const dom = makeFakeDom({ log, noCtx: opts.noCtx, dataUrl: opts.dataUrl });
+  const fetchCalls = [];
+  class FakeImage {
+    constructor() { this.width = 800; this.height = 600; }
+    set src(v) {
+      setTimeout(() => {
+        try {
+          if (opts.imgError) { if (this.onerror) this.onerror(); } else if (this.onload) this.onload();
+        } catch (e) { log.push('threw:' + e.message); }
+      }, 0);
+    }
+  }
+  class FakeURL extends URL {
+    static createObjectURL() { return 'blob:test'; }
+    static revokeObjectURL(u) { log.push('revoke:' + u); }
+  }
   const ctx = vm.createContext({
-    document: dom.document, location: { href: 'http://x/webhook/nakupni-kontrola-web' }, URL, console,
-    fetch: async () => ({ json: async () => ({}) }),
+    document: dom.document, location: { href: 'http://x/webhook/nakupni-kontrola-web' }, URL: FakeURL, Image: FakeImage, console,
+    fetch: async (...args) => { fetchCalls.push(args); if (opts.fetchFail) throw new Error('síť'); return { json: async () => ({}) }; },
   });
-  vm.runInContext(m[1] + '\n;this.__render = render;', ctx);
-  return { render: ctx.__render, dom };
+  vm.runInContext(m[1] + '\n;this.__render = render; this.__toJpegBase64 = toJpegBase64;', ctx);
+  return { render: ctx.__render, toJpeg: ctx.__toJpegBase64, dom, log, fetchCalls };
 }
 
 test('render: ok odpověď s HTML v dukazu se vykreslí jako prostý text, bez innerHTML', () => {
@@ -477,4 +502,170 @@ test('render: stav ok s chybějícími nebo špatnými poli nevyhodí výjimku',
   const t = texts(dom.document.getElementById('out'));
   assert.ok(t.includes('Krok'));
   assert.ok(!t.some((s) => s.includes('[object Object]')));
+});
+
+// --- oprava 1: kontrast, zpracování obrázků, whitelist tříd, CSS ---
+// Promise může ve staré verzi viset (výjimka uvnitř onload), proto každé čekání má strop.
+async function settle(p, ms = 300) {
+  let t;
+  const timeout = new Promise((resolve) => { t = setTimeout(() => resolve({ timeout: true }), ms); });
+  try {
+    return await Promise.race([p.then((value) => ({ ok: true, value }), (error) => ({ ok: false, error })), timeout]);
+  } finally { clearTimeout(t); }
+}
+const ALLOWED_CLASSES = new Set(['', 'card', 'light', 'sig', 'err', 'hint', 'zelená', 'oranžová', 'červená', 'šedá', 'high', 'medium', 'low']);
+const CHYBA_ZPRACOVANI = 'Obrázek se nepodařilo zpracovat.';
+const CHYBA_NACTENI = 'Obrázek se nepodařilo načíst.';
+
+test('toJpegBase64: getContext vrátí null -> reject s hláškou o zpracování, objectURL se uvolní', async () => {
+  const { toJpeg, log } = loadPage({ noCtx: true });
+  const r = await settle(toJpeg({ name: 'a.jpg' }));
+  assert.ok(!r.timeout, 'promise visí');
+  assert.equal(r.ok, false);
+  assert.equal(r.error.message, CHYBA_ZPRACOVANI);
+  assert.ok(log.includes('revoke:blob:test'));
+});
+
+test('toJpegBase64: prázdný data URL ("data:,") -> reject', async () => {
+  const { toJpeg, log } = loadPage({ dataUrl: 'data:,' });
+  const r = await settle(toJpeg({ name: 'a.jpg' }));
+  assert.ok(!r.timeout, 'promise visí');
+  assert.equal(r.ok, false);
+  assert.equal(r.error.message, CHYBA_ZPRACOVANI);
+  assert.ok(log.includes('revoke:blob:test'));
+});
+
+test('toJpegBase64: data URL jiného typu než image/jpeg -> reject', async () => {
+  const { toJpeg } = loadPage({ dataUrl: 'data:image/png;base64,' + 'A'.repeat(200) });
+  const r = await settle(toJpeg({ name: 'a.png' }));
+  assert.equal(r.ok, false);
+  assert.equal(r.error.message, CHYBA_ZPRACOVANI);
+});
+
+test('toJpegBase64: šťastná cesta -> JPEG base64, plátno se nejdřív vyplní bílou', async () => {
+  const { toJpeg, log } = loadPage();
+  const r = await settle(toJpeg({ name: 'a.jpg' }));
+  assert.equal(r.ok, true, r.error && r.error.message);
+  assert.equal(r.value.mime, 'image/jpeg');
+  assert.equal(r.value.data, 'A'.repeat(200));
+  const fill = log.indexOf('fillStyle:#fff');
+  const rect = log.indexOf('fillRect');
+  const draw = log.indexOf('drawImage');
+  assert.ok(fill >= 0 && rect > fill && draw > rect, 'pořadí: ' + log.join(','));
+  assert.ok(log.includes('revoke:blob:test'));
+});
+
+test('toJpegBase64: onerror -> reject s hláškou o načtení a objectURL se uvolní', async () => {
+  const { toJpeg, log } = loadPage({ imgError: true });
+  const r = await settle(toJpeg({ name: 'a.jpg' }));
+  assert.ok(!r.timeout, 'promise visí');
+  assert.equal(r.ok, false);
+  assert.equal(r.error.message, CHYBA_NACTENI);
+  assert.ok(log.includes('revoke:blob:test'));
+});
+
+async function submitPage(opts, files) {
+  const p = loadPage(opts);
+  p.dom.byId.shots.files = files;
+  const r = await settle(p.dom.byId.f.listeners.submit({ preventDefault() {} }));
+  assert.ok(!r.timeout, 'submit se nedokončil');
+  return { ...p, go: p.dom.byId.go, out: p.dom.byId.out };
+}
+
+test('submit: chyba zpracování obrázku ukáže konkrétní hlášku, tlačítko se povolí, fetch se nevolá', async () => {
+  const { out, go, fetchCalls } = await submitPage({ noCtx: true }, [{ name: 'a.png' }]);
+  const t = texts(out);
+  assert.ok(t.includes(CHYBA_ZPRACOVANI), t.join(' | '));
+  assert.ok(!t.includes(CHYBA_OBECNA));
+  assert.equal(go.disabled, false);
+  assert.equal(go.textContent, 'Zkontrolovat');
+  assert.equal(fetchCalls.length, 0);
+});
+
+test('submit: chyba načtení obrázku ukáže konkrétní hlášku', async () => {
+  const { out, go } = await submitPage({ imgError: true }, [{ name: 'a.png' }]);
+  assert.ok(texts(out).includes(CHYBA_NACTENI));
+  assert.equal(go.disabled, false);
+});
+
+test('submit: síťová chyba ukáže obecnou hlášku a tlačítko se povolí', async () => {
+  const { out, go } = await submitPage({ fetchFail: true }, []);
+  assert.ok(texts(out).includes(CHYBA_OBECNA));
+  assert.equal(go.disabled, false);
+  assert.equal(go.textContent, 'Zkontrolovat');
+});
+
+test('change: více než 4 soubory -> upozornění, zkontrolují se první 4', async () => {
+  const { dom } = loadPage();
+  dom.byId.shots.files = [1, 2, 3, 4, 5, 6];
+  dom.byId.shots.listeners.change();
+  assert.match(dom.byId.limit.textContent, /6 souborů/);
+  assert.match(dom.byId.limit.textContent, /prvních 4/);
+});
+
+test('render: nepovolené semafor/závažnost se nahradí šedou/low, třídy jsou jen z whitelistu', () => {
+  const { render, dom } = loadPage();
+  render({ stav: 'ok', semafor: 'card err', shrnuti: 'x', co_delat: [], signaly: [{ zavaznost: 'zelená zelená', titul: 'T', dukaz: 'D', modul: 'M' }] });
+  const badge = dom.all.find((n) => n.className.startsWith('light'));
+  assert.equal(badge.className, 'light šedá');
+  assert.equal(badge.textContent, 'Riziko: šedá');
+  const sig = dom.all.find((n) => n.className.startsWith('sig'));
+  assert.equal(sig.className, 'sig low');
+  for (const n of dom.all) for (const t of n.className.split(' ')) assert.ok(ALLOWED_CLASSES.has(t), 'nepovolená třída: ' + t);
+});
+
+test('render: povolený semafor se zobrazí beze změny', () => {
+  const { render, dom } = loadPage();
+  render({ stav: 'ok', semafor: 'zelená', shrnuti: 'x', co_delat: [], signaly: [{ zavaznost: 'high', titul: 'T', dukaz: 'D', modul: 'M' }] });
+  const badge = dom.all.find((n) => n.className.startsWith('light'));
+  assert.equal(badge.className, 'light zelená');
+  assert.equal(badge.textContent, 'Riziko: zelená');
+  assert.equal(dom.all.find((n) => n.className.startsWith('sig')).className, 'sig high');
+});
+
+function cssOf() { return /<style>([\s\S]*?)<\/style>/.exec(pageHtml())[1]; }
+function tokensOf(block) {
+  const t = {};
+  for (const m of block.matchAll(/--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,6})\b/g)) t[m[1]] = m[2];
+  return t;
+}
+function lumOf(hex) {
+  let h = hex.slice(1);
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.substr(i, 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function contrastOf(a, b) {
+  const x = lumOf(a), y = lumOf(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+test('kontrast: text --on na odznacích a tlačítku má poměr >= 4.5 v obou tématech (WCAG)', () => {
+  const css = cssOf();
+  const light = tokensOf(/:root\s*\{([^}]*)\}/.exec(css)[1]);
+  const darkM = /@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(css);
+  assert.ok(darkM, 'chybí tmavé téma');
+  const dark = { ...light, ...tokensOf(darkM[1]) };
+  const bgToken = {};
+  for (const m of css.matchAll(/\.([^\s{,:]+)\s*\{\s*background:\s*var\(--(\w+)\)/g)) bgToken[m[1]] = m[2];
+  assert.match(css, /\.light \{[^}]*color:\s*var\(--on\)/);
+  assert.match(css, /button \{[^}]*color:\s*var\(--on\)/);
+  assert.match(css, /button \{[^}]*background:\s*var\(--accent\)/);
+  const pairs = ['zelená', 'oranžová', 'červená', 'šedá'].map((c) => bgToken[c]).concat(['accent']);
+  assert.equal(pairs.filter(Boolean).length, 5, 'chybí mapování třída -> pozadí');
+  for (const [name, t] of [['světlé', light], ['tmavé', dark]]) {
+    assert.ok(t.on, name + ': chybí --on');
+    for (const tok of pairs) {
+      assert.ok(t[tok], name + ': chybí --' + tok);
+      const ratio = contrastOf(t[tok], t.on);
+      assert.ok(ratio >= 4.5, name + ' --' + tok + ' vs --on: ' + ratio.toFixed(2));
+    }
+  }
+});
+
+test('CSS: color-scheme light dark na :root a overflow-wrap:anywhere pro .card, .sig a p', () => {
+  const css = cssOf();
+  assert.match(css, /:root\s*\{[^}]*color-scheme:\s*light dark/);
+  assert.match(css, /\.card,\s*\.sig,\s*p\s*\{[^}]*overflow-wrap:\s*anywhere/);
 });

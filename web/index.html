@@ -5,22 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nákupní kontrola</title>
 <style>
-  :root { --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6672; --card:#fff; --line:#dde2e8; --accent:#1f6feb; --green:#1a7f37; --orange:#b35900; --red:#c62828; --gray:#6b7280; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e8ebef; --muted:#9aa5b1; --card:#1d2227; --line:#2f363d; --accent:#58a6ff; --green:#3fb950; --orange:#e3912e; --red:#f47067; --gray:#9ca3af; } }
+  :root { color-scheme: light dark; --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6672; --card:#fff; --line:#dde2e8; --accent:#1f6feb; --green:#1a7f37; --orange:#b35900; --red:#c62828; --gray:#6b7280; --on:#ffffff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e8ebef; --muted:#9aa5b1; --card:#1d2227; --line:#2f363d; --accent:#58a6ff; --green:#3fb950; --orange:#e3912e; --red:#f47067; --gray:#9ca3af; --on:#0b0f14; } }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
   main { max-width:720px; margin:0 auto; padding:24px 16px 64px; }
   h1 { font-size:1.6rem; margin:0 0 4px; }
   h2 { font-size:1.2rem; margin:0 0 8px; }
   p.lead { color:var(--muted); margin:0 0 20px; }
+  .card, .sig, p { overflow-wrap:anywhere; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
   label { display:block; font-weight:600; margin:12px 0 4px; }
   input[type=text], textarea { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
   textarea { min-height:90px; resize:vertical; }
-  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:12px 20px; font:inherit; font-weight:600; cursor:pointer; margin-top:16px; }
+  button { background:var(--accent); color:var(--on); border:0; border-radius:8px; padding:12px 20px; font:inherit; font-weight:600; cursor:pointer; margin-top:16px; }
   button:disabled { opacity:.6; cursor:wait; }
   .hint { color:var(--muted); font-size:.9rem; }
-  .light { display:inline-block; padding:8px 18px; border-radius:999px; color:#fff; font-weight:700; font-size:1.2rem; }
+  .light { display:inline-block; padding:8px 18px; border-radius:999px; color:var(--on); font-weight:700; font-size:1.2rem; }
   .zelená { background:var(--green); } .oranžová { background:var(--orange); } .červená { background:var(--red); } .šedá { background:var(--gray); }
   .sig { border-left:4px solid var(--line); padding:4px 0 4px 12px; margin:12px 0; }
   .sig.high { border-color:var(--red); } .sig.medium { border-color:var(--orange); } .sig.low { border-color:var(--gray); }
@@ -49,7 +50,11 @@
 <script>
 const API = new URL('nakupni-kontrola', location.href).href;
 const CHYBA_OBECNA = 'Kontrola se nepodařila. Zkuste to prosím znovu.';
+const CHYBA_ZPRACOVANI = 'Obrázek se nepodařilo zpracovat.';
+const CHYBA_NACTENI = 'Obrázek se nepodařilo načíst.';
 const MAX_SNIMKU = 4;
+const SEMAFORY = ['zelená', 'oranžová', 'červená', 'šedá'];
+const ZAVAZNOSTI = ['high', 'medium', 'low'];
 const out = document.getElementById('out');
 const shots = document.getElementById('shots');
 const limit = document.getElementById('limit');
@@ -59,23 +64,40 @@ function isObj(v) { return v !== null && typeof v === 'object'; }
 function str(v) { return typeof v === 'string' ? v : ''; }
 function strs(v) { return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; }
 function objs(v) { return Array.isArray(v) ? v.filter(isObj) : []; }
+// Třída do className smí jen z povoleného seznamu (hodnoty z odpovědi jsou data).
+function povoleno(v, seznam, vychozi) { return seznam.includes(v) ? v : vychozi; }
+
+// Z načteného obrázku udělá JPEG: max 1600 px, bílé pozadí (průhledné PNG/WebP nesmí zčernat).
+function jpegZObrazku(img) {
+  const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error(CHYBA_ZPRACOVANI);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  const data = c.toDataURL('image/jpeg', 0.85);
+  const prefix = 'data:image/jpeg;base64,';
+  if (typeof data !== 'string' || data.length < 100 || !data.startsWith(prefix)) throw new Error(CHYBA_ZPRACOVANI);
+  return { mime: 'image/jpeg', data: data.slice(prefix.length) };
+}
 
 function toJpegBase64(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url);
-      resolve({ mime: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] });
+      try { resolve(jpegZObrazku(img)); }
+      catch (e) { reject(new Error(CHYBA_ZPRACOVANI)); }
+      finally { URL.revokeObjectURL(url); }
     };
-    img.onerror = () => reject(new Error('Obrázek se nepodařilo načíst.'));
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(CHYBA_NACTENI)); };
     img.src = url;
   });
 }
+
+function chybaObrazku(err) { return !!err && typeof err.message === 'string' && err.message.indexOf('Obrázek') === 0; }
 
 function render(r) {
   out.replaceChildren();
@@ -83,7 +105,7 @@ function render(r) {
   if (!isObj(r) || !['ok', 'chyba', 'potrebuji_vice'].includes(r.stav)) { card.append(el('p', CHYBA_OBECNA, 'err')); out.append(card); return; }
   if (r.stav === 'chyba') { card.append(el('p', str(r.chyba) || CHYBA_OBECNA, 'err')); out.append(card); return; }
   if (r.stav === 'potrebuji_vice') { card.append(el('p', str(r.zprava))); out.append(card); return; }
-  const semafor = str(r.semafor);
+  const semafor = povoleno(str(r.semafor), SEMAFORY, 'šedá');
   card.append(el('span', 'Riziko: ' + semafor, 'light ' + semafor));
   card.append(el('p', str(r.shrnuti)));
   card.append(el('p', 'Jistota kontroly: ' + str(r.jistota), 'hint'));
@@ -96,7 +118,8 @@ function render(r) {
     sc.append(el('h2', 'Zjištěné signály'));
     signaly.forEach((s) => {
       const zdroj = str(s.zdroj);
-      const d = el('div', null, 'sig ' + str(s.zavaznost));
+      const zavaznost = povoleno(str(s.zavaznost), ZAVAZNOSTI, 'low');
+      const d = el('div', null, 'sig ' + zavaznost);
       d.append(el('b', str(s.titul)), el('div', str(s.dukaz)), el('span', str(s.modul) + (zdroj ? ' · zdroj: ' + zdroj : '')));
       sc.append(d);
     });
@@ -127,7 +150,7 @@ document.getElementById('f').addEventListener('submit', async (e) => {
       body: JSON.stringify({ odkaz: document.getElementById('odkaz').value, text: document.getElementById('text').value, screenshoty }) });
     render(await res.json());
   } catch (err) {
-    render({ stav: 'chyba', chyba: CHYBA_OBECNA });
+    render({ stav: 'chyba', chyba: chybaObrazku(err) ? err.message : CHYBA_OBECNA });
   } finally { go.disabled = false; go.textContent = 'Zkontrolovat'; }
 });
 </script>
