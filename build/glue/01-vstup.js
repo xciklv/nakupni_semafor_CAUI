@@ -1,4 +1,7 @@
+// Denní kvóta: počítá se po validaci vstupu a PŘED načtením stránky, takže i odpověď 'potrebuji_vice' spotřebuje jednu kontrolu.
+// Stav je ve workflow static data a souběžné běhy ho čtou/zapisují bez zámku, proto je limit pouze přibližný.
 const MAX_DENNE = 200;
+const FETCH_DEADLINE_MS = 10000;
 const body = $input.first().json.body || {};
 const state = $getWorkflowStaticData('global');
 const v = validateInput(body);
@@ -12,11 +15,18 @@ let pageStatus = 'bez_odkazu';
 if (input.url) {
   try {
     // Přesměrování se nenásledují (cíl by mohl být interní adresa, kterou normalizeUrl zablokoval).
-    const r = await this.helpers.httpRequest({
-      url: input.url.url, method: 'GET', timeout: 10000, encoding: 'text',
+    // Deadline: abortSignal (zastaví stahování, pokud ho runtime předá) + Promise.race (omezí čekání v každém případě).
+    const req = Promise.resolve(this.helpers.httpRequest({
+      url: input.url.url, method: 'GET', timeout: FETCH_DEADLINE_MS, encoding: 'text',
       disableFollowRedirect: true, ignoreHttpStatusErrors: true, returnFullResponse: true,
+      abortSignal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(FETCH_DEADLINE_MS) : undefined,
       headers: { 'User-Agent': 'Mozilla/5.0 (NakupniKontrola)', 'Accept-Language': 'cs' },
-    });
+    }));
+    req.catch(() => {});
+    let timer;
+    const deadline = new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('deadline')), FETCH_DEADLINE_MS); });
+    let r;
+    try { r = await Promise.race([req, deadline]); } finally { clearTimeout(timer); }
     if (r && r.statusCode >= 200 && r.statusCode < 300) {
       pageText = htmlToText(typeof r.body === 'string' ? r.body : JSON.stringify(r.body));
       pageStatus = pageText.length >= 300 ? 'nacteno' : 'prilis_kratke';

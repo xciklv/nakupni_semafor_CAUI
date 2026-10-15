@@ -22,21 +22,59 @@ test('bundle neobsahuje require ani module.exports (kolize s const v jednom scop
   assert.equal(/module\.exports/.test(bundle), false);
 });
 
-test('engine/*.js nemají duplicitní top-level deklarace (bundle je jeden scope)', () => {
-  const seen = new Map();
-  const dup = new Set();
-  const re = /^(?:async\s+)?(?:const|let|var|function\*?)\s+([A-Za-z_$][\w$]*)/;
-  for (const f of fs.readdirSync(path.join(root, 'engine')).filter((n) => n.endsWith('.js'))) {
-    for (const line of fs.readFileSync(path.join(root, 'engine', f), 'utf8').split('\n')) {
-      if (/^if \(typeof (require|module) !== 'undefined'/.test(line)) continue;
-      const m = re.exec(line);
-      if (!m) continue;
-      if (seen.has(m[1]) && seen.get(m[1]) !== f) dup.add(m[1] + ' (' + seen.get(m[1]) + ', ' + f + ')');
-      else if (seen.has(m[1])) dup.add(m[1] + ' (opakuje se v ' + f + ')');
-      seen.set(m[1], f);
+// Názvy deklarované na column 0 (const/let/var/function/class vč. destructuringu); guard řádky require/module se přeskakují.
+function topLevelNames(src) {
+  const names = [];
+  for (const line of src.split('\n')) {
+    if (/^if \(typeof (require|module) !== 'undefined'/.test(line)) continue;
+    let m = /^(?:async\s+)?(?:function\*?|class)\s+([A-Za-z_$][\w$]*)/.exec(line);
+    if (m) { names.push(m[1]); continue; }
+    m = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/.exec(line);
+    if (m) { names.push(m[1]); continue; }
+    m = /^(?:const|let|var)\s*([{[])([^}\]]*)[}\]]\s*=/.exec(line);
+    if (m) {
+      for (let part of m[2].split(',')) {
+        part = part.replace(/=.*$/, '').trim().replace(/^\.\.\./, '');
+        if (m[1] === '{' && part.includes(':')) part = part.split(':')[1].trim();
+        const id = /^([A-Za-z_$][\w$]*)/.exec(part);
+        if (id) names.push(id[1]);
+      }
     }
   }
-  assert.deepEqual([...dup], [], 'duplicitní top-level názvy: ' + [...dup].join(', '));
+  return names;
+}
+function findDuplicateDecls(files) {
+  const seen = new Map();
+  const dup = [];
+  for (const [f, src] of Object.entries(files)) {
+    for (const n of topLevelNames(src)) {
+      if (seen.has(n)) dup.push(n + ' (' + seen.get(n) + ', ' + f + ')');
+      else seen.set(n, f);
+    }
+  }
+  return dup;
+}
+
+test('engine/*.js nemají duplicitní top-level deklarace (bundle je jeden scope)', () => {
+  const files = {};
+  for (const f of fs.readdirSync(path.join(root, 'engine')).filter((n) => n.endsWith('.js'))) files[f] = fs.readFileSync(path.join(root, 'engine', f), 'utf8');
+  assert.ok(Object.keys(files).length >= 8);
+  const dup = findDuplicateDecls(files);
+  assert.deepEqual(dup, [], 'duplicitní top-level názvy: ' + dup.join(', '));
+});
+
+test('skener duplicit zachytí function, const, let, var i destructuring', () => {
+  const base = "const A = 1;\nfunction foo() {}\n";
+  assert.deepEqual(findDuplicateDecls({ a: base, b: 'const B = 2;' }), []);
+  assert.equal(findDuplicateDecls({ a: base, b: 'function foo() {}' }).length, 1);
+  assert.equal(findDuplicateDecls({ a: base, b: 'let A = 2;' }).length, 1);
+  assert.equal(findDuplicateDecls({ a: base, b: 'var A;' }).length, 1);
+  assert.equal(findDuplicateDecls({ a: base, b: 'const { x, A } = require("y");' }).length, 1);
+  assert.equal(findDuplicateDecls({ a: base, b: 'const { q: foo } = obj;' }).length, 1);
+  assert.equal(findDuplicateDecls({ a: base, b: 'const [p, A] = arr;' }).length, 1);
+  assert.equal(findDuplicateDecls({ a: base, b: 'let { x = 1, ...A } = obj;' }).length, 1);
+  assert.equal(findDuplicateDecls({ a: base, b: "if (typeof require !== 'undefined') { var { A } = require('x'); }" }).length, 0);
+  assert.equal(findDuplicateDecls({ a: base, b: '  const A = 1; // odsazené = lokální' }).length, 0);
 });
 
 test('každý glue soubor je s bundlem validní async tělo (top-level return/await)', () => {
@@ -65,22 +103,54 @@ test('workflow: každé spojení míří na existující node a IF má dva výst
     for (const out of v.main) for (const c of out) assert.ok(names.has(c.node), 'cíl ' + c.node);
   }
   assert.equal(wf.connections['Stačí vstup?'].main.length, 2);
+  // pořadí výstupů IF: 0 = true (stačí vstup) -> extrakce, 1 = false -> odpověď bez LLM
+  assert.equal(wf.connections['Stačí vstup?'].main[0][0].node, 'Sestavit extrakci');
+  assert.equal(wf.connections['Stačí vstup?'].main[1][0].node, 'Respond – více vstupu');
 });
 
-// --- behavior glue 01 ve vm sandboxu ---
+test('workflow: settings nic neukládá (soukromí) a zachovává executionOrder v1', () => {
+  const s = buildWorkflow({ credId: 'C', credName: 'N' }).settings;
+  assert.equal(s.executionOrder, 'v1');
+  assert.equal(s.saveDataSuccessExecution, 'none');
+  assert.equal(s.saveDataErrorExecution, 'none');
+  assert.equal(s.saveManualExecutions, false);
+  assert.equal(s.saveExecutionProgress, false);
+});
+
+test('workflow: webhookId je UUID', () => {
+  const wf = buildWorkflow({ credId: 'C', credName: 'N' });
+  const withId = wf.nodes.filter((x) => 'webhookId' in x);
+  assert.ok(withId.length >= 1);
+  for (const n of withId) {
+    assert.match(n.webhookId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, n.name);
+  }
+});
+
+// --- behavior glue ve vm sandboxu (this s helpers, n8n globály jako stuby) ---
 const STUB_BUNDLE = buildBundle();
-async function runGlue01(body, { state = {}, httpStub } = {}) {
+// nodes: { 'Název nodu': json | function (může vyhodit) }
+async function runGlue(file, { json = {}, nodes = {}, state = {}, httpStub, src, globals = {} } = {}) {
   const calls = [];
   const ctx = vm.createContext({
-    URL, console,
-    $input: { first: () => ({ json: { body } }) },
+    URL, console, setTimeout, clearTimeout, AbortSignal,
+    $input: { first: () => ({ json }) },
+    $: (name) => ({
+      first: () => {
+        const n = nodes[name];
+        if (typeof n === 'function') return { json: n() };
+        if (n === undefined) throw new Error('node ' + name + ' neexistuje');
+        return { json: n };
+      },
+    }),
     $getWorkflowStaticData: () => state,
+    ...globals,
   });
-  const fn = vm.runInContext('(async function(){' + STUB_BUNDLE + '\n' + glueSrc('01-vstup.js') + '\n})', ctx);
+  const fn = vm.runInContext('(async function(){' + STUB_BUNDLE + '\n' + (src || glueSrc(file)) + '\n})', ctx);
   const self = { helpers: { httpRequest: async (opts) => { calls.push(opts); return httpStub ? httpStub(opts) : { statusCode: 200, body: '' }; } } };
   const out = await fn.call(self);
   return { out: JSON.parse(JSON.stringify(out))[0].json, calls, state };
 }
+const runGlue01 = (body, o = {}) => runGlue('01-vstup.js', { ...o, json: { body } });
 
 test('glue 01: prázdné tělo -> zkratka, 400', async () => {
   const { out, calls } = await runGlue01({});
@@ -145,4 +215,130 @@ test('glue 01: vyčerpaná denní kvóta -> 429', async () => {
 
 test('glue 01: limit kvóty je jedna pojmenovaná konstanta na začátku', () => {
   assert.match(glueSrc('01-vstup.js'), /^\s*const MAX_DENNE = 200;/m);
+});
+
+test('glue 01: abortSignal se předá a nikdy se nevracející request skončí do deadline (potrebuji_vice)', async () => {
+  const src = glueSrc('01-vstup.js');
+  assert.match(src, /const FETCH_DEADLINE_MS = \d+;/);
+  const fast = src.replace(/const FETCH_DEADLINE_MS = \d+;/, 'const FETCH_DEADLINE_MS = 50;');
+  assert.notEqual(fast, src);
+  const t0 = Date.now();
+  const { out, calls } = await runGlue('01-vstup.js', {
+    json: { body: { odkaz: 'https://example.cz/p' } }, src: fast,
+    httpStub: () => new Promise(() => {}),
+  });
+  assert.ok(Date.now() - t0 < 1000, 'deadline nezabral');
+  assert.equal(out.zkratka, true);
+  assert.equal(out.odpoved.stav, 'potrebuji_vice');
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].abortSignal, 'chybí abortSignal');
+  assert.equal(typeof calls[0].abortSignal.aborted, 'boolean');
+});
+
+test('glue 01: bez AbortSignal v sandboxu se request přesto provede (deadline běží přes Promise.race)', async () => {
+  const { out, calls } = await runGlue('01-vstup.js', {
+    json: { body: { odkaz: 'https://example.cz/p' } },
+    globals: { AbortSignal: undefined },
+    httpStub: () => ({ statusCode: 200, body: '<html>' + 'text '.repeat(200) + '</html>' }),
+  });
+  assert.equal(out.zkratka, false);
+  assert.equal(calls[0].abortSignal, undefined);
+});
+
+test('glue 01: kvóta je zdokumentovaná v komentáři na začátku', () => {
+  const head = glueSrc('01-vstup.js').split('\n').slice(0, 8).join('\n');
+  assert.match(head, /kvót/i);
+  assert.match(head, /potrebuji_vice/);
+  assert.match(head, /přibližn/i);
+});
+
+// --- glue 02 ---
+test('glue 02: sestaví požadavek na extrakci', async () => {
+  const { out } = await runGlue('02-extrakce-req.js', { json: { input: { text: 'Powerbanka 199 Kč', screenshoty: [], url: null }, pageText: '' } });
+  assert.equal(typeof out.llmRequest.model, 'string');
+  assert.ok(Array.isArray(out.llmRequest.messages));
+});
+
+// --- glue 03 ---
+const CTX_NEZNAME = { zkratka: false, input: { text: 'Powerbanka 199 Kč', screenshoty: [], url: null }, pageText: '', rezim: 'neznámé', host: null };
+const EXTRACT_OK = { content: [{ type: 'text', text: '{"produkt":{"nazev":"Powerbanka","kategorie":"elektronika","cena":199,"mena":"CZK","referencni_cena_odhad":{"min":800,"max":1200,"mena":"CZK"}},"prodejce":{},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}' }] };
+
+test('glue 03: chyba Claude (error) -> šedá, vše nezkontrolováno, požadavek na vysvětlení', async () => {
+  const { out, calls } = await runGlue('03-moduly.js', { json: { error: { message: '401' } }, nodes: { 'Vstup a načtení': CTX_NEZNAME } });
+  assert.equal(out.verdict.semafor, 'šedá');
+  assert.deepEqual(out.verdict.unchecked, ['offer', 'seller', 'safety']);
+  assert.deepEqual(out.signals, []);
+  assert.ok(out.llmRequest && Array.isArray(out.llmRequest.messages));
+  assert.equal(calls.length, 0);
+});
+
+test('glue 03: validní extrakce, režim neznámé -> signály a verdikt není zelená, nic se nestahuje', async () => {
+  const { out, calls } = await runGlue('03-moduly.js', { json: EXTRACT_OK, nodes: { 'Vstup a načtení': CTX_NEZNAME } });
+  const ids = out.signals.map((s) => s.id);
+  assert.ok(ids.includes('cena_extremne_nizka'), ids.join());
+  assert.ok(ids.includes('ce_chybi'), ids.join());
+  assert.notEqual(out.verdict.semafor, 'zelená');
+  assert.equal(calls.length, 0);
+});
+
+function coiHtml(n) {
+  let h = '<div>';
+  for (let i = 0; i < n; i++) h += '<article><p class="list_titles"><br><span>riziko' + i + '.cz</span></p><p>Důvod ' + i + '.</p></article>';
+  h += '<article><p class="list_titles"><br><span>clarkscz.cz</span></p><p>Provozovatel není uveden.</p></article></div>';
+  return h;
+}
+
+test('glue 03: eshop na seznamu ČOI -> červená; seznam se cachuje do static data a podruhé se nestahuje', async () => {
+  const state = {};
+  const stub = (o) => {
+    if (o.url.startsWith('https://coi.gov.cz/')) return coiHtml(150);
+    if (o.url.startsWith('https://rdap.')) return { events: [{ eventAction: 'registration', eventDate: '2015-01-01T00:00:00Z' }] };
+    if (o.url.startsWith('https://ares.gov.cz/')) return { statusCode: 404, body: {} };
+    throw new Error('neočekávaný požadavek ' + o.url);
+  };
+  const extract = { content: [{ type: 'text', text: '{"produkt":{"nazev":"Mikina","kategorie":"oblečení","cena":500,"mena":"CZK"},"prodejce":{"ico":"27082440"},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}' }] };
+  const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'clarkscz.cz' };
+  const coiCalls = (calls) => calls.filter((c) => c.url.startsWith('https://coi.gov.cz/')).length;
+  const r1 = await runGlue('03-moduly.js', { json: extract, nodes: { 'Vstup a načtení': ctx }, state, httpStub: stub });
+  assert.equal(r1.out.verdict.semafor, 'červená');
+  assert.ok(r1.out.signals.some((s) => s.id === 'coi_seznam'));
+  assert.ok(r1.out.signals.some((s) => s.id === 'ico_neexistuje'), 'ARES 404 -> ico_neexistuje');
+  assert.equal(coiCalls(r1.calls), 1);
+  assert.ok(state.coi && state.coi.list, 'cache v static data');
+  const r2 = await runGlue('03-moduly.js', { json: extract, nodes: { 'Vstup a načtení': ctx }, state, httpStub: stub });
+  assert.equal(coiCalls(r2.calls), 0, 'druhý běh používá cache');
+  assert.equal(r2.out.verdict.semafor, 'červená');
+});
+
+test('glue 03: výjimka uvnitř -> degraduje na šedou, nic neuniká', async () => {
+  const { out } = await runGlue('03-moduly.js', { json: EXTRACT_OK, nodes: { 'Vstup a načtení': () => { throw new Error('tajná chyba /interní/cesta'); } } });
+  assert.equal(out.verdict.semafor, 'šedá');
+  assert.deepEqual(out.verdict.unchecked, ['offer', 'seller', 'safety']);
+  assert.deepEqual(out.signals, []);
+  assert.ok(out.llmRequest && Array.isArray(out.llmRequest.messages));
+  assert.equal(JSON.stringify(out).includes('tajná'), false);
+});
+
+// --- glue 04 ---
+const MOD_OK = { verdict: { semafor: 'oranžová', score: 4, confidence: 'střední', unchecked: ['seller'] }, signals: [{ id: 'cena_nizka', module: 'offer', severity: 'low', title: 'Cena je nízká', evidence: 'x', source: 'odhad modelu' }] };
+
+test('glue 04: chyba vysvětlení -> status 200, stav ok a záložní text', async () => {
+  const { out } = await runGlue('04-odpoved.js', { json: { error: { message: 'x' } }, nodes: { Moduly: MOD_OK } });
+  assert.equal(out.status, 200);
+  assert.equal(out.odpoved.stav, 'ok');
+  assert.equal(out.odpoved.semafor, 'oranžová');
+  assert.equal(out.odpoved.shrnuti, 'Kontrola našla signály, které stojí za zvážení.');
+});
+
+test('glue 04: validní vysvětlení se použije', async () => {
+  const text = JSON.stringify({ shrnuti: 'Nabídka má několik signálů, které stojí za pozornost.', co_delat: ['Porovnejte cenu u jiných prodejců.'] });
+  const { out } = await runGlue('04-odpoved.js', { json: { content: [{ type: 'text', text }] }, nodes: { Moduly: MOD_OK } });
+  assert.equal(out.status, 200);
+  assert.equal(out.odpoved.shrnuti, 'Nabídka má několik signálů, které stojí za pozornost.');
+  assert.deepEqual(out.odpoved.co_delat, ['Porovnejte cenu u jiných prodejců.']);
+});
+
+test('glue 04: výjimka -> 500 s obecnou hláškou bez úniku detailů', async () => {
+  const { out } = await runGlue('04-odpoved.js', { json: {}, nodes: { Moduly: () => { throw new Error('tajná chyba /interní/cesta'); } } });
+  assert.deepEqual(out, { status: 500, odpoved: { stav: 'chyba', chyba: 'Kontrola se nepodařila. Zkuste to prosím znovu.' } });
 });

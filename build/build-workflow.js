@@ -33,7 +33,7 @@ function buildWorkflow({ credId, credName }) {
   const nodes = [
     // allowedOrigins '*': HTML servírované z webhooku běží v CSP sandboxu bez allow-same-origin (n8n-core html-sandbox.js),
     // takže jeho origin je 'null' a fetch na tento webhook je cross-origin.
-    { id: 'Webhook', name: 'Webhook', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [0, 0], webhookId: 'nakupni-kontrola',
+    { id: 'Webhook', name: 'Webhook', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [0, 0], webhookId: '2477b1ff-1caf-474d-9db3-1104c8e3ca48',
       parameters: { httpMethod: 'POST', path: 'nakupni-kontrola', responseMode: 'responseNode', options: { allowedOrigins: '*' } } },
     code('Vstup a načtení', '01-vstup.js', [220, 0]),
     { id: 'Stačí vstup?', name: 'Stačí vstup?', type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [440, 0],
@@ -60,7 +60,11 @@ function buildWorkflow({ credId, credName }) {
     ...link('Claude – vysvětlení', 'Odpověď'),
     ...link('Odpověď', 'Respond'),
   };
-  return { name: 'Nákupní kontrola', nodes, connections, settings: { executionOrder: 'v1' } };
+  return { name: 'Nákupní kontrola', nodes, connections, settings: {
+    executionOrder: 'v1',
+    // Soukromí: nabídky, screenshoty a výsledky se v n8n po doběhu neukládají.
+    saveDataSuccessExecution: 'none', saveDataErrorExecution: 'none', saveManualExecutions: false, saveExecutionProgress: false,
+  } };
 }
 
 if (require.main === module) {
