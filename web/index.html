@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nákupní kontrola</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6672; --card:#fff; --line:#dde2e8; --accent:#1f6feb; --green:#1a7f37; --orange:#b35900; --red:#c62828; --gray:#6b7280; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e8ebef; --muted:#9aa5b1; --card:#1d2227; --line:#2f363d; --accent:#58a6ff; --green:#3fb950; --orange:#e3912e; --red:#f47067; --gray:#9ca3af; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:1.6rem; margin:0 0 4px; }
+  h2 { font-size:1.2rem; margin:0 0 8px; }
+  p.lead { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-weight:600; margin:12px 0 4px; }
+  input[type=text], textarea { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  textarea { min-height:90px; resize:vertical; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:12px 20px; font:inherit; font-weight:600; cursor:pointer; margin-top:16px; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .hint { color:var(--muted); font-size:.9rem; }
+  .light { display:inline-block; padding:8px 18px; border-radius:999px; color:#fff; font-weight:700; font-size:1.2rem; }
+  .zelená { background:var(--green); } .oranžová { background:var(--orange); } .červená { background:var(--red); } .šedá { background:var(--gray); }
+  .sig { border-left:4px solid var(--line); padding:4px 0 4px 12px; margin:12px 0; }
+  .sig.high { border-color:var(--red); } .sig.medium { border-color:var(--orange); } .sig.low { border-color:var(--gray); }
+  .sig b { display:block; } .sig span { color:var(--muted); font-size:.9rem; }
+  .err { color:var(--red); font-weight:600; }
+  ul { padding-left:20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Nákupní kontrola</h1>
+  <p class="lead">Vložte odkaz, text nebo screenshot nabídky a zjistěte rizikové signály dřív, než zaplatíte.</p>
+  <form id="f" class="card">
+    <label for="odkaz">Odkaz na nabídku</label>
+    <input id="odkaz" type="text" placeholder="adresa nabídky…" autocomplete="off">
+    <label for="text">Nebo zkopírovaný text nabídky</label>
+    <textarea id="text" placeholder="Název, cena, popis, prodejce, recenze…"></textarea>
+    <label for="shots">Nebo screenshoty (až 4, včetně údajů o prodejci)</label>
+    <input id="shots" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+    <p id="limit" class="hint" aria-live="polite"></p>
+    <button id="go" type="submit">Zkontrolovat</button>
+    <p class="hint">Screenshoty ani texty neukládáme. Výsledek je pomůcka, ne právní verdikt.</p>
+  </form>
+  <div id="out" aria-live="polite"></div>
+</main>
+<script>
+const API = new URL('nakupni-kontrola', location.href).href;
+const CHYBA_OBECNA = 'Kontrola se nepodařila. Zkuste to prosím znovu.';
+const MAX_SNIMKU = 4;
+const out = document.getElementById('out');
+const shots = document.getElementById('shots');
+const limit = document.getElementById('limit');
+
+function el(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
+function isObj(v) { return v !== null && typeof v === 'object'; }
+function str(v) { return typeof v === 'string' ? v : ''; }
+function strs(v) { return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; }
+function objs(v) { return Array.isArray(v) ? v.filter(isObj) : []; }
+
+function toJpegBase64(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve({ mime: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] });
+    };
+    img.onerror = () => reject(new Error('Obrázek se nepodařilo načíst.'));
+    img.src = url;
+  });
+}
+
+function render(r) {
+  out.replaceChildren();
+  const card = el('div', null, 'card');
+  if (!isObj(r) || !['ok', 'chyba', 'potrebuji_vice'].includes(r.stav)) { card.append(el('p', CHYBA_OBECNA, 'err')); out.append(card); return; }
+  if (r.stav === 'chyba') { card.append(el('p', str(r.chyba) || CHYBA_OBECNA, 'err')); out.append(card); return; }
+  if (r.stav === 'potrebuji_vice') { card.append(el('p', str(r.zprava))); out.append(card); return; }
+  const semafor = str(r.semafor);
+  card.append(el('span', 'Riziko: ' + semafor, 'light ' + semafor));
+  card.append(el('p', str(r.shrnuti)));
+  card.append(el('p', 'Jistota kontroly: ' + str(r.jistota), 'hint'));
+  const nezkontrolovano = strs(r.nezkontrolovano);
+  if (nezkontrolovano.length) card.append(el('p', 'Nezkontrolováno: ' + nezkontrolovano.join(', '), 'hint'));
+  out.append(card);
+  const signaly = objs(r.signaly);
+  if (signaly.length) {
+    const sc = el('div', null, 'card');
+    sc.append(el('h2', 'Zjištěné signály'));
+    signaly.forEach((s) => {
+      const zdroj = str(s.zdroj);
+      const d = el('div', null, 'sig ' + str(s.zavaznost));
+      d.append(el('b', str(s.titul)), el('div', str(s.dukaz)), el('span', str(s.modul) + (zdroj ? ' · zdroj: ' + zdroj : '')));
+      sc.append(d);
+    });
+    out.append(sc);
+  }
+  const wc = el('div', null, 'card');
+  wc.append(el('h2', 'Co dělat'));
+  const ul = el('ul');
+  strs(r.co_delat).forEach((t) => ul.append(el('li', t)));
+  wc.append(ul, el('p', str(r.upozorneni), 'hint'));
+  out.append(wc);
+}
+
+function upozornitNaPocet() {
+  const n = shots.files.length;
+  limit.textContent = n > MAX_SNIMKU ? 'Vybrali jste ' + n + ' souborů; zkontrolujeme jen prvních ' + MAX_SNIMKU + '.' : '';
+}
+shots.addEventListener('change', upozornitNaPocet);
+
+document.getElementById('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const go = document.getElementById('go');
+  go.disabled = true; go.textContent = 'Kontroluji…';
+  try {
+    const files = [...shots.files].slice(0, MAX_SNIMKU);
+    const screenshoty = await Promise.all(files.map(toJpegBase64));
+    const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ odkaz: document.getElementById('odkaz').value, text: document.getElementById('text').value, screenshoty }) });
+    render(await res.json());
+  } catch (err) {
+    render({ stav: 'chyba', chyba: CHYBA_OBECNA });
+  } finally { go.disabled = false; go.textContent = 'Zkontrolovat'; }
+});
+</script>
+</body>
+</html>

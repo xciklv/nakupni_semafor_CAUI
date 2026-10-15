@@ -342,3 +342,139 @@ test('glue 04: výjimka -> 500 s obecnou hláškou bez úniku detailů', async (
   const { out } = await runGlue('04-odpoved.js', { json: {}, nodes: { Moduly: () => { throw new Error('tajná chyba /interní/cesta'); } } });
   assert.deepEqual(out, { status: 500, odpoved: { stav: 'chyba', chyba: 'Kontrola se nepodařila. Zkuste to prosím znovu.' } });
 });
+
+// --- Task 9: webová stránka servírovaná z n8n ---
+const PAGE_PATH = path.join(root, 'web', 'index.html');
+const pageHtml = () => fs.readFileSync(PAGE_PATH, 'utf8');
+const CHYBA_OBECNA = 'Kontrola se nepodařila. Zkuste to prosím znovu.';
+
+test('workflow servíruje webovou stránku na GET webhooku', () => {
+  const wf = buildWorkflow({ credId: 'C', credName: 'A' });
+  const get = wf.nodes.find((n) => n.name === 'Webhook – stránka');
+  assert.equal(get.parameters.httpMethod, 'GET');
+  assert.equal(get.parameters.path, 'nakupni-kontrola-web');
+  const resp = wf.nodes.find((n) => n.name === 'Respond – stránka');
+  assert.match(resp.parameters.responseBody, /<!doctype html>/i);
+  assert.ok(wf.connections['Webhook – stránka']);
+});
+
+test('workflow: GET webhook stránky má vlastní UUID a odpověď je text/html propojená na Respond', () => {
+  const wf = buildWorkflow({ credId: 'C', credName: 'A' });
+  const get = wf.nodes.find((n) => n.name === 'Webhook – stránka');
+  const post = wf.nodes.find((n) => n.name === 'Webhook');
+  assert.match(get.webhookId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.notEqual(get.webhookId, post.webhookId);
+  const resp = wf.nodes.find((n) => n.name === 'Respond – stránka');
+  assert.equal(resp.parameters.respondWith, 'text');
+  assert.deepEqual(resp.parameters.options.responseHeaders.entries, [{ name: 'Content-Type', value: 'text/html; charset=utf-8' }]);
+  assert.deepEqual(wf.connections['Webhook – stránka'], { main: [[{ node: 'Respond – stránka', type: 'main', index: 0 }]] });
+});
+
+test('responseBody stránky není n8n výraz: nezačíná "=" a neobsahuje "{{"', () => {
+  const wf = buildWorkflow({ credId: 'C', credName: 'A' });
+  const body = wf.nodes.find((n) => n.name === 'Respond – stránka').parameters.responseBody;
+  assert.equal(body, pageHtml());
+  assert.equal(body.startsWith('='), false);
+  assert.equal(body.includes('{{'), false);
+});
+
+test('stránka nepoužívá innerHTML a volá relativní API', () => {
+  const html = pageHtml();
+  assert.equal(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|setAttribute\(\s*['"]on/.test(html), false);
+  assert.match(html, /nakupni-kontrola/);
+});
+
+test('stránka nemá žádnou externí adresu (http/https) ani zdroje mimo volání API', () => {
+  assert.equal(/https?:\/\//.test(pageHtml()), false);
+  assert.equal(/<(script|link|img|iframe)\b[^>]*\b(src|href)=/i.test(pageHtml()), false);
+});
+
+// Fake DOM: jen to, co stránka používá. Eviduje zápisy innerHTML/outerHTML a atributy všech elementů.
+function makeFakeDom() {
+  const all = [];
+  const byId = {};
+  class FakeEl {
+    constructor(tag) {
+      this.tagName = tag; this.children = []; this.textContent = ''; this.className = '';
+      this.attrs = {}; this.htmlWrites = 0; this.files = []; this.value = ''; this.disabled = false;
+      all.push(this);
+    }
+    append(...nodes) { this.children.push(...nodes); }
+    replaceChildren(...nodes) { this.children = nodes; }
+    addEventListener() {}
+    setAttribute(name, v) { this.attrs[name] = String(v); }
+    set innerHTML(v) { this.htmlWrites++; }
+    set outerHTML(v) { this.htmlWrites++; }
+  }
+  const document = {
+    createElement: (tag) => new FakeEl(tag),
+    getElementById: (id) => byId[id] || (byId[id] = new FakeEl('div')),
+  };
+  return { document, all, byId };
+}
+function texts(node, acc = []) {
+  if (node.textContent) acc.push(node.textContent);
+  node.children.forEach((c) => texts(c, acc));
+  return acc;
+}
+function loadPage() {
+  const m = /<script>([\s\S]*?)<\/script>/.exec(pageHtml());
+  assert.ok(m, 'chybí <script>');
+  const dom = makeFakeDom();
+  const ctx = vm.createContext({
+    document: dom.document, location: { href: 'http://x/webhook/nakupni-kontrola-web' }, URL, console,
+    fetch: async () => ({ json: async () => ({}) }),
+  });
+  vm.runInContext(m[1] + '\n;this.__render = render;', ctx);
+  return { render: ctx.__render, dom };
+}
+
+test('render: ok odpověď s HTML v dukazu se vykreslí jako prostý text, bez innerHTML', () => {
+  const { render, dom } = loadPage();
+  const payload = '<img src=x onerror=alert(1)>';
+  render({ stav: 'ok', semafor: 'červená', skore: 9, jistota: 'vysoká', shrnuti: 'Shrnutí', co_delat: ['Nekupujte'],
+    signaly: [{ id: 'x', modul: 'Nabídka', zavaznost: 'high', titul: 'Titul', dukaz: payload, zdroj: 'z' }],
+    nezkontrolovano: [], upozorneni: 'U' });
+  assert.equal(dom.all.filter((n) => n.textContent === payload).length, 1);
+  assert.equal(dom.all.filter((n) => n.htmlWrites > 0).length, 0);
+  assert.equal(dom.all.filter((n) => Object.keys(n.attrs).some((k) => /^on/i.test(k))).length, 0);
+  assert.ok(texts(dom.document.getElementById('out')).includes('Riziko: červená'));
+});
+
+test('render: chyba zobrazí text chyby', () => {
+  const { render, dom } = loadPage();
+  render({ stav: 'chyba', chyba: 'Nějaká chyba' });
+  assert.ok(texts(dom.document.getElementById('out')).includes('Nějaká chyba'));
+});
+
+test('render: potrebuji_vice zobrazí zprávu', () => {
+  const { render, dom } = loadPage();
+  render({ stav: 'potrebuji_vice', zprava: 'Vložte text nabídky.' });
+  assert.ok(texts(dom.document.getElementById('out')).includes('Vložte text nabídky.'));
+});
+
+test('render: neočekávaný tvar odpovědi nevyhodí výjimku a ukáže obecnou chybu', () => {
+  for (const r of [null, undefined, 'text', 42, [], {}, { stav: 'neznamy' }, { stav: 'chyba' }, { stav: 'chyba', chyba: { x: 1 } }]) {
+    const { render, dom } = loadPage();
+    assert.doesNotThrow(() => render(r), 'render ' + JSON.stringify(r));
+    assert.ok(texts(dom.document.getElementById('out')).includes(CHYBA_OBECNA), 'obecná chyba pro ' + JSON.stringify(r));
+  }
+});
+
+test('render: stav ok s chybějícími nebo špatnými poli nevyhodí výjimku', () => {
+  const shapes = [
+    { stav: 'ok' },
+    { stav: 'ok', signaly: 'x', co_delat: null, nezkontrolovano: 5, semafor: {}, shrnuti: 7 },
+    { stav: 'ok', semafor: 'zelená', signaly: [null, 5, 'x', { titul: 1, dukaz: { a: 1 } }], co_delat: [null, 'Krok', 3], nezkontrolovano: ['a', {}] },
+  ];
+  for (const r of shapes) {
+    const { render, dom } = loadPage();
+    assert.doesNotThrow(() => render(r), JSON.stringify(r));
+    assert.equal(dom.all.filter((n) => n.htmlWrites > 0).length, 0);
+  }
+  const { render, dom } = loadPage();
+  render(shapes[2]);
+  const t = texts(dom.document.getElementById('out'));
+  assert.ok(t.includes('Krok'));
+  assert.ok(!t.some((s) => s.includes('[object Object]')));
+});

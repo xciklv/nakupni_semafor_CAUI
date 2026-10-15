@@ -48,6 +48,12 @@ function buildWorkflow({ credId, credName }) {
       parameters: { respondWith: 'json', responseBody: '={{ JSON.stringify($json.odpoved) }}', options: { responseCode: '={{ $json.status }}' } } },
     { id: 'Respond – více vstupu', name: 'Respond – více vstupu', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [660, 140],
       parameters: { respondWith: 'json', responseBody: '={{ JSON.stringify($json.odpoved) }}', options: { responseCode: '={{ $json.status }}' } } },
+    // Webová stránka: GET webhook vrací web/index.html. responseBody je text bez výrazu (nezačíná '=', nemá '{{').
+    { id: 'Webhook – stránka', name: 'Webhook – stránka', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [0, 300], webhookId: '6f1c3a52-9b7e-4d2a-8c41-3e5b7a9d0f26',
+      parameters: { httpMethod: 'GET', path: 'nakupni-kontrola-web', responseMode: 'responseNode', options: {} } },
+    { id: 'Respond – stránka', name: 'Respond – stránka', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [220, 300],
+      parameters: { respondWith: 'text', responseBody: fs.readFileSync(path.join(root, 'web', 'index.html'), 'utf8'),
+        options: { responseHeaders: { entries: [{ name: 'Content-Type', value: 'text/html; charset=utf-8' }] } } } },
   ];
   const link = (a, b, out = 0) => ({ [a]: { main: [...Array(out).fill([]), [{ node: b, type: 'main', index: 0 }]] } });
   const connections = {
@@ -59,6 +65,7 @@ function buildWorkflow({ credId, credName }) {
     ...link('Moduly', 'Claude – vysvětlení'),
     ...link('Claude – vysvětlení', 'Odpověď'),
     ...link('Odpověď', 'Respond'),
+    ...link('Webhook – stránka', 'Respond – stránka'),
   };
   return { name: 'Nákupní kontrola', nodes, connections, settings: {
     executionOrder: 'v1',
