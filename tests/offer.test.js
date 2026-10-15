@@ -50,3 +50,45 @@ test('počet signálů z nesouladů je omezen na 3', () => {
   const r = offerSignals(X({ produkt: { nazev: 'A' }, nesoulady: ['1', '2', '3', '4', '5'] }));
   assert.equal(r.signals.filter((s) => s.id === 'nesoulad').length, 3);
 });
+
+test('cena přesně 0,25× a 0,5× reference: 0,25× je cena_nizka, 0,5× nemá signál', () => {
+  const base = { nazev: 'Powerbanka', mena: 'CZK', referencni_cena_odhad: { min: 800, max: 1200, mena: 'CZK' } };
+  const quarter = offerSignals(X({ produkt: { ...base, cena: 200 } })).signals;
+  assert.deepEqual(quarter.map((s) => s.id), ['cena_nizka']);
+  const half = offerSignals(X({ produkt: { ...base, cena: 400 } })).signals;
+  assert.deepEqual(half, []);
+});
+
+test('cena 0 s referencí nevyvolá cenový signál a samotná cena 0 je nezkontrolovaná', () => {
+  const base = { mena: 'CZK', referencni_cena_odhad: { min: 800, max: 1200, mena: 'CZK' } };
+  const withName = offerSignals(X({ produkt: { ...base, nazev: 'A', cena: 0 } }));
+  assert.equal(withName.status, 'ok');
+  assert.deepEqual(withName.signals, []);
+  assert.equal(offerSignals(X({ produkt: { cena: 0 } })).status, 'unchecked');
+});
+
+test('recenze_same_petky: 20 recenzí ano, 19 ne', () => {
+  const at20 = offerSignals(X({ produkt: { nazev: 'A' }, recenze: { pocet: 20, vsechny_5_hvezd: true } }));
+  assert.deepEqual(ids(at20), ['recenze_same_petky']);
+  const at19 = offerSignals(X({ produkt: { nazev: 'A' }, recenze: { pocet: 19, vsechny_5_hvezd: true } }));
+  assert.deepEqual(ids(at19), []);
+});
+
+test('nerealne parametry jsou omezeny na 3 signály', () => {
+  const r = offerSignals(X({ produkt: { nazev: 'A' }, nerealne_parametry: ['1', '2', '3', '4', '5'] }));
+  assert.equal(r.signals.filter((s) => s.id === 'nerealny_parametr').length, 3);
+  assert.equal(r.signals.length, 3);
+});
+
+test('duplicitní nerealne parametry (bez ohledu na velikost písmen a mezery) dají jeden signál', () => {
+  const r = offerSignals(X({ produkt: { nazev: 'A' }, nerealne_parametry: ['x', 'X ', 'x'] }));
+  assert.equal(r.signals.length, 1);
+  assert.equal(r.signals[0].id, 'nerealny_parametr');
+});
+
+test('společný limit 3 pro nerealne parametry a nesoulady: nejdřív nerealne', () => {
+  const r = offerSignals(X({ produkt: { nazev: 'A' }, nerealne_parametry: ['a', 'b'], nesoulady: ['c', 'd', 'e'] }));
+  assert.equal(r.signals.length, 3);
+  assert.equal(r.signals.filter((s) => s.id === 'nerealny_parametr').length, 2);
+  assert.equal(r.signals.filter((s) => s.id === 'nesoulad').length, 1);
+});

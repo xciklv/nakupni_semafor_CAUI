@@ -89,3 +89,19 @@ test('nízká jistota (jeden ok modul) se střední závažností → oranžová
   assert.equal(v.confidence, 'nízká');
   assert.equal(v.semafor, 'oranžová');
 });
+
+test('evidence delší než 300 znaků se zkrátí na 300 včetně „…“', () => {
+  const sig = s('low', { evidence: 'a'.repeat(16000) });
+  assert.equal(sig.evidence.length, 300);
+  assert.ok(sig.evidence.endsWith('…'));
+});
+
+test('krátká evidence se nemění', () => {
+  assert.equal(s('low', { evidence: 'krátké' }).evidence, 'krátké');
+});
+
+test('title delší než 120 znaků se zkrátí na 120 včetně „…“', () => {
+  const sig = s('low', { title: 'b'.repeat(500) });
+  assert.equal(sig.title.length, 120);
+  assert.ok(sig.title.endsWith('…'));
+});
