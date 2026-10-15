@@ -8,12 +8,16 @@ const SYSTEM_EXTRACT = [
   '"recenze":{"pocet":number|null,"prumer":number|null,"podobne_texty":bool|null,"vsechny_5_hvezd":bool|null,"genericke":bool|null},',
   '"obrazky":{"vypada_ai_nebo_katalog":bool|null,"nesoulad_s_popisem":bool|null},',
   '"nerealne_parametry":[str],"nesoulady":[str]}',
+  'Hodnocení (prodejce.hodnoceni, recenze.prumer) je na škále 0-5. Pokud zdroj používá jinou škálu (např. 0-10 nebo procenta), převeď ji na 0-5; pokud převod nelze, vrať null.',
+  'ico: 8místné číslo bez mezer, pokud ho nabídka neuvádí, vrať null.',
   'nerealne_parametry: tvrzení, která fyzikálně nebo cenově nedávají smysl (uveď tvrzení a stručný důvod).',
   'nesoulady: rozpory mezi popisem, cenou a fotkami. Piš česky, stručně.',
 ].join('\n');
 
 function buildExtractRequest(input, pageText) {
-  const safe = (s) => String(s).replace(/<\/?nabidka>/gi, '[nabidka]');
+  // Every '<' and '>' in user-controlled text is replaced, so the only real tags left
+  // in the prompt are the wrapper's own <nabidka> and </nabidka>.
+  const safe = (s) => String(s).replace(/</g, '‹').replace(/>/g, '›');
   const parts = [];
   if (input.url) parts.push('Odkaz: ' + safe(input.url.url));
   if (pageText) parts.push('Text stránky:\n' + safe(pageText));
@@ -25,7 +29,7 @@ function buildExtractRequest(input, pageText) {
 
 function parseLlmJson(api) {
   if (!api || api.error || !Array.isArray(api.content)) return { ok: false, duvod: 'odpověď modelu chybí nebo je chybná' };
-  const text = api.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+  const text = api.content.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n');
   const a = text.indexOf('{');
   const b = text.lastIndexOf('}');
   if (a < 0 || b < a) return { ok: false, duvod: 'model nevrátil JSON' };
@@ -33,26 +37,50 @@ function parseLlmJson(api) {
 }
 
 const llmStr = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
-const llmNum = (v) => { const n = typeof v === 'string' ? Number(v.replace(',', '.')) : v; return typeof n === 'number' && Number.isFinite(n) ? n : null; };
+const llmNum = (v) => {
+  let n = v;
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (!/^[-+]?\d+([.,]\d+)?$/.test(t)) return null;
+    n = Number(t.replace(',', '.'));
+  }
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+};
+const llmNonNeg = (v) => { const n = llmNum(v); return n != null && n >= 0 ? n : null; };
+const llmRating = (v) => { const n = llmNum(v); return n != null && n >= 0 && n <= 5 ? n : null; };
 const llmBool = (v) => (typeof v === 'boolean' ? v : null);
 const llmArr = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()) : []);
+const llmIco = (v) => {
+  let t;
+  if (typeof v === 'number') { if (!Number.isInteger(v) || v < 0) return null; t = String(v); }
+  else if (typeof v === 'string') t = v.replace(/\s+/g, '');
+  else return null;
+  if (!/^\d{1,8}$/.test(t)) return null;
+  return t.padStart(8, '0');
+};
+const llmCountry = (v) => { const t = llmStr(v); return t && /^[A-Za-z]{2}$/.test(t) ? t.toUpperCase() : null; };
 
 function normalizeExtraction(d) {
   const x = d && typeof d === 'object' ? d : {};
   const p = x.produkt || {}, s = x.prodejce || {}, r = x.recenze || {}, o = x.obrazky || {};
   const ref = p.referencni_cena_odhad;
+  let refOut = null;
+  if (ref && typeof ref === 'object') {
+    const mn = llmNum(ref.min), mx = llmNum(ref.max), mena = llmStr(ref.mena);
+    if (mn != null && mx != null && mena && mn > 0 && mn <= mx) refOut = { min: mn, max: mx, mena };
+  }
   return {
     produkt: {
-      nazev: llmStr(p.nazev), kategorie: llmStr(p.kategorie), cena: llmNum(p.cena), mena: llmStr(p.mena),
+      nazev: llmStr(p.nazev), kategorie: llmStr(p.kategorie), cena: llmNonNeg(p.cena), mena: llmStr(p.mena),
       tvrzene_parametry: llmArr(p.tvrzene_parametry), tvrzeni_certifikace: llmArr(p.tvrzeni_certifikace),
-      referencni_cena_odhad: ref && llmNum(ref.min) != null && llmNum(ref.max) != null && llmStr(ref.mena) ? { min: llmNum(ref.min), max: llmNum(ref.max), mena: llmStr(ref.mena) } : null,
+      referencni_cena_odhad: refOut,
     },
     prodejce: {
-      nazev: llmStr(s.nazev), ico: llmStr(s.ico), provozovatel_uveden: llmBool(s.provozovatel_uveden), kontakt_uveden: llmBool(s.kontakt_uveden),
-      podminky_uvedeny: llmBool(s.podminky_uvedeny), hodnoceni: llmNum(s.hodnoceni), pocet_prodeju: llmNum(s.pocet_prodeju),
-      stari_obchodu_dny: llmNum(s.stari_obchodu_dny), zeme_odeslani: llmStr(s.zeme_odeslani) ? llmStr(s.zeme_odeslani).toUpperCase() : null,
+      nazev: llmStr(s.nazev), ico: llmIco(s.ico), provozovatel_uveden: llmBool(s.provozovatel_uveden), kontakt_uveden: llmBool(s.kontakt_uveden),
+      podminky_uvedeny: llmBool(s.podminky_uvedeny), hodnoceni: llmRating(s.hodnoceni), pocet_prodeju: llmNonNeg(s.pocet_prodeju),
+      stari_obchodu_dny: llmNonNeg(s.stari_obchodu_dny), zeme_odeslani: llmCountry(s.zeme_odeslani),
     },
-    recenze: { pocet: llmNum(r.pocet), prumer: llmNum(r.prumer), podobne_texty: llmBool(r.podobne_texty), vsechny_5_hvezd: llmBool(r.vsechny_5_hvezd), genericke: llmBool(r.genericke) },
+    recenze: { pocet: llmNonNeg(r.pocet), prumer: llmRating(r.prumer), podobne_texty: llmBool(r.podobne_texty), vsechny_5_hvezd: llmBool(r.vsechny_5_hvezd), genericke: llmBool(r.genericke) },
     obrazky: { vypada_ai_nebo_katalog: llmBool(o.vypada_ai_nebo_katalog), nesoulad_s_popisem: llmBool(o.nesoulad_s_popisem) },
     nerealne_parametry: llmArr(x.nerealne_parametry),
     nesoulady: llmArr(x.nesoulady),
