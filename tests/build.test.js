@@ -381,6 +381,14 @@ test('glue 03 Safety Gate: znacka null -> endpoint se nikdy nevolá', async () =
   assert.equal(out.signals.some((s) => s.id === 'safety_gate'), false);
 });
 
+test('glue 03 Safety Gate: generická značka (Unbranded) -> endpoint se nikdy nevolá', async () => {
+  for (const z of ['Unbranded', 'No brand', 'HP']) {
+    const { out, calls } = await runSg(extractBrand(z, null), () => ({ statusCode: 200, body: { content: [{ ...SG_ALERT, product: { ...SG_ALERT.product, brands: [{ brand: z }] } }] } }));
+    assert.equal(sgCalls(calls).length, 0, z);
+    assert.equal(out.signals.some((s) => s.id === 'safety_gate'), false, z);
+  }
+});
+
 test('glue 03 Safety Gate: odeslaný požadavek (sanitizovaný dotaz, numberElements 20, totalElements 0)', async () => {
   const { calls } = await runSg(extractBrand('Škoda "Auto"', 'STB-200!'), () => ({ statusCode: 200, body: { content: [] } }));
   const c = sgCalls(calls);

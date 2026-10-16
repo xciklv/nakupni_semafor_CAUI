@@ -153,7 +153,7 @@ test('safetyGateQuery: max 60 znaků; méně než 2 znaky -> null', () => {
   assert.equal(safetyGateQuery(XB('X', null)), null);
   assert.equal(safetyGateQuery(XB('***', null)), null);
   assert.equal(safetyGateQuery(XB('日本', null)), null);
-  assert.deepEqual(safetyGateQuery(XB('HP', null)), { fullTextSearch: 'HP' });
+  assert.equal(safetyGateQuery(XB('HP', null)), null);
   assert.equal(safetyGateQuery(null), null);
   assert.equal(safetyGateQuery({}), null);
 });
@@ -218,4 +218,64 @@ test('safetySignals: status a ce_chybi beze změny, nezávisí na značce', () =
   const r = safetySignals(XB('Anker', 'A1263'));
   assert.equal(r.status, 'ok');
   assert.equal(r.signals[0].id, 'ce_chybi');
+});
+
+const STOP = ['unbranded', 'no brand', 'nobrand', 'brand', 'generic', 'noname', 'no name', 'original', 'universal', 'oem', 'unknown', 'none', 'n/a', 'na', 'other', 'others', 'brandless', 'bez značky', 'neznámá', 'vlastní značka', 'private label', 'handmade', 'mini', 'power', 'smart', 'pro', 'plus', 'max', 'new', 'hot', 'best', 'top', 'super'];
+
+test('generické značky (stop-list): dotaz null a signál nevzniká ani při shodě s alertem', () => {
+  for (const w of STOP) {
+    for (const v of [w, w.toUpperCase(), '  ' + w + ' ']) {
+      assert.equal(safetyGateQuery(XB(v, null)), null, v);
+      assert.equal(safetyGateQuery(XB(v, 'STB-200')), null, v + ' + model');
+      assert.deepEqual(safetyGateSignals([ALERT(v), ALERT(w)], XB(v, null)), [], v);
+      assert.deepEqual(safetyGateSignals([ALERT(v)], XB(v, 'STB-200')), [], v + ' + model');
+    }
+  }
+  assert.deepEqual(safetyGateSignals([ALERT('No brand')], XB('No brand', null)), []);
+  assert.equal(safetyGateQuery(XB('Power Max', null)), null, 'jen ze stop slov');
+  assert.deepEqual(safetyGateSignals([ALERT('Power Max')], XB('Power Max', null)), []);
+  assert.equal(safetyGateQuery(XB('Bez značky', null)), null);
+  assert.equal(safetyGateQuery(XB('N/A', null)), null);
+});
+
+test('značka obsahující stop slovo, ale nejen ono, je použitelná', () => {
+  assert.deepEqual(safetyGateQuery(XB('Anker Power', null)), { fullTextSearch: 'Anker Power' });
+  assert.equal(safetyGateSignals([ALERT('Anker Power')], XB('Anker Power', null)).length, 1);
+});
+
+test('krátká značka (<3 znaky) jen s použitelným modelem', () => {
+  assert.equal(safetyGateQuery(XB('HP', null)), null);
+  assert.equal(safetyGateQuery(XB('LG', '1')), null);
+  assert.equal(safetyGateQuery(XB('O2', '   ')), null);
+  assert.deepEqual(safetyGateQuery(XB('HP', 'Pavilion 15')), { fullTextSearch: 'HP Pavilion 15' });
+  assert.deepEqual(safetyGateSignals([ALERT('HP', { product: { name: 'Laptop', nameSpecific: 'Pavilion 15', brands: [{ brand: 'HP' }] } })], XB('HP', null)), []);
+  const hp = ALERT('HP', { product: { name: 'Laptop', nameSpecific: 'HP Pavilion 15 charger', brands: [{ brand: 'HP' }] } });
+  assert.equal(safetyGateSignals([hp], XB('HP', 'Pavilion 15')).length, 1);
+  assert.deepEqual(safetyGateSignals([ALERT('HP')], XB('HP', 'Envy 13')), []);
+});
+
+test('model: použitelný jen s písmenem/číslicí a ne čistě číselný kratší než 3 číslice', () => {
+  assert.deepEqual(safetyGateQuery(XB('Anker', '1')), { fullTextSearch: 'Anker' });
+  assert.deepEqual(safetyGateQuery(XB('Anker', '12')), { fullTextSearch: 'Anker' });
+  assert.deepEqual(safetyGateQuery(XB('Anker', '--')), { fullTextSearch: 'Anker' });
+  assert.deepEqual(safetyGateQuery(XB('Anker', '123')), { fullTextSearch: 'Anker 123' });
+  assert.deepEqual(safetyGateQuery(XB('Anker', 'A1')), { fullTextSearch: 'Anker A1' });
+  // nepoužitelný model se ignoruje (nezužuje shodu)
+  assert.equal(safetyGateSignals([ALERT('Anker')], XB('Anker', '1')).length, 1);
+  assert.equal(safetyGateSignals([ALERT('Anker')], XB('Anker', '--')).length, 1);
+  // použitelný model gatuje dál
+  assert.deepEqual(safetyGateSignals([ALERT('Anker')], XB('Anker', 'A1263')), []);
+});
+
+test('Anker funguje s modelem i bez', () => {
+  const a = ALERT('Anker', { product: { name: 'Power bank', nameSpecific: 'A1263 PowerCore', brands: [{ brand: 'Anker' }] } });
+  assert.equal(safetyGateSignals([a], XB('Anker', null)).length, 1);
+  assert.equal(safetyGateSignals([a], XB('Anker', 'A1263')).length, 1);
+  assert.deepEqual(safetyGateQuery(XB('Anker', 'A1263')), { fullTextSearch: 'Anker A1263' });
+});
+
+test('"&" se v dotazu i při porovnání chová stejně (mezera)', () => {
+  assert.equal(safetyGateQuery(XB('Black&Decker', null)).fullTextSearch, 'Black Decker');
+  assert.equal(safetyGateSignals([ALERT('Black & Decker')], XB('Black&Decker', null)).length, 1);
+  assert.equal(safetyGateSignals([ALERT('Black&Decker')], XB('Black & Decker', null)).length, 1);
 });

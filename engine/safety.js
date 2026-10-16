@@ -42,9 +42,24 @@ function safetySignals(x) {
 const SAFETY_GATE_QUERY_MAX = 60;
 const SAFETY_GATE_EXAMPLE_CAP = { ref: 24, name: 50, risk: 30 };
 
-const safetyClean = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').replace(/[^A-Za-z0-9 -]/g, '').replace(/\s+/g, ' ').trim();
+const safetyClean = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' ').replace(/\s+/g, ' ').replace(/[^A-Za-z0-9 -]/g, '').replace(/\s+/g, ' ').trim();
 const safetyTokens = (s) => (typeof s === 'string' ? safetyNorm(s).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean) : []);
 const safetyCut = (s, n) => { const t = String(s).replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+
+// Generická slova, která nejsou značka (porovnává se normalizovaná celá značka i značka složená jen z takových slov).
+const SAFETY_GENERIC_BRANDS = new Set(['unbranded', 'no brand', 'nobrand', 'brand', 'generic', 'noname', 'no name', 'original', 'universal', 'oem', 'unknown', 'none', 'n/a', 'na', 'other', 'others', 'brandless', 'bez značky', 'neznámá', 'vlastní značka', 'private label', 'handmade', 'mini', 'power', 'smart', 'pro', 'plus', 'max', 'new', 'hot', 'best', 'top', 'super'].map((w) => safetyTokens(w).join(' ')));
+const safetyIsGenericBrand = (tok) => SAFETY_GENERIC_BRANDS.has(tok.join(' ')) || tok.every((t) => SAFETY_GENERIC_BRANDS.has(t));
+
+// Použitelná značka+model, nebo null: značka není generická; značka <3 znaky jen s použitelným modelem; model je použitelný, jen když má písmeno/číslici a není čistě číselný kratší než 3 číslice (jinak se ignoruje).
+function safetyGateParts(p) {
+  if (!p || typeof p.znacka !== 'string') return null;
+  const brandTok = safetyTokens(p.znacka);
+  if (!brandTok.length || safetyIsGenericBrand(brandTok)) return null;
+  const mTok = typeof p.model === 'string' ? safetyTokens(p.model) : [];
+  const modelTok = mTok.length && !/^\d{1,2}$/.test(mTok.join('')) ? mTok : null;
+  if (brandTok.join(' ').length < 3 && !modelTok) return null;
+  return { brandTok, modelTok, model: modelTok ? p.model : null };
+}
 
 // Posloupnost tokenů needle musí ležet v hay vcelku a po sobě (celá slova, ne podřetězce: Anker != Tanker).
 function safetyHasSeq(hay, needle) {
@@ -58,11 +73,9 @@ function safetyHasSeq(hay, needle) {
 }
 
 function safetyGateQuery(x) {
-  const p = x && x.produkt;
-  if (!p || typeof p.znacka !== 'string' || !p.znacka.trim()) return null;
-  const parts = [p.znacka];
-  if (typeof p.model === 'string' && p.model.trim()) parts.push(p.model);
-  const text = safetyClean(parts.join(' ')).slice(0, SAFETY_GATE_QUERY_MAX).trim();
+  const parts = safetyGateParts(x && x.produkt);
+  if (!parts) return null;
+  const text = safetyClean(x.produkt.znacka + (parts.model ? ' ' + parts.model : '')).slice(0, SAFETY_GATE_QUERY_MAX).trim();
   return text.length >= 2 ? { fullTextSearch: text } : null;
 }
 
@@ -77,12 +90,9 @@ function safetyAlertMatches(a, brandTok, modelTok) {
 
 function safetyGateSignals(alerts, x) {
   const p = x && x.produkt;
-  if (!Array.isArray(alerts) || !p || typeof p.znacka !== 'string') return [];
-  const brandTok = safetyTokens(p.znacka);
-  if (!brandTok.length) return [];
-  const hasModel = typeof p.model === 'string' && p.model.trim() !== '';
-  const modelTok = hasModel ? safetyTokens(p.model) : null;
-  if (hasModel && !modelTok.length) return [];
+  const parts = Array.isArray(alerts) ? safetyGateParts(p) : null;
+  if (!parts) return [];
+  const { brandTok, modelTok } = parts;
   const hits = alerts.filter((a) => safetyAlertMatches(a, brandTok, modelTok));
   if (!hits.length) return [];
   const a = hits[0], pr = a.product;

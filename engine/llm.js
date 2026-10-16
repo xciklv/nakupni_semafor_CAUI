@@ -61,7 +61,7 @@ const llmIco = (v) => {
 };
 const LLM_BRAND_MAX = 60;
 const llmShortStr = (v) => { const t = llmStr(v); return t && t.length <= LLM_BRAND_MAX ? t : null; };
-const llmCountry =(v) => { const t = llmStr(v); return t && /^[A-Za-z]{2}$/.test(t) ? t.toUpperCase() : null; };
+const llmCountry = (v) => { const t = llmStr(v); return t && /^[A-Za-z]{2}$/.test(t) ? t.toUpperCase() : null; };
 
 function normalizeExtraction(d) {
   const x = d && typeof d === 'object' ? d : {};
