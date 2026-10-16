@@ -13,9 +13,10 @@ function buildBundle() {
 }
 
 const glue = (f) => fs.readFileSync(path.join(__dirname, 'glue', f), 'utf8');
-const code = (name, file, pos, withBundle = true) => ({
+// Code nody nesdílejí scope, proto KAŽDÝ nese celý bundle enginu.
+const code = (name, file, pos) => ({
   id: name, name, type: 'n8n-nodes-base.code', typeVersion: 2, position: pos,
-  parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: (withBundle ? buildBundle() + '\n' : '') + glue(file) },
+  parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: buildBundle() + '\n' + glue(file) },
 });
 const claude = (name, pos, credId, credName) => ({
   id: name, name, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: pos, onError: 'continueRegularOutput',
@@ -39,7 +40,7 @@ function buildWorkflow({ credId, credName }) {
     { id: 'Stačí vstup?', name: 'Stačí vstup?', type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [440, 0],
       parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
         conditions: [{ id: 'c1', leftValue: '={{ $json.zkratka }}', rightValue: false, operator: { type: 'boolean', operation: 'false', singleValue: true } }], combinator: 'and' } } },
-    code('Sestavit extrakci', '02-extrakce-req.js', [660, -100], false),
+    code('Sestavit extrakci', '02-extrakce-req.js', [660, -100]),
     claude('Claude – extrakce', [880, -100], credId, credName),
     code('Moduly', '03-moduly.js', [1100, -100]),
     claude('Claude – vysvětlení', [1320, -100], credId, credName),

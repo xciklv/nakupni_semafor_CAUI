@@ -6,6 +6,11 @@ const SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'cutt.ly', 'rebra
 const MARKETPLACES = ['temu.com', 'aliexpress.com', 'aliexpress.us', 'allegro.cz', 'allegro.pl', 'amazon.com', 'amazon.de', 'amazon.pl', 'ebay.com', 'ebay.de', 'shein.com', 'joom.com', 'vinted.cz'];
 const INP_MAX_HTML = 2000000;
 const INP_PORTS = ['', '80', '443'];
+const INP_MAX_URL = 2048;
+const INP_ASCII_RE = /^[\x21-\x5b\x5d-\x7e]+$/; // tisknutelné ASCII bez mezery a bez zpětného lomítka
+const INP_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const INP_TLD_RE = /^([a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
+const INP_OCTET_RE = /^(0|[1-9][0-9]{0,2})$/;
 const INP_PRIVATE_SUFFIXES = ['localhost', 'local', 'internal', 'localdomain', 'lan', 'home.arpa'];
 // Jedna linearní průchozí regex: komentář, nebo otevírací script/style/noscript.
 const INP_SKIP_RE = /<!--|<(script|style|noscript)(?![a-z0-9_:-])/gi;
@@ -23,77 +28,60 @@ function inpIpv4Blocked(a, b) {
     || (a === 192 && b === 168);
 }
 
-// Vrátí pole 8 čísel (skupin IPv6) nebo null, pokud literál nejde rozparsovat.
-function inpExpandIpv6(s) {
-  let str = s.toLowerCase();
-  if (str.indexOf('.') !== -1) {
-    const cut = str.lastIndexOf(':');
-    const v4 = str.slice(cut + 1).split('.').map(Number);
-    if (v4.length !== 4 || v4.some((n) => !(n >= 0 && n <= 255))) return null;
-    str = str.slice(0, cut + 1) + ((v4[0] << 8) | v4[1]).toString(16) + ':' + ((v4[2] << 8) | v4[3]).toString(16);
+// Hostitel (malá písmena, bez koncových teček): { ip: [a,b,c,d] } pro IPv4 literál, { name: true } pro doménu, jinak null.
+// IPv4 je jen přesně čtyři kanonické desítkové oktety; hex, osmičkové, jednočíselné a zkrácené zápisy se odmítají.
+function inpParseHost(host) {
+  if (host.length > 253) return null;
+  const labels = host.split('.');
+  if (!labels.every((l) => INP_LABEL_RE.test(l))) return null;
+  const tld = labels[labels.length - 1];
+  if (/^[0-9]+$/.test(tld)) {
+    if (labels.length !== 4 || !labels.every((l) => INP_OCTET_RE.test(l) && Number(l) <= 255)) return null;
+    return { ip: labels.map(Number) };
   }
-  const halves = str.split('::');
-  if (halves.length > 2) return null;
-  const head = halves[0] === '' ? [] : halves[0].split(':');
-  let groups;
-  if (halves.length === 1) {
-    groups = head;
-  } else {
-    const tail = halves[1] === '' ? [] : halves[1].split(':');
-    const fill = 8 - head.length - tail.length;
-    if (fill < 1) return null;
-    groups = head.concat(new Array(fill).fill('0'), tail);
-  }
-  if (groups.length !== 8) return null;
-  const nums = groups.map((g) => (/^[0-9a-f]{1,4}$/.test(g) ? parseInt(g, 16) : NaN));
-  return nums.some((n) => Number.isNaN(n)) ? null : nums;
+  if (labels.length < 2 || !INP_TLD_RE.test(tld)) return null;
+  return { name: true };
 }
 
-function inpIpv6Blocked(g) {
-  if (g.slice(0, 6).every((n) => n === 0)) return true; // ::, ::1, ::a.b.c.d
-  if ((g[0] & 0xfe00) === 0xfc00) return true; // fc00::/7
-  if ((g[0] & 0xffc0) === 0xfe80) return true; // fe80::/10
-  if (g.slice(0, 5).every((n) => n === 0) && g[5] === 0xffff) {
-    return inpIpv4Blocked(g[6] >> 8, g[6] & 0xff); // ::ffff:<v4>
-  }
-  return false;
-}
-
-// host: lowercase, bez tečky na konci, u IPv6 s hranatými závorkami.
-function inpIsBlockedHost(host) {
-  if (host.charAt(0) === '[') {
-    const g = inpExpandIpv6(host.slice(1, -1));
-    return g === null || inpIpv6Blocked(g);
-  }
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (m) {
-    const o = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
-    if (o.some((n) => n > 255)) return true;
-    return inpIpv4Blocked(o[0], o[1]);
-  }
-  if (INP_PRIVATE_SUFFIXES.some((x) => host === x || host.endsWith('.' + x))) return true;
-  // Poslední štítek číselný (dec/hex) = IP literál v nestandardním zápisu; TLD nikdy není číselný.
-  if (/(^|\.)(\d+|0x[0-9a-f]*)$/i.test(host)) return true;
-  return false;
-}
-
+// Ruční parser: v Code nodu n8n globál URL není. Záměrně přísnější než normalizace URL (jen ASCII, žádné IPv6,
+// žádné userinfo ani procenta v authority, jen porty 80/443, jen kanonické IPv4).
 function normalizeUrl(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return null;
-  let s = raw.trim();
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'https://' + s;
-  let u;
-  try { u = new URL(s); } catch (e) { return { ok: false, duvod: 'neplatný odkaz' }; }
-  if (!/^https?:$/.test(u.protocol)) return { ok: false, duvod: 'neplatný odkaz' };
-  if (u.username || u.password) return { ok: false, duvod: 'odkaz nesmí obsahovat přihlašovací údaje' };
-  if (INP_PORTS.indexOf(u.port) === -1) return { ok: false, duvod: 'nepodporovaný port' };
-  let host = u.hostname.toLowerCase();
-  if (host.endsWith('.')) host = host.slice(0, -1);
-  if (inpIsBlockedHost(host)) return { ok: false, duvod: 'odkaz míří na interní nebo neveřejnou adresu' };
-  if (host.charAt(0) !== '[' && host.indexOf('.') === -1) return { ok: false, duvod: 'neplatná adresa' };
-  host = host.replace(/^www\./, '');
+  const bad = (duvod) => ({ ok: false, duvod });
+  const s = raw.trim();
+  if (s.length > INP_MAX_URL) return bad('odkaz je příliš dlouhý');
+  if (!INP_ASCII_RE.test(s)) return bad('neplatný odkaz (použijte adresu v ASCII tvaru nebo vložte text či screenshot)');
+  let scheme = 'https';
+  let rest = s;
+  const sm = /^([a-z][a-z0-9+.-]*):\/\//i.exec(s);
+  if (sm) {
+    scheme = sm[1].toLowerCase();
+    rest = s.slice(sm[0].length);
+  } else if (/^[a-z][a-z0-9+.-]*:(?![0-9]+(?:[/?#]|$))/i.test(s)) {
+    return bad('nepodporovaný protokol (jen http a https)');
+  }
+  if (scheme !== 'http' && scheme !== 'https') return bad('nepodporovaný protokol (jen http a https)');
+  const cut = rest.search(/[/?#]/);
+  const authority = cut === -1 ? rest : rest.slice(0, cut);
+  let tail = cut === -1 ? '' : rest.slice(cut);
+  const hash = tail.indexOf('#');
+  if (hash !== -1) tail = tail.slice(0, hash);
+  if (tail.charAt(0) !== '/') tail = '/' + tail;
+  if (authority.indexOf('@') !== -1) return bad('odkaz nesmí obsahovat přihlašovací údaje');
+  if (/[%[\]]/.test(authority)) return bad('neplatná adresa');
+  const parts = authority.split(':');
+  if (parts.length > 2) return bad('neplatná adresa');
+  if (parts.length === 2 && INP_PORTS.indexOf(parts[1]) === -1) return bad('nepodporovaný port');
+  const fullHost = parts[0].toLowerCase().replace(/\.+$/, '');
+  const interni = bad('odkaz míří na interní nebo neveřejnou adresu');
+  if (INP_PRIVATE_SUFFIXES.some((x) => fullHost === x || fullHost.endsWith('.' + x))) return interni;
+  const kind = inpParseHost(fullHost);
+  if (kind === null) return bad('neplatná adresa');
+  if (kind.ip && inpIpv4Blocked(kind.ip[0], kind.ip[1])) return interni;
+  const host = fullHost.replace(/^www\./, '');
   const inList = (list) => list.some((d) => host === d || host.endsWith('.' + d));
-  if (inList(SHORTENERS)) return { ok: false, duvod: 'zkrácený odkaz – vložte plný odkaz nebo screenshot' };
-  return { ok: true, url: u.href, host, rezim: inList(MARKETPLACES) ? 'marketplace' : 'eshop' };
+  if (inList(SHORTENERS)) return bad('zkrácený odkaz – vložte plný odkaz nebo screenshot');
+  return { ok: true, url: scheme + '://' + fullHost + tail, host, rezim: inList(MARKETPLACES) ? 'marketplace' : 'eshop' };
 }
 
 function validateInput(body) {
