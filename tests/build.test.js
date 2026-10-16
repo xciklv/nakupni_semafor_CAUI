@@ -827,7 +827,9 @@ test('e2e kalibrace (e): obnova ČOI selže, ale existuje stará cache (>6 h) s 
   const o0 = f0.final.odpoved;
   assert.equal(o0.semafor, 'červená');
   assert.ok(sigIds(o0).includes('coi_seznam'));
-  assert.ok(!o0.nezkontrolovano.includes('prodejce: seznam ČOI'), o0.nezkontrolovano.join());
+  assert.ok(o0.nezkontrolovano.includes('prodejce: seznam ČOI (neaktuální)'), o0.nezkontrolovano.join());
+  assert.deepEqual(f0.r3.out.verdict.skipped, ['seznam ČOI (neaktuální)']);
+  assert.notEqual(o0.jistota, 'vysoká');
   assert.equal(callsTo(f0, 'https://coi.gov.cz/'), 1, 'obnova se zkusila');
   assert.equal(state0.coi.at, stale.at, 'stará cache zůstala');
   // obnova vrátí nepoužitelnou stránku (málo záznamů): stará cache se použije také
@@ -835,6 +837,7 @@ test('e2e kalibrace (e): obnova ČOI selže, ale existuje stará cache (>6 h) s 
   const f = await runFlow({ odkaz: 'https://clarkscz.cz/x' }, { httpStub: (o) => (o.url.startsWith('https://coi.gov.cz/') ? '<html>změněná stránka</html>' : o.url.startsWith('https://rdap.') ? rdapIso(2005) : { statusCode: 403, body: '' }), state });
   assert.equal(f.final.odpoved.semafor, 'červená');
   assert.equal(state.coi.at, stale.at);
+  assert.ok(f.final.odpoved.nezkontrolovano.includes('prodejce: seznam ČOI (neaktuální)'));
 });
 
 test('e2e kalibrace (e2): čerstvá cache (<6 h) se nepřeobnovuje', async () => {
@@ -842,6 +845,8 @@ test('e2e kalibrace (e2): čerstvá cache (<6 h) se nepřeobnovuje', async () =>
   const f = await runFlow({ odkaz: 'https://clarkscz.cz/x' }, { httpStub: coiFailStub(), state });
   assert.equal(callsTo(f, 'https://coi.gov.cz/'), 0);
   assert.equal(f.final.odpoved.semafor, 'červená');
+  assert.deepEqual(f.r3.out.verdict.skipped, [], 'čerstvá cache nic nepřidává do skipped');
+  assert.ok(!f.final.odpoved.nezkontrolovano.some((x) => x.includes('ČOI')));
 });
 
 test('e2e kalibrace (f): ARES vrátí 404 pro IČO s platným kontrolním číslem -> jen low signál, žádná červená', async () => {
@@ -890,6 +895,83 @@ test('glue 03 kalibrace: verdikt nese skipped a Moduly neposílají dál nic nav
   assert.deepEqual(Object.keys(out.verdict).sort(), ['confidence', 'score', 'semafor', 'skipped', 'unchecked']);
   assert.deepEqual(out.verdict.skipped, ['seznam ČOI']);
   assert.deepEqual(JSON.parse(out.llmRequest.messages[0].content).nezkontrolovano, ['prodejce: seznam ČOI']);
+});
+
+// --- fix wave A, round 1: wall-clock deadline pro ČOI, RDAP a ARES ---
+const DEADLINE_CONSTS = ['COI_DEADLINE_MS', 'RDAP_DEADLINE_MS', 'ARES_DEADLINE_MS'];
+const withShortDeadlines = (src, ms = 40) => DEADLINE_CONSTS.reduce((acc, name) => {
+  const re = new RegExp('const ' + name + ' = \\d+;');
+  assert.match(acc, re, 'chybí konstanta ' + name);
+  return acc.replace(re, 'const ' + name + ' = ' + ms + ';');
+}, src);
+const DL_CTX = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'example.cz' };
+const DL_EXTRACT = () => NOTEBOOK({ prodejce: { ico: '27082440', kontakt_uveden: true } });
+const hang = () => new Promise(() => {});
+// stub: všechny zdroje v pořádku, kromě těch v `hung` (nevracejí se nikdy)
+const dlStub = (hung) => (o) => {
+  const key = o.url.startsWith('https://coi.gov.cz/') ? 'coi' : o.url.startsWith('https://rdap.') ? 'rdap' : o.url.startsWith('https://ares.gov.cz/') ? 'ares' : null;
+  if (!key) throw new Error('neočekávaný požadavek ' + o.url);
+  if (hung.includes(key)) return hang();
+  if (key === 'coi') return coiHtml(150);
+  if (key === 'rdap') return rdapIso(2005);
+  return { statusCode: 200, body: { obchodniJmeno: 'X' } };
+};
+const nezk = async (modulyOut) => (await runGlue('04-odpoved.js', { json: { error: {} }, nodes: { Moduly: modulyOut } })).out.odpoved.nezkontrolovano;
+
+test('glue 03: konstanty deadline na začátku (ČOI 10000, RDAP 6500, ARES 6500)', () => {
+  const src = nodeCode('Moduly');
+  assert.match(src, /const COI_DEADLINE_MS = 10000;/);
+  assert.match(src, /const RDAP_DEADLINE_MS = 6500;/);
+  assert.match(src, /const ARES_DEADLINE_MS = 6500;/);
+});
+
+for (const [key, label] of [['coi', 'seznam ČOI'], ['rdap', 'RDAP (stáří domény)'], ['ares', 'ARES']]) {
+  test('glue 03 deadline: nikdy se nevracející ' + label + ' skončí do deadline a je v nezkontrolovano', async () => {
+    const src = withShortDeadlines(nodeCode('Moduly'));
+    const t0 = Date.now();
+    const { out, calls } = await runGlue('03-moduly.js', { json: DL_EXTRACT(), nodes: { 'Vstup a načtení': DL_CTX }, state: {}, httpStub: dlStub([key]), src });
+    assert.ok(Date.now() - t0 < 1000, 'deadline nezabral');
+    assert.equal(calls.filter((c) => c.url.includes(key === 'coi' ? 'coi.gov.cz' : key === 'rdap' ? 'rdap.' : 'ares.gov.cz')).length, 1);
+    assert.deepEqual(out.verdict.skipped, [label]);
+    assert.notEqual(out.verdict.confidence, 'vysoká');
+    assert.ok(out.verdict && out.llmRequest);
+    assert.deepEqual(await nezk(out), ['prodejce: ' + label]);
+  });
+}
+
+test('glue 03 deadline: všechny tři zdroje visí -> celý běh skončí do deadline, všechny tři v nezkontrolovano', async () => {
+  const src = withShortDeadlines(nodeCode('Moduly'));
+  const t0 = Date.now();
+  const { out } = await runGlue('03-moduly.js', { json: DL_EXTRACT(), nodes: { 'Vstup a načtení': DL_CTX }, state: {}, httpStub: dlStub(['coi', 'rdap', 'ares']), src });
+  assert.ok(Date.now() - t0 < 1000);
+  assert.deepEqual(out.verdict.skipped, ['RDAP (stáří domény)', 'seznam ČOI', 'ARES']);
+  assert.deepEqual(await nezk(out), ['prodejce: RDAP (stáří domény)', 'prodejce: seznam ČOI', 'prodejce: ARES']);
+});
+
+test('glue 03 deadline: ČOI visí a existuje stará cache -> použije se stará cache (hit = červená), zdroj je neaktuální', async () => {
+  const src = withShortDeadlines(nodeCode('Moduly'));
+  const ctx = { ...DL_CTX, host: 'clarkscz.cz' };
+  const state = { coi: { at: Date.now() - 24 * 3600 * 1000, list: { 'clarkscz.cz': 'Provozovatel není uveden.' } } };
+  const { out } = await runGlue('03-moduly.js', { json: DL_EXTRACT(), nodes: { 'Vstup a načtení': ctx }, state, httpStub: dlStub(['coi']), src });
+  assert.equal(out.verdict.semafor, 'červená');
+  assert.ok(out.signals.some((s) => s.id === 'coi_seznam'));
+  assert.deepEqual(out.verdict.skipped, ['seznam ČOI (neaktuální)']);
+  assert.notEqual(out.verdict.confidence, 'vysoká');
+});
+
+test('glue 03 deadline: pozdní odmítnutí opuštěného requestu nevyvolá unhandled rejection', async () => {
+  const src = withShortDeadlines(nodeCode('Moduly'), 20);
+  const late = () => new Promise((_, rej) => setTimeout(() => rej(new Error('pozdě')), 80));
+  const stub = (o) => (o.url.startsWith('https://coi.gov.cz/') || o.url.startsWith('https://rdap.') || o.url.startsWith('https://ares.gov.cz/') ? late() : { statusCode: 403, body: '' });
+  const seen = [];
+  const onRej = (e) => seen.push(e);
+  process.on('unhandledRejection', onRej);
+  try {
+    const { out } = await runGlue('03-moduly.js', { json: DL_EXTRACT(), nodes: { 'Vstup a načtení': DL_CTX }, state: {}, httpStub: stub, src });
+    assert.deepEqual(out.verdict.skipped, ['RDAP (stáří domény)', 'seznam ČOI', 'ARES']);
+    await new Promise((r) => setTimeout(r, 200));
+  } finally { process.off('unhandledRejection', onRej); }
+  assert.deepEqual(seen, []);
 });
 
 // --- Task 9: webová stránka servírovaná z n8n ---

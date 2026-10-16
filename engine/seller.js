@@ -94,7 +94,7 @@ function rdapUrl(host) {
 async function sellerTry(fn) {
   try { return { ok: true, value: await fn() }; } catch (e) { return { ok: false, value: null }; }
 }
-const sellerAgo = (n) => 'před ' + n + (n === 1 ? ' dnem' : ' dny');
+const sellerAgo = (n) => (n === 0 ? 'dnes' : 'před ' + n + (n === 1 ? ' dnem' : ' dny'));
 const sellerDays = (n) => n + (n === 1 ? ' den' : Number.isInteger(n) && n >= 2 && n <= 4 ? ' dny' : ' dní');
 const sellerDec = (n) => String(n).replace('.', ',');
 

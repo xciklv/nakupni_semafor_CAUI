@@ -304,6 +304,7 @@ test('coiList smí být promise; odmítnutý promise = seznam ČOI v skipped', a
 
 test('čeština: před 1 dnem / 2 dny / 5 dny', async () => {
   const ev = async (n) => (await sellerSignals({ x: X(), rezim: 'eshop', host: 'x.cz', nowMs: NOW, fetchers: { rdap: async () => rdap(new Date(NOW - n * 86400000).toISOString()) }, coiList: {} })).signals[0].evidence;
+  assert.equal(await ev(0), 'Doména x.cz byla zaregistrována dnes.');
   assert.equal(await ev(1), 'Doména x.cz byla zaregistrována před 1 dnem.');
   assert.equal(await ev(2), 'Doména x.cz byla zaregistrována před 2 dny.');
   assert.equal(await ev(5), 'Doména x.cz byla zaregistrována před 5 dny.');

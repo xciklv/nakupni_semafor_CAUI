@@ -194,3 +194,11 @@ test('filtr obvinění se nevztahuje na ostatní pole (název produktu)', () => 
   assert.equal(x.produkt.nazev, 'Kniha Podvodník Felix Krull');
   assert.deepEqual(x.nesoulady, []);
 });
+
+test('filtr obvinění: kmen podvod + fraud/scam se zahazuje, běžné věty zůstávají', () => {
+  const drop = ['Je to podvod', 'Jde o podvod', 'Podvodná nabídka', 'Podvodnou nabídku', 'Podvody', 'podvodu', 'This is a scam', 'fraud risk', 'Scammer shop', 'FRAUD'];
+  const keep = ['Fotka neodpovídá popisu', 'Podvozek vozíku je na fotce jiný', 'Cena neodpovídá parametrům'];
+  const x = normalizeExtraction({ nesoulady: drop.concat(keep), nerealne_parametry: drop.concat(keep) });
+  assert.deepEqual(x.nesoulady, keep);
+  assert.deepEqual(x.nerealne_parametry, keep);
+});

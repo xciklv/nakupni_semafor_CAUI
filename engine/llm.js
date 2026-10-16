@@ -60,7 +60,7 @@ const llmIco = (v) => {
   return t.padStart(8, '0');
 };
 // Texty nesouladů a nereálných parametrů píše model a ukazují se uživateli: obviňující věty se zahazují (nepřepisují).
-const LLM_ACCUSATION_RE = /podvodnik|podvodnic|podvodn[ey]|je podvod|zlodej|\blump\b|\blump(i|ove|ovi|u|a)\b|nelegalni|trestn/;
+const LLM_ACCUSATION_RE = /podvod|\bfraud\b|\bscam|podvodnik|podvodnic|podvodn[ey]|je podvod|zlodej|\blump\b|\blump(i|ove|ovi|u|a)\b|nelegalni|trestn/;
 const llmAccuses = (t) => LLM_ACCUSATION_RE.test(String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
 const llmClean = (v) => llmArr(v).filter((t) => !llmAccuses(t));
 const LLM_BRAND_MAX = 60;
