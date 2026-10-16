@@ -90,38 +90,64 @@ function rdapUrl(host) {
   return h.endsWith('.cz') ? 'https://rdap.nic.cz/domain/' + h : 'https://rdap.org/domain/' + h;
 }
 
+// Zavolá zdroj a nikdy nevyhodí: { ok, value }. Volání zdroje začne synchronně, takže víc zdrojů v Promise.all běží souběžně.
+async function sellerTry(fn) {
+  try { return { ok: true, value: await fn() }; } catch (e) { return { ok: false, value: null }; }
+}
+const sellerAgo = (n) => 'před ' + n + (n === 1 ? ' dnem' : ' dny');
+const sellerDays = (n) => n + (n === 1 ? ' den' : Number.isInteger(n) && n >= 2 && n <= 4 ? ' dny' : ' dní');
+const sellerDec = (n) => String(n).replace('.', ',');
+
+// Vrací { status, signals, external, skipped }: external = uspěl aspoň jeden externí zdroj (RDAP, ČOI, ARES),
+// skipped = zdroje, které se zkusily, ale nebyly dostupné. coiList smí být i promise (seznam ČOI se stahuje souběžně).
 async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
   const out = [];
+  const skipped = [];
   let checks = 0;
+  let external = false;
   const add = (id, severity, title, evidence, source, hard = false) => out.push(signal({ id, module: 'seller', severity, title, evidence, source, hard }));
   const s = x.prodejce;
+  const eshopHost = rezim === 'eshop' && !!host;
+  const rdapOn = eshopHost && registrable(host).indexOf('.') !== -1;
+  const icoValid = !!s.ico && isValidIco(s.ico);
 
-  if (rezim === 'eshop' && host) {
-    if (registrable(host).indexOf('.') !== -1) try {
-      const age = rdapAgeDays(await fetchers.rdap(host), nowMs);
-      if (age != null) {
-        checks++;
-        if (age < 30) add('domena_nova', 'high', 'Doména e-shopu je velmi nová', 'Doména ' + registrable(host) + ' byla zaregistrována před ' + age + ' dny.', 'RDAP');
-        else if (age < 180) add('domena_mlada', 'medium', 'Doména e-shopu je mladá', 'Doména ' + registrable(host) + ' byla zaregistrována před ' + age + ' dny.', 'RDAP');
-      }
-    } catch (e) { /* zdroj nedostupný: nezapočítá se do kontrol */ }
-    if (coiList) {
+  // RDAP, seznam ČOI a ARES se čekají souběžně; každá větev si chybu ošetří sama.
+  const [rdapRes, coiRes, aresRes] = await Promise.all([
+    rdapOn ? sellerTry(() => fetchers.rdap(host)) : null,
+    sellerTry(() => coiList),
+    icoValid ? sellerTry(() => fetchers.ares(s.ico)) : null,
+  ]);
+
+  if (rdapOn) {
+    const age = rdapRes.ok ? rdapAgeDays(rdapRes.value, nowMs) : null;
+    if (age != null) {
       checks++;
-      const key = [host.toLowerCase().replace(/^www\./, ''), registrable(host)].find((k) => Object.prototype.hasOwnProperty.call(coiList, k));
-      if (key) add('coi_seznam', 'high', 'E-shop je na seznamu rizikových webů ČOI', coiList[key] || 'Web je uveden na seznamu České obchodní inspekce.', 'ČOI', true);
-    }
+      external = true;
+      if (age < 30) add('domena_nova', 'high', 'Doména e-shopu je velmi nová', 'Doména ' + registrable(host) + ' byla zaregistrována ' + sellerAgo(age) + '.', 'RDAP');
+      else if (age < 180) add('domena_mlada', 'medium', 'Doména e-shopu je mladá', 'Doména ' + registrable(host) + ' byla zaregistrována ' + sellerAgo(age) + '.', 'RDAP');
+    } else skipped.push('RDAP (stáří domény)');
+  }
+  if (eshopHost) {
+    const list = coiRes.ok ? coiRes.value : null;
+    if (list) {
+      checks++;
+      external = true;
+      const key = [host.toLowerCase().replace(/^www\./, ''), registrable(host)].find((k) => Object.prototype.hasOwnProperty.call(list, k));
+      if (key) add('coi_seznam', 'high', 'E-shop je na seznamu rizikových webů ČOI', list[key] || 'Web je uveden na seznamu České obchodní inspekce.', 'ČOI', true);
+    } else skipped.push('seznam ČOI');
   }
 
   if (s.ico) {
-    if (!isValidIco(s.ico)) { checks++; add('ico_neplatne', 'medium', 'IČO je neplatné', 'Uvedené IČO ' + s.ico + ' neprojde kontrolou čísla.', 'kontrola IČO'); }
+    if (!icoValid) { checks++; add('ico_neplatne', 'low', 'IČO je neplatné', 'Uvedené IČO ' + s.ico + ' neprojde kontrolou čísla.', 'kontrola IČO'); }
     else {
-      try {
-        const body = await fetchers.ares(s.ico);
-        if (body !== null && (typeof body !== 'object' || Array.isArray(body))) throw new Error('ARES: neplatná odpověď');
+      const body = aresRes.ok ? aresRes.value : undefined;
+      // použitelná odpověď: null (404 = nenalezeno) nebo objekt; cokoli jiného (chyba, text, pole) je nedostupný zdroj
+      if (aresRes.ok && (body === null || (typeof body === 'object' && !Array.isArray(body)))) {
         checks++;
-        if (body === null) add('ico_neexistuje', 'high', 'IČO neexistuje v registru', 'IČO ' + s.ico + ' nebylo v ARES nalezeno.', 'ARES');
+        external = true;
+        if (body === null) add('ico_neexistuje', 'low', 'IČO nenalezeno v českém registru ARES', 'IČO nebylo nalezeno v českém registru ARES; u zahraničních (např. slovenských) firem je to běžné.', 'ARES');
         else if (typeof body.datumZaniku === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.datumZaniku)) add('subjekt_zanikl', 'high', 'Uvedený subjekt zanikl', (body.obchodniJmeno || s.ico) + ' zanikl dne ' + body.datumZaniku + '.', 'ARES');
-      } catch (e) { /* ARES nedostupný */ }
+      } else skipped.push('ARES');
     }
   }
 
@@ -133,13 +159,13 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
   if (known(s.kontakt_uveden)) { checks++; if (s.kontakt_uveden === false && !outsideEu) add('kontakt_chybi', 'medium', 'Chybí kontakt', 'Prodejce neuvádí kontaktní údaje.', 'analýza nabídky'); }
   if (known(s.podminky_uvedeny)) { checks++; if (s.podminky_uvedeny === false) add('podminky_chybi', 'low', 'Chybí obchodní podmínky', 'Nejsou dostupné obchodní podmínky.', 'analýza nabídky'); }
   // hodnocení 0 = bez hodnocení (ne špatné hodnocení): nevyhodnocuje se
-  if (known(s.hodnoceni) && s.hodnoceni > 0) { checks++; if (s.hodnoceni < 4.0) add('hodnoceni_nizke', 'medium', 'Nízké hodnocení prodejce', 'Hodnocení prodejce je ' + s.hodnoceni + '.', 'analýza nabídky'); }
-  if (known(s.pocet_prodeju)) { checks++; if (s.pocet_prodeju < 50) add('malo_prodeju', 'low', 'Prodejce má málo prodejů', 'Prodejce má jen ' + s.pocet_prodeju + ' prodejů.', 'analýza nabídky'); }
-  if (known(s.stari_obchodu_dny)) { checks++; if (s.stari_obchodu_dny < 90) add('obchod_novy', 'medium', 'Obchod je nový', 'Obchod existuje ' + s.stari_obchodu_dny + ' dní.', 'analýza nabídky'); }
+  if (known(s.hodnoceni) && s.hodnoceni > 0) { checks++; if (s.hodnoceni < 4.0) add('hodnoceni_nizke', 'medium', 'Nízké hodnocení prodejce', 'Hodnocení prodejce je ' + sellerDec(s.hodnoceni) + '.', 'analýza nabídky'); }
+  if (known(s.pocet_prodeju)) { checks++; if (s.pocet_prodeju < 50) add('malo_prodeju', 'low', 'Prodejce má málo prodejů', 'Počet prodejů: ' + s.pocet_prodeju + '.', 'analýza nabídky'); }
+  if (known(s.stari_obchodu_dny)) { checks++; if (s.stari_obchodu_dny < 90) add('obchod_novy', 'medium', 'Obchod je nový', 'Obchod je starý ' + sellerDays(s.stari_obchodu_dny) + '.', 'analýza nabídky'); }
   if (outsideEu) {
     add('mimo_eu_bez_kontaktu', 'medium', 'Odeslání mimo EU bez kontaktu', 'Zboží se odesílá ze země ' + s.zeme_odeslani + ' a chybí kontakt nebo provozovatel.', 'analýza nabídky');
   }
-  return { status: checks > 0 ? 'ok' : 'unchecked', signals: out };
+  return { status: checks > 0 ? 'ok' : 'unchecked', signals: out, external, skipped };
 }
 
 if (typeof module !== 'undefined') module.exports = { SELLER_EU, SELLER_SLD, registrable, parseCoi, rdapAgeDays, isValidIco, rdapUrl, sellerSignals };

@@ -1,8 +1,9 @@
 if (typeof require !== 'undefined' && typeof signal === 'undefined') { var { signal } = require('./signals'); }
 
 // Text se porovnává bez diakritiky a malými písmeny (viz safetyNorm), proto regexy diakritiku nemají.
-const SAFETY_CE_RE = /nabijec|charger|powerbank|power bank|elektr|\bkabel(?!k)|adapter|svitidl|reproduktor|sluchatk|headphone|earphone|earbud|smartwatch|hodink|drone|dron|lamp|zasuvk|telefon|mobil/;
-const SAFETY_TOY_RE = /\b(hracek|hracka|hracky|toys?)\b/;
+const SAFETY_CE_RE = /nabijec|charger|powerbank|power bank|elektr|\bkabel(?!k)|adapter|svitidl|reproduktor|sluchatk|headphone|earphone|earbud|smartwatch|hodink|drone|\bdron(?:y|u|ovi|em|ech|ami|e)?\b|\blamp(?!ion|as)|zasuvk|telefon|\bmobil(?!iar)/;
+// Slovní kotvy: \bmobil (ne automobil; mobiliář je nábytek), \blamp(?!ion|as) (ne lampion/lampas), \bdron (ne androns).
+const SAFETY_TOY_RE = /\b(?:hrack\w*|hracek|toys?)\b/;
 const SAFETY_LED_RE = /\bled\b/;
 const SAFETY_LED_NEG_RE = /forma na led|kostk|led do|na led/;
 const SAFETY_BATERIE_RE = /baterie|baterii/;
@@ -27,7 +28,7 @@ function safetySignals(x) {
   if (safetyApplies(hay) && !claimsCe) {
     const toy = SAFETY_TOY_RE.test(hay);
     signals.push(signal({
-      id: 'ce_chybi', module: 'safety', severity: toy ? 'medium' : 'low',
+      id: 'ce_chybi', module: 'safety', severity: 'low',
       title: 'Nabídka nezmiňuje shodu s předpisy EU',
       evidence: toy
         ? 'U hraček je označení CE povinné, nabídka o něm mlčí.'

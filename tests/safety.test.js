@@ -16,9 +16,9 @@ test('elektronika bez zmínky o shodě → low signál', () => {
   assert.equal(r.signals[0].severity, 'low');
 });
 
-test('dětské zboží bez zmínky o shodě → medium', () => {
+test('dětské zboží bez zmínky o shodě → low (ce_chybi je vždy low)', () => {
   const r = safetySignals(X({ nazev: 'Dětská hračka s baterií', kategorie: 'hračky' }));
-  assert.equal(r.signals[0].severity, 'medium');
+  assert.equal(r.signals[0].severity, 'low');
 });
 
 test('se zmínkou o CE signál nevzniká', () => {
@@ -37,9 +37,9 @@ test('názvy bez diakritiky (Nabijecka USB) → ce_chybi', () => {
   assert.equal(r.signals[0].id, 'ce_chybi');
 });
 
-test('dětská hračka bez diakritiky → medium', () => {
+test('dětská hračka bez diakritiky → low', () => {
   const r = safetySignals(X({ nazev: 'Detska hracka', kategorie: 'hracky' }));
-  assert.equal(r.signals[0].severity, 'medium');
+  assert.equal(r.signals[0].severity, 'low');
 });
 
 test('jen nesouvisející tvrzení (100% bavlna na nabíječce) → ce_chybi', () => {
@@ -62,14 +62,60 @@ test('dětská postýlka → bez signálu', () => {
   assert.deepEqual(safetySignals(X({ nazev: 'Dětská postýlka' })).signals, []);
 });
 
-test('dětská hračka s baterií → medium a text o hračkách', () => {
+test('dětská hračka s baterií → low a text o hračkách', () => {
   const s = safetySignals(X({ nazev: 'Dětská hračka s baterií', kategorie: 'hračky' })).signals[0];
-  assert.equal(s.severity, 'medium');
+  assert.equal(s.severity, 'low');
   assert.match(s.evidence, /U hraček je označení CE povinné/);
 });
 
-test('Toy car → medium', () => {
-  assert.equal(safetySignals(X({ nazev: 'Toy car' })).signals[0].severity, 'medium');
+test('Toy car → low se zněním o hračkách', () => {
+  const s = safetySignals(X({ nazev: 'Toy car' })).signals[0];
+  assert.equal(s.severity, 'low');
+  assert.match(s.evidence, /U hraček je označení CE povinné/);
+});
+
+test('ce_chybi je low u všech kategorií (žádný medium ani high)', () => {
+  for (const nazev of ['Toy car', 'Hračka', 'Nabíječka', 'USB kabel', 'LED pásek', 'Dron DJI Mini', 'Mobilní telefon']) {
+    const r = safetySignals(X({ nazev }));
+    assert.equal(r.signals.length, 1, nazev);
+    assert.equal(r.signals[0].id, 'ce_chybi', nazev);
+    assert.equal(r.signals[0].severity, 'low', nazev);
+  }
+});
+
+const ceChybi = (nazev, kategorie) => safetySignals(X({ nazev, kategorie })).signals.some((s) => s.id === 'ce_chybi');
+
+test('slovní kotvy: automobil, mobiliář a lampion nejsou spouštěč CE', () => {
+  assert.equal(ceChybi('Automobil Škoda Octavia'), false);
+  assert.equal(ceChybi('Autopotah na automobil'), false);
+  assert.equal(ceChybi('Mobiliář zahradní'), false);
+  assert.equal(ceChybi('Papírový lampion'), false);
+  assert.equal(ceChybi('Lampiony na svatbu'), false);
+  assert.equal(ceChybi('Lampas'), false);
+});
+
+test('slovní kotvy: mobil, lampa a dron se pořád poznají', () => {
+  assert.equal(ceChybi('Mobil Samsung Galaxy'), true);
+  assert.equal(ceChybi('Mobilní telefon'), true);
+  assert.equal(ceChybi('Stolní lampa'), true);
+  assert.equal(ceChybi('Lampy LED'), true);
+  assert.equal(ceChybi('Dron DJI Mini 4'), true);
+  assert.equal(ceChybi('Drony s kamerou'), true);
+  assert.equal(ceChybi('Drone with camera'), true);
+});
+
+test('slovní kotva: androns není dron', () => {
+  assert.equal(ceChybi('Androns řemínek'), false);
+  assert.equal(ceChybi('Kalhoty Androns'), false);
+});
+
+test('hračka v ohýbaných tvarech (hračku, hračkou, hračkám, hraček) se pozná', () => {
+  for (const nazev of ['Koupím hračku', 'Hra s hračkou', 'Dárek pro hračkám', 'Sada hraček', 'Plyšová hračka', 'Autíčka na hračky', 'Toys set']) {
+    const s = safetySignals(X({ nazev })).signals;
+    assert.equal(s.length, 1, nazev);
+    assert.match(s[0].evidence, /U hraček je označení CE povinné/, nazev);
+  }
+  assert.equal(ceChybi('Hrací karty'), false);
 });
 
 test('Nabíječka bez tvrzení → low', () => {

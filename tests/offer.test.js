@@ -16,12 +16,12 @@ test('běžná nabídka bez rozporů nemá signály', () => {
   assert.deepEqual(r.signals, []);
 });
 
-test('cena pod čtvrtinou reference → medium, pod polovinou → low', () => {
+test('cena pod čtvrtinou reference → low, pod polovinou → info (váha 0)', () => {
   const base = { nazev: 'Powerbanka', mena: 'CZK', referencni_cena_odhad: { min: 800, max: 1200, mena: 'CZK' } };
   const a = offerSignals(X({ produkt: { ...base, cena: 150 } })).signals.find((s) => s.id === 'cena_extremne_nizka');
-  assert.equal(a.severity, 'medium');
+  assert.equal(a.severity, 'low');
   const b = offerSignals(X({ produkt: { ...base, cena: 350 } })).signals.find((s) => s.id === 'cena_nizka');
-  assert.equal(b.severity, 'low');
+  assert.equal(b.severity, 'info');
 });
 
 test('cena v jiné měně než reference se neporovnává', () => {
@@ -38,7 +38,47 @@ test('nerealistické parametry, nesoulady, recenze a obrázky', () => {
     recenze: { pocet: 50, podobne_texty: true, vsechny_5_hvezd: true, genericke: true },
   }));
   assert.deepEqual(ids(r).sort(), ['nesoulad', 'nesoulad_obrazku', 'nerealny_parametr', 'obrazky_ai_katalog', 'recenze_genericke', 'recenze_podobne', 'recenze_same_petky'].sort());
-  assert.equal(r.signals.find((s) => s.id === 'obrazky_ai_katalog').severity, 'low');
+  const sev = (id) => r.signals.find((s) => s.id === id).severity;
+  for (const id of ['obrazky_ai_katalog', 'recenze_genericke']) assert.equal(sev(id), 'info', id);
+  for (const id of ['nesoulad', 'nerealny_parametr', 'nesoulad_obrazku', 'recenze_podobne', 'recenze_same_petky']) assert.equal(sev(id), 'low', id);
+});
+
+test('žádný signál nabídky není medium ani high a cena_extremne_nizka je low', () => {
+  const r = offerSignals(X({
+    produkt: { nazev: 'Powerbanka', cena: 100, mena: 'CZK', referencni_cena_odhad: { min: 800, max: 1200, mena: 'CZK' } },
+    nerealne_parametry: ['a', 'b'], nesoulady: ['c', 'd'],
+    obrazky: { vypada_ai_nebo_katalog: true, nesoulad_s_popisem: true },
+    recenze: { pocet: 50, podobne_texty: true, vsechny_5_hvezd: true, genericke: true },
+  }));
+  assert.equal(r.signals.find((s) => s.id === 'cena_extremne_nizka').severity, 'low');
+  assert.ok(r.signals.every((s) => s.severity === 'info' || s.severity === 'low'), r.signals.map((s) => s.id + ':' + s.severity).join());
+});
+
+const { computeVerdict } = require('../engine/scoring');
+const ALL_OK = { offer: 'ok', seller: 'ok', safety: 'ok' };
+
+test('legitimní nabídka (Alza: katalogové fotky, obecné recenze, cena v normě) → skóre <= 2, nikdy oranžová', () => {
+  const r = offerSignals(X({
+    produkt: { nazev: 'Powerbanka Xiaomi 20000 mAh', cena: 899, mena: 'CZK', referencni_cena_odhad: { min: 700, max: 1100, mena: 'CZK' } },
+    obrazky: { vypada_ai_nebo_katalog: true, nesoulad_s_popisem: false },
+    recenze: { pocet: 120, prumer: 4.7, podobne_texty: false, vsechny_5_hvezd: false, genericke: true },
+  }));
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(ids(r).sort(), ['obrazky_ai_katalog', 'recenze_genericke']);
+  const v = computeVerdict(r.signals, ALL_OK);
+  assert.ok(v.score <= 2, 'skóre ' + v.score);
+  assert.notEqual(v.semafor, 'oranžová');
+  assert.notEqual(v.semafor, 'červená');
+});
+
+test('dva rozpory od LLM samy nedosáhnou oranžové', () => {
+  const r = offerSignals(X({ produkt: { nazev: 'Notebook' }, nesoulady: ['Fotka ukazuje jiný model', 'Cena neodpovídá popisu'] }));
+  assert.deepEqual(ids(r), ['nesoulad', 'nesoulad']);
+  const v = computeVerdict(r.signals, ALL_OK);
+  assert.equal(v.score, 2);
+  assert.equal(v.semafor, 'zelená');
+  const worst = offerSignals(X({ produkt: { nazev: 'N' }, nesoulady: ['a', 'b', 'c', 'd'], nerealne_parametry: ['x'] }));
+  assert.equal(computeVerdict(worst.signals, ALL_OK).semafor, 'zelená', 'strop 3 signálů = skóre 3 bez medium');
 });
 
 test('pět hvězd bez dostatku recenzí není signál', () => {

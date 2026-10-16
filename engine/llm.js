@@ -59,6 +59,10 @@ const llmIco = (v) => {
   if (!/^\d{1,8}$/.test(t)) return null;
   return t.padStart(8, '0');
 };
+// Texty nesouladů a nereálných parametrů píše model a ukazují se uživateli: obviňující věty se zahazují (nepřepisují).
+const LLM_ACCUSATION_RE = /podvodnik|podvodnic|podvodn[ey]|je podvod|zlodej|\blump\b|\blump(i|ove|ovi|u|a)\b|nelegalni|trestn/;
+const llmAccuses = (t) => LLM_ACCUSATION_RE.test(String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
+const llmClean = (v) => llmArr(v).filter((t) => !llmAccuses(t));
 const LLM_BRAND_MAX = 60;
 const llmShortStr = (v) => { const t = llmStr(v); return t && t.length <= LLM_BRAND_MAX ? t : null; };
 const llmCountry = (v) => { const t = llmStr(v); return t && /^[A-Za-z]{2}$/.test(t) ? t.toUpperCase() : null; };
@@ -85,8 +89,8 @@ function normalizeExtraction(d) {
     },
     recenze: { pocet: llmNonNeg(r.pocet), prumer: llmRating(r.prumer), podobne_texty: llmBool(r.podobne_texty), vsechny_5_hvezd: llmBool(r.vsechny_5_hvezd), genericke: llmBool(r.genericke) },
     obrazky: { vypada_ai_nebo_katalog: llmBool(o.vypada_ai_nebo_katalog), nesoulad_s_popisem: llmBool(o.nesoulad_s_popisem) },
-    nerealne_parametry: llmArr(x.nerealne_parametry),
-    nesoulady: llmArr(x.nesoulady),
+    nerealne_parametry: llmClean(x.nerealne_parametry),
+    nesoulady: llmClean(x.nesoulady),
   };
 }
 

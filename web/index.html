@@ -24,8 +24,9 @@
   .light { display:inline-block; padding:8px 18px; border-radius:999px; color:var(--on); font-weight:700; font-size:1.2rem; }
   .zelená { background:var(--green); } .oranžová { background:var(--orange); } .červená { background:var(--red); } .šedá { background:var(--gray); }
   .sig { border-left:4px solid var(--line); padding:4px 0 4px 12px; margin:12px 0; }
-  .sig.high { border-color:var(--red); } .sig.medium { border-color:var(--orange); } .sig.low { border-color:var(--gray); }
-  .sig b { display:block; } .sig span { color:var(--muted); font-size:.9rem; }
+  .sig.high { border-color:var(--red); } .sig.medium { border-color:var(--orange); } .sig.low { border-color:var(--gray); } .sig.info { border-color:var(--muted); }
+  .sig b { display:inline; } .sig span { color:var(--muted); font-size:.9rem; }
+  .sig .sev { display:inline-block; margin-right:8px; padding:0 8px; border:1px solid var(--line); border-radius:999px; font-weight:600; font-size:.8rem; }
   .err { color:var(--red); font-weight:600; }
   ul { padding-left:20px; }
 </style>
@@ -54,7 +55,9 @@ const CHYBA_ZPRACOVANI = 'Obrázek se nepodařilo zpracovat.';
 const CHYBA_NACTENI = 'Obrázek se nepodařilo načíst.';
 const MAX_SNIMKU = 4;
 const SEMAFORY = ['zelená', 'oranžová', 'červená', 'šedá'];
-const ZAVAZNOSTI = ['high', 'medium', 'low'];
+const ZAVAZNOSTI = ['info', 'low', 'medium', 'high'];
+// Závažnost se ukazuje i textem, ne jen barvou.
+const ZAVAZNOST_STITEK = { info: 'Informace', low: 'Nízká', medium: 'Střední', high: 'Vysoká' };
 const out = document.getElementById('out');
 const shots = document.getElementById('shots');
 const limit = document.getElementById('limit');
@@ -120,7 +123,7 @@ function render(r) {
       const zdroj = str(s.zdroj);
       const zavaznost = povoleno(str(s.zavaznost), ZAVAZNOSTI, 'low');
       const d = el('div', null, 'sig ' + zavaznost);
-      d.append(el('b', str(s.titul)), el('div', str(s.dukaz)), el('span', str(s.modul) + (zdroj ? ' · zdroj: ' + zdroj : '')));
+      d.append(el('span', ZAVAZNOST_STITEK[zavaznost], 'sev'), el('b', str(s.titul)), el('div', str(s.dukaz)), el('span', str(s.modul) + (zdroj ? ' · zdroj: ' + zdroj : '')));
       sc.append(d);
     });
     out.append(sc);

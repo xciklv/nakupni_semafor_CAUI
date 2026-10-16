@@ -734,6 +734,164 @@ test('e2e (d): Code node, který vyhodí výjimku, nikdy nevyhodí chybu ven, al
   }
 });
 
+// --- fix wave A: kalibrace verdiktu, viditelnost nedostupných zdrojů ---
+const ext = (o) => anthropic({ produkt: {}, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [], ...o });
+const rdapIso = (y) => ({ events: [{ eventAction: 'registration', eventDate: y + '-01-01T00:00:00Z' }] });
+const sigIds = (o) => o.signaly.map((s) => s.id);
+const callsTo = (r, prefix) => r.r3.calls.filter((c) => c.url.startsWith(prefix)).length;
+const NOTEBOOK = (o = {}) => ext({
+  produkt: { nazev: 'Notebook Lenovo IdeaPad 15', kategorie: 'počítače', cena: 14990, mena: 'CZK' },
+  prodejce: { nazev: 'Alza', provozovatel_uveden: true, kontakt_uveden: true }, ...o,
+});
+
+test('e2e kalibrace (a): textová nabídka jako z Alzy (katalogové fotky, obecné recenze), bez externího zdroje -> zelená, jistota střední, nikdy červená', async () => {
+  for (const cert of [[], ['CE']]) {
+    const extract = ext({
+      produkt: { nazev: 'Powerbanka Xiaomi 20000 mAh', kategorie: 'elektronika', cena: 899, mena: 'CZK', referencni_cena_odhad: { min: 700, max: 1100, mena: 'CZK' }, tvrzeni_certifikace: cert },
+      prodejce: { nazev: 'Alza', provozovatel_uveden: true, kontakt_uveden: true },
+      recenze: { pocet: 120, prumer: 4.7, genericke: true }, obrazky: { vypada_ai_nebo_katalog: true },
+    });
+    const f = await runFlow({ text: 'Powerbanka Xiaomi 20000 mAh, 899 Kč, prodává Alza' }, { extract });
+    const o = f.final.odpoved;
+    assert.equal(o.semafor, 'zelená', JSON.stringify(sigIds(o)));
+    assert.equal(o.jistota, 'střední', 'bez externího zdroje nikdy vysoká');
+    assert.notEqual(o.semafor, 'červená');
+    assert.deepEqual(o.nezkontrolovano, []);
+    assert.ok(o.signaly.every((s) => s.zavaznost === 'info' || s.zavaznost === 'low'), JSON.stringify(o.signaly.map((s) => s.id + ':' + s.zavaznost)));
+    assert.ok(sigIds(o).includes('obrazky_ai_katalog'), 'informace se ukazuje');
+    assert.equal(sigIds(o).includes('ce_chybi'), cert.length === 0);
+  }
+});
+
+test('e2e kalibrace (b): kabel jako z Temu (CN, bez kontaktu, 30 prodejů, katalogové fotky, bez CE) -> oranžová, ne červená', async () => {
+  const extract = ext({
+    produkt: { nazev: 'USB kabel 100W rychlonabíjecí', kategorie: 'elektronika', cena: 99, mena: 'CZK' },
+    prodejce: { kontakt_uveden: false, zeme_odeslani: 'CN', pocet_prodeju: 30 }, obrazky: { vypada_ai_nebo_katalog: true },
+  });
+  const f = await runFlow({ odkaz: 'https://www.temu.com/p', text: 'USB kabel 99 Kč' }, { extract, httpStub: () => ({ statusCode: 403, body: '' }) });
+  const o = f.final.odpoved;
+  assert.equal(f.r1.out.rezim, 'marketplace');
+  assert.equal(o.semafor, 'oranžová', JSON.stringify(sigIds(o)));
+  assert.notEqual(o.semafor, 'červená');
+  assert.ok(sigIds(o).includes('mimo_eu_bez_kontaktu'));
+  assert.equal(o.jistota, 'střední');
+});
+
+test('e2e kalibrace (c): poctivý notebook se dvěma nesoulady od LLM -> zelená (a nesoulady jsou vidět)', async () => {
+  const extract = NOTEBOOK({ nesoulady: ['Fotka ukazuje jiný model klávesnice', 'Popis uvádí 16 GB RAM, ale parametry 8 GB'] });
+  const f = await runFlow({ text: 'Notebook Lenovo IdeaPad 15, 14 990 Kč' }, { extract });
+  const o = f.final.odpoved;
+  assert.equal(o.semafor, 'zelená');
+  assert.equal(sigIds(o).filter((i) => i === 'nesoulad').length, 2);
+  assert.equal(o.skore, 2);
+});
+
+test('e2e kalibrace (c2): obviňující text od LLM se zahodí už při normalizaci', async () => {
+  const extract = NOTEBOOK({ nesoulady: ['Prodejce je podvodník', 'Fotka ukazuje jiný model'], nerealne_parametry: ['Nabídka je podvod'] });
+  const f = await runFlow({ text: 'Notebook' }, { extract });
+  const o = f.final.odpoved;
+  assert.deepEqual(sigIds(o), ['nesoulad']);
+  assert.ok(!JSON.stringify(o).includes('podvod'));
+});
+
+const coiFailStub = (extra) => (o) => {
+  if (o.url.startsWith('https://coi.gov.cz/')) throw new Error('503');
+  if (o.url.startsWith('https://rdap.')) return rdapIso(2005);
+  return extra ? extra(o) : { statusCode: 403, body: '' };
+};
+
+test('e2e kalibrace (d): ČOI nejde stáhnout a není cache, RDAP ok, všechny moduly ok -> nezkontrolovano uvádí seznam ČOI, jistota není vysoká', async () => {
+  const f = await runFlow({ odkaz: 'https://example.cz/p', text: 'Notebook' }, { extract: NOTEBOOK(), httpStub: coiFailStub() });
+  const o = f.final.odpoved;
+  assert.equal(o.stav, 'ok');
+  assert.equal(o.semafor, 'zelená');
+  assert.deepEqual(o.nezkontrolovano, ['prodejce: seznam ČOI']);
+  assert.notEqual(o.jistota, 'vysoká');
+  assert.equal(o.jistota, 'střední');
+  assert.deepEqual(f.r3.out.verdict.skipped, ['seznam ČOI']);
+});
+
+test('e2e kalibrace (d2): všechny zdroje dostupné a moduly ok -> jistota vysoká a nic v nezkontrolovano', async () => {
+  const stub = (o) => (o.url.startsWith('https://coi.gov.cz/') ? coiHtml(150) : o.url.startsWith('https://rdap.') ? rdapIso(2005) : { statusCode: 403, body: '' });
+  const f = await runFlow({ odkaz: 'https://example.cz/p', text: 'Notebook' }, { extract: NOTEBOOK(), httpStub: stub });
+  const o = f.final.odpoved;
+  assert.equal(o.semafor, 'zelená');
+  assert.equal(o.jistota, 'vysoká');
+  assert.deepEqual(o.nezkontrolovano, []);
+});
+
+test('e2e kalibrace (e): obnova ČOI selže, ale existuje stará cache (>6 h) s hostem -> pořád červená ze staré cache', async () => {
+  const stale = { at: Date.now() - 24 * 3600 * 1000, list: { 'clarkscz.cz': 'Provozovatel není uveden.' } };
+  const state0 = { coi: { ...stale } };
+  const f0 = await runFlow({ odkaz: 'https://clarkscz.cz/x' }, { httpStub: coiFailStub(), state: state0 });
+  const o0 = f0.final.odpoved;
+  assert.equal(o0.semafor, 'červená');
+  assert.ok(sigIds(o0).includes('coi_seznam'));
+  assert.ok(!o0.nezkontrolovano.includes('prodejce: seznam ČOI'), o0.nezkontrolovano.join());
+  assert.equal(callsTo(f0, 'https://coi.gov.cz/'), 1, 'obnova se zkusila');
+  assert.equal(state0.coi.at, stale.at, 'stará cache zůstala');
+  // obnova vrátí nepoužitelnou stránku (málo záznamů): stará cache se použije také
+  const state = { coi: { ...stale } };
+  const f = await runFlow({ odkaz: 'https://clarkscz.cz/x' }, { httpStub: (o) => (o.url.startsWith('https://coi.gov.cz/') ? '<html>změněná stránka</html>' : o.url.startsWith('https://rdap.') ? rdapIso(2005) : { statusCode: 403, body: '' }), state });
+  assert.equal(f.final.odpoved.semafor, 'červená');
+  assert.equal(state.coi.at, stale.at);
+});
+
+test('e2e kalibrace (e2): čerstvá cache (<6 h) se nepřeobnovuje', async () => {
+  const state = { coi: { at: Date.now() - 3600 * 1000, list: { 'clarkscz.cz': 'x' } } };
+  const f = await runFlow({ odkaz: 'https://clarkscz.cz/x' }, { httpStub: coiFailStub(), state });
+  assert.equal(callsTo(f, 'https://coi.gov.cz/'), 0);
+  assert.equal(f.final.odpoved.semafor, 'červená');
+});
+
+test('e2e kalibrace (f): ARES vrátí 404 pro IČO s platným kontrolním číslem -> jen low signál, žádná červená', async () => {
+  const extract = NOTEBOOK({ prodejce: { nazev: 'Slovenská firma', ico: '27082440', provozovatel_uveden: true, kontakt_uveden: true } });
+  const stub = (o) => (o.url.startsWith('https://coi.gov.cz/') ? coiHtml(150) : o.url.startsWith('https://rdap.') ? rdapIso(2005) : o.url.startsWith('https://ares.gov.cz/') ? { statusCode: 404, body: {} } : { statusCode: 403, body: '' });
+  const f = await runFlow({ odkaz: 'https://example.cz/p', text: 'Notebook' }, { extract, httpStub: stub });
+  const o = f.final.odpoved;
+  const ne = o.signaly.find((s) => s.id === 'ico_neexistuje');
+  assert.ok(ne, sigIds(o).join());
+  assert.equal(ne.zavaznost, 'low');
+  assert.match(ne.dukaz, /zahraničních/);
+  assert.notEqual(o.semafor, 'červená');
+  assert.equal(o.semafor, 'zelená');
+});
+
+test('glue 03 kalibrace (g): ČOI, RDAP a ARES se požadují souběžně (všechna volání začnou dřív, než některé skončí) a s kratšími timeouty', async () => {
+  const started = [];
+  let release;
+  const gate = new Promise((res) => { release = res; });
+  const stub = (o) => {
+    if (o.url.startsWith('https://coi.gov.cz/')) { started.push('coi'); return gate.then(() => coiHtml(150)); }
+    if (o.url.startsWith('https://rdap.')) { started.push('rdap'); return gate.then(() => rdapIso(2005)); }
+    if (o.url.startsWith('https://ares.gov.cz/')) { started.push('ares'); return gate.then(() => ({ statusCode: 404, body: {} })); }
+    throw new Error('neočekávaný požadavek ' + o.url);
+  };
+  const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'example.cz' };
+  const extract = NOTEBOOK({ prodejce: { ico: '27082440', kontakt_uveden: true } });
+  const p = runGlue('03-moduly.js', { json: extract, nodes: { 'Vstup a načtení': ctx }, state: {}, httpStub: stub });
+  const t0 = Date.now();
+  while (started.length < 3 && Date.now() - t0 < 1000) await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(started.slice().sort(), ['ares', 'coi', 'rdap'], 'před uvolněním musí běžet všechny tři');
+  release();
+  const { out, calls } = await p;
+  assert.deepEqual(out.verdict.skipped, []);
+  assert.equal(out.verdict.confidence, 'vysoká');
+  const timeoutOf = (prefix) => calls.find((c) => c.url.startsWith(prefix)).timeout;
+  assert.equal(timeoutOf('https://rdap.'), 6000);
+  assert.equal(timeoutOf('https://ares.gov.cz/'), 6000);
+  assert.equal(timeoutOf('https://coi.gov.cz/'), 10000);
+});
+
+test('glue 03 kalibrace: verdikt nese skipped a Moduly neposílají dál nic navíc', async () => {
+  const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'example.cz' };
+  const { out } = await runGlue('03-moduly.js', { json: NOTEBOOK(), nodes: { 'Vstup a načtení': ctx }, state: {}, httpStub: coiFailStub() });
+  assert.deepEqual(Object.keys(out).sort(), ['llmRequest', 'signals', 'verdict']);
+  assert.deepEqual(Object.keys(out.verdict).sort(), ['confidence', 'score', 'semafor', 'skipped', 'unchecked']);
+  assert.deepEqual(out.verdict.skipped, ['seznam ČOI']);
+  assert.deepEqual(JSON.parse(out.llmRequest.messages[0].content).nezkontrolovano, ['prodejce: seznam ČOI']);
+});
+
 // --- Task 9: webová stránka servírovaná z n8n ---
 const PAGE_PATH = path.join(root, 'web', 'index.html');
 const pageHtml = () => fs.readFileSync(PAGE_PATH, 'utf8');
@@ -904,7 +1062,7 @@ async function settle(p, ms = 300) {
     return await Promise.race([p.then((value) => ({ ok: true, value }), (error) => ({ ok: false, error })), timeout]);
   } finally { clearTimeout(t); }
 }
-const ALLOWED_CLASSES = new Set(['', 'card', 'light', 'sig', 'err', 'hint', 'zelená', 'oranžová', 'červená', 'šedá', 'high', 'medium', 'low']);
+const ALLOWED_CLASSES = new Set(['', 'card', 'light', 'sig', 'err', 'hint', 'zelená', 'oranžová', 'červená', 'šedá', 'high', 'medium', 'low', 'info', 'sev']);
 const CHYBA_ZPRACOVANI = 'Obrázek se nepodařilo zpracovat.';
 const CHYBA_NACTENI = 'Obrázek se nepodařilo načíst.';
 
@@ -1012,6 +1170,35 @@ test('render: povolený semafor se zobrazí beze změny', () => {
   assert.equal(badge.className, 'light zelená');
   assert.equal(badge.textContent, 'Riziko: zelená');
   assert.equal(dom.all.find((n) => n.className.startsWith('sig')).className, 'sig high');
+});
+
+test('render: závažnost info má třídu sig info a všechny závažnosti mají viditelný textový štítek', () => {
+  const labels = { info: 'Informace', low: 'Nízká', medium: 'Střední', high: 'Vysoká' };
+  for (const [zavaznost, label] of Object.entries(labels)) {
+    const { render, dom } = loadPage();
+    render({ stav: 'ok', semafor: 'zelená', shrnuti: 'x', co_delat: [], signaly: [{ zavaznost, titul: 'Titul ' + zavaznost, dukaz: 'D', modul: 'M' }] });
+    const sig = dom.all.find((n) => n.className.startsWith('sig'));
+    assert.equal(sig.className, 'sig ' + zavaznost);
+    const t = texts(sig);
+    assert.ok(t.includes(label), zavaznost + ': chybí štítek ' + label + ' v ' + t.join(' | '));
+    assert.ok(t.includes('Titul ' + zavaznost));
+    const sev = sig.children.find((c) => c.className === 'sev');
+    assert.ok(sev && sev.textContent === label, 'štítek má třídu sev');
+    for (const n of dom.all) for (const c of n.className.split(' ')) assert.ok(ALLOWED_CLASSES.has(c), 'nepovolená třída: ' + c);
+  }
+});
+
+test('render: neznámá závažnost se zobrazí jako Nízká (třída low), ne jako surová hodnota', () => {
+  const { render, dom } = loadPage();
+  render({ stav: 'ok', semafor: 'zelená', shrnuti: 'x', co_delat: [], signaly: [{ zavaznost: 'critical <b>', titul: 'T', dukaz: 'D', modul: 'M' }] });
+  const sig = dom.all.find((n) => n.className.startsWith('sig'));
+  assert.equal(sig.className, 'sig low');
+  assert.ok(texts(sig).includes('Nízká'));
+  assert.ok(!texts(sig).some((x) => x.includes('critical')));
+});
+
+test('CSS: .sig.info má tlumené ohraničení', () => {
+  assert.match(cssOf(), /\.sig\.info\s*\{[^}]*border-color:\s*var\(--muted\)/);
 });
 
 function cssOf() { return /<style>([\s\S]*?)<\/style>/.exec(pageHtml())[1]; }

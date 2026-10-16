@@ -6,10 +6,38 @@ const { computeVerdict } = require('../engine/scoring');
 const ALL_OK = { offer: 'ok', seller: 'ok', safety: 'ok' };
 const s = (severity, extra = {}) => signal({ id: 'x', module: 'offer', severity, title: 't', evidence: 'e', ...extra });
 
-test('žádné signály a všechny moduly ok → zelená, vysoká jistota', () => {
+test('žádné signály, všechny moduly ok, bez externího zdroje → zelená, střední jistota', () => {
   const v = computeVerdict([], ALL_OK);
   assert.equal(v.semafor, 'zelená');
+  assert.equal(v.confidence, 'střední');
+  assert.deepEqual(v.skipped, []);
+});
+
+test('všechny moduly ok + externí zdroj → zelená, vysoká jistota', () => {
+  const v = computeVerdict([], ALL_OK, { external: true, skipped: [] });
+  assert.equal(v.semafor, 'zelená');
   assert.equal(v.confidence, 'vysoká');
+});
+
+test('všechny moduly ok + externí zdroj + nedostupný zdroj (seznam ČOI) → střední jistota, skipped se vrací', () => {
+  const skipped = ['seznam ČOI'];
+  const v = computeVerdict([], ALL_OK, { external: true, skipped });
+  assert.equal(v.semafor, 'zelená');
+  assert.equal(v.confidence, 'střední');
+  assert.deepEqual(v.skipped, ['seznam ČOI']);
+  assert.notEqual(v.skipped, skipped, 'skipped je kopie');
+});
+
+test('external musí být přesně true (truthy hodnota nestačí)', () => {
+  assert.equal(computeVerdict([], ALL_OK, { external: 'ano' }).confidence, 'střední');
+  assert.equal(computeVerdict([], ALL_OK, null).confidence, 'střední');
+});
+
+test('jen název a cena (nabídka ok, bezpečnost ok, prodejce nezkontrolován) → šedá, nikdy zelená', () => {
+  const v = computeVerdict([], { offer: 'ok', seller: 'unchecked', safety: 'ok' });
+  assert.equal(v.semafor, 'šedá');
+  assert.equal(v.confidence, 'střední');
+  assert.deepEqual(v.unchecked, ['seller']);
 });
 
 test('všechny moduly nezkontrolovány → šedá, nikdy zelená', () => {
@@ -22,10 +50,10 @@ test('jen jeden modul ok a žádné signály → šedá', () => {
   assert.equal(computeVerdict([], { offer: 'ok', seller: 'unchecked', safety: 'unchecked' }).semafor, 'šedá');
 });
 
-test('dva ok moduly → střední jistota, zelená', () => {
+test('dva ok moduly bez signálů → střední jistota, ale šedá (zelená jen se všemi třemi moduly)', () => {
   const v = computeVerdict([], { offer: 'ok', seller: 'ok', safety: 'unchecked' });
   assert.equal(v.confidence, 'střední');
-  assert.equal(v.semafor, 'zelená');
+  assert.equal(v.semafor, 'šedá');
 });
 
 test('skóre 3 → oranžová, skóre 6 → červená', () => {
@@ -82,6 +110,46 @@ test('jeden high signál → červená', () => {
 test('skóre 2 → zelená, skóre 5 → oranžová', () => {
   assert.equal(computeVerdict([s('low'), s('low')], ALL_OK).semafor, 'zelená');
   assert.equal(computeVerdict([s('medium'), s('low'), s('low')], ALL_OK).semafor, 'oranžová');
+});
+
+test('info signály mají váhu 0 a verdikt nemění', () => {
+  assert.equal(WEIGHT.info, 0);
+  const v = computeVerdict([s('info'), s('info'), s('info'), s('info'), s('info'), s('info')], ALL_OK);
+  assert.equal(v.score, 0);
+  assert.equal(v.semafor, 'zelená');
+  assert.equal(s('info').severity, 'info');
+});
+
+test('low+low+low (3 body, žádný medium) → ne oranžová; low ×4 → oranžová', () => {
+  const three = computeVerdict([s('low'), s('low'), s('low')], ALL_OK);
+  assert.equal(three.score, 3);
+  assert.equal(three.semafor, 'zelená');
+  assert.equal(computeVerdict([s('low'), s('low'), s('low')], { offer: 'ok', seller: 'unchecked', safety: 'ok' }).semafor, 'šedá');
+  const four = computeVerdict([s('low'), s('low'), s('low'), s('low')], ALL_OK);
+  assert.equal(four.score, 4);
+  assert.equal(four.semafor, 'oranžová');
+});
+
+test('jeden medium signál → oranžová (i s info signály navíc)', () => {
+  assert.equal(computeVerdict([s('medium')], ALL_OK).semafor, 'oranžová');
+  assert.equal(computeVerdict([s('medium'), s('info'), s('info')], ALL_OK).semafor, 'oranžová');
+});
+
+test('oranžová a červená platí i při nezkontrolovaných modulech (signály se neskrývají)', () => {
+  const partial = { offer: 'ok', seller: 'unchecked', safety: 'unchecked' };
+  assert.equal(computeVerdict([s('medium')], partial).semafor, 'oranžová');
+  assert.equal(computeVerdict([s('high')], partial).semafor, 'červená');
+});
+
+test('hard signál → červená bez ohledu na ostatní (info, moduly, jistotu)', () => {
+  assert.equal(computeVerdict([s('info', { hard: true })], ALL_OK, { external: true }).semafor, 'červená');
+  assert.equal(computeVerdict([s('low', { hard: true })], { offer: 'unchecked', seller: 'unchecked', safety: 'unchecked' }).semafor, 'červená');
+});
+
+test('skipped: nepole a nestringy se ignorují, výchozí je prázdné pole', () => {
+  assert.deepEqual(computeVerdict([], ALL_OK, { skipped: 'x' }).skipped, []);
+  assert.deepEqual(computeVerdict([], ALL_OK, { skipped: ['a', 5, null] }).skipped, ['a']);
+  assert.deepEqual(computeVerdict([], ALL_OK).skipped, []);
 });
 
 test('nízká jistota (jeden ok modul) se střední závažností → oranžová, ne šedá', () => {

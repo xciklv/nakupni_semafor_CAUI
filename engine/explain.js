@@ -22,10 +22,17 @@ const EXPLAIN_BEZPECNOST_TVRZENI = /bezpecn\w*|v poradku|v pohode|bez obav|neni 
 // 'Kontrola nenašla rizikové signály.', so the deterministic zelená text is used instead.
 const EXPLAIN_ZELENA_VAROVANI = /nekup\w*|nedoporuc\w*|nedokoncuj\w*|nakup radeji|radeji ne|varuj\w*|varovan\w*|podvod\w*|nebezpecn\w*|riziko|rizikov/;
 
+// Nezkontrolované moduly následované nedostupnými zdroji ('prodejce: seznam ČOI'); chybějící/špatné pole se toleruje.
+function explainUnchecked(verdict) {
+  const mods = Array.isArray(verdict.unchecked) ? verdict.unchecked : [];
+  const skipped = Array.isArray(verdict.skipped) ? verdict.skipped.filter((x) => typeof x === 'string' && x) : [];
+  return mods.map((k) => MODULE_NAMES[k]).concat(skipped.map((x) => MODULE_NAMES.seller + ': ' + x));
+}
+
 function buildExplainRequest(verdict, signals) {
   const payload = {
     semafor: verdict.semafor, jistota: verdict.confidence,
-    nezkontrolovano: (verdict.unchecked || []).map((k) => MODULE_NAMES[k]),
+    nezkontrolovano: explainUnchecked(verdict),
     signaly: signals.map((s) => ({ zavaznost: s.severity, titul: s.title, dukaz: s.evidence })),
   };
   return { model: 'claude-haiku-5-5', max_tokens: 600, system: SYSTEM_EXPLAIN, messages: [{ role: 'user', content: JSON.stringify(payload) }] };
@@ -86,7 +93,10 @@ function fallbackAdvice(verdict) {
     'šedá': ['Z dostupných dat nelze nabídku spolehlivě posoudit.', ['Vložte více údajů, například screenshot celé nabídky včetně prodejce.', 'Do rozhodnutí berte výsledek jen jako orientační.']],
   };
   const t = table[verdict.semafor] || table['šedá'];
-  return { shrnuti: t[0], co_delat: t[1] };
+  // U šedé zmínka, že nějaký zdroj nebyl dostupný, jen když to platí (jinak základní text beze změny).
+  const nedostupne = Array.isArray(verdict.skipped) && verdict.skipped.length > 0;
+  const shrnuti = verdict.semafor === 'šedá' || !table[verdict.semafor] ? t[0] + (nedostupne ? ' Údaje jsou neúplné, některý zdroj nebyl dostupný.' : '') : t[0];
+  return { shrnuti, co_delat: t[1] };
 }
 
 function buildResponse({ verdict, signals = [], explanation } = {}) {
@@ -108,7 +118,7 @@ function buildResponse({ verdict, signals = [], explanation } = {}) {
     stav: 'ok', semafor: verdict.semafor, skore: verdict.score, jistota: verdict.confidence,
     shrnuti: text.shrnuti, co_delat: text.co_delat,
     signaly: sorted.map((s) => ({ id: s.id, modul: MODULE_NAMES[s.module], zavaznost: s.severity, titul: s.title, dukaz: s.evidence, zdroj: s.source })),
-    nezkontrolovano: (verdict.unchecked || []).map((k) => MODULE_NAMES[k]),
+    nezkontrolovano: explainUnchecked(verdict),
     upozorneni: DISCLAIMER,
   };
 }

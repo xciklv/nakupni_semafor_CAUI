@@ -230,3 +230,41 @@ test('verdikt bez pole unchecked nezpůsobí pád', () => {
   const r = buildResponse({ verdict: v, signals: [], explanation: null });
   assert.deepEqual(r.nezkontrolovano, []);
 });
+
+// --- fix wave A: nezkontrolované zdroje se ukazují uživateli ---
+test('buildResponse: nezkontrolovano = moduly + „prodejce: <zdroj>“ ze skipped', () => {
+  const v = computeVerdict([], { offer: 'ok', seller: 'ok', safety: 'unchecked' }, { external: true, skipped: ['seznam ČOI', 'ARES'] });
+  assert.deepEqual(v.skipped, ['seznam ČOI', 'ARES']);
+  const r = buildResponse({ verdict: v, signals: [], explanation: null });
+  assert.deepEqual(r.nezkontrolovano, ['bezpečnost', 'prodejce: seznam ČOI', 'prodejce: ARES']);
+  const ok3 = buildResponse({ verdict: computeVerdict([], OK3, { external: true, skipped: ['seznam ČOI'] }), signals: [] });
+  assert.deepEqual(ok3.nezkontrolovano, ['prodejce: seznam ČOI']);
+  assert.notEqual(ok3.jistota, 'vysoká');
+});
+
+test('buildResponse toleruje chybějící nebo špatné verdict.skipped', () => {
+  for (const skipped of [undefined, null, 'x', 5, {}]) {
+    const r = buildResponse({ verdict: { semafor: 'šedá', score: 0, confidence: 'nízká', unchecked: ['seller'], skipped }, signals: [] });
+    assert.deepEqual(r.nezkontrolovano, ['prodejce']);
+  }
+  const r = buildResponse({ verdict: { semafor: 'šedá', score: 0, confidence: 'nízká', unchecked: [], skipped: ['ARES', 7, null] }, signals: [] });
+  assert.deepEqual(r.nezkontrolovano, ['prodejce: ARES']);
+});
+
+test('buildExplainRequest zahrnuje nedostupné zdroje v nezkontrolovano a toleruje chybějící skipped', () => {
+  const v = computeVerdict([], { offer: 'ok', seller: 'ok', safety: 'unchecked' }, { external: true, skipped: ['seznam ČOI'] });
+  const p = JSON.parse(buildExplainRequest(v, []).messages[0].content);
+  assert.deepEqual(p.nezkontrolovano, ['bezpečnost', 'prodejce: seznam ČOI']);
+  const p2 = JSON.parse(buildExplainRequest({ semafor: 'šedá', confidence: 'nízká', unchecked: ['offer'] }, []).messages[0].content);
+  assert.deepEqual(p2.nezkontrolovano, ['nabídka']);
+});
+
+test('fallbackAdvice (šedá): zmínka o nedostupných zdrojích jen když nějaký zdroj nebyl dostupný', () => {
+  const base = fallbackAdvice({ semafor: 'šedá' }).shrnuti;
+  assert.equal(base, 'Z dostupných dat nelze nabídku spolehlivě posoudit.');
+  const withSkipped = fallbackAdvice({ semafor: 'šedá', unchecked: [], skipped: ['ARES'] }).shrnuti;
+  assert.match(withSkipped, /^Z dostupných dat nelze nabídku spolehlivě posoudit\./);
+  assert.match(withSkipped, /neúplné/);
+  assert.equal(fallbackAdvice({ semafor: 'šedá', unchecked: ['seller'], skipped: [] }).shrnuti, base, 'nezkontrolovaný modul už vysvětluje základní text');
+  for (const sem of ['zelená', 'oranžová', 'červená']) assert.equal(fallbackAdvice({ semafor: sem, unchecked: ['seller'], skipped: ['ARES'] }).shrnuti, fallbackAdvice({ semafor: sem }).shrnuti);
+});

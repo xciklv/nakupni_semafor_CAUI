@@ -90,19 +90,26 @@ test('stará doména mimo seznam → bez signálů', async () => {
   assert.equal(r.status, 'ok');
 });
 
-test('výpadek RDAP i ČOI a žádná pole → nezkontrolováno', async () => {
+test('výpadek RDAP i ČOI a žádná pole → nezkontrolováno, bez externího zdroje, oba zdroje v skipped', async () => {
   const boom = async () => { throw new Error('down'); };
   const r = await sellerSignals({ x: X(), rezim: 'eshop', host: 'x.cz', nowMs: NOW, fetchers: { rdap: boom, ares: boom }, coiList: null });
   assert.equal(r.status, 'unchecked');
   assert.deepEqual(r.signals, []);
+  assert.equal(r.external, false);
+  assert.deepEqual(r.skipped, ['RDAP (stáří domény)', 'seznam ČOI']);
 });
 
-test('IČO neexistuje v ARES → high; neplatné IČO → medium', async () => {
+test('IČO neexistuje v ARES → low s neutrálním zněním; neplatné IČO → low', async () => {
   const f = { rdap: async () => rdap('2000-01-01T00:00:00+00:00'), ares: async () => null };
   const a = await sellerSignals({ x: X({ ico: '27082440' }), rezim: 'eshop', host: 'x.cz', nowMs: NOW, fetchers: f, coiList: {} });
-  assert.equal(a.signals.find((s) => s.id === 'ico_neexistuje').severity, 'high');
+  const ne = a.signals.find((s) => s.id === 'ico_neexistuje');
+  assert.equal(ne.severity, 'low');
+  assert.equal(ne.hard, false);
+  assert.equal(ne.evidence, 'IČO nebylo nalezeno v českém registru ARES; u zahraničních (např. slovenských) firem je to běžné.');
+  assert.equal(a.external, true);
+  assert.deepEqual(a.skipped, []);
   const b = await sellerSignals({ x: X({ ico: '12345678' }), rezim: 'eshop', host: 'x.cz', nowMs: NOW, fetchers: f, coiList: {} });
-  assert.ok(ids(b).includes('ico_neplatne'));
+  assert.equal(b.signals.find((s) => s.id === 'ico_neplatne').severity, 'low');
 });
 
 test('zaniklý subjekt v ARES → high', async () => {
@@ -111,6 +118,7 @@ test('zaniklý subjekt v ARES → high', async () => {
     fetchers: { rdap: async () => rdap('2000-01-01T00:00:00+00:00'), ares: async () => ({ obchodniJmeno: 'X', datumZaniku: '2020-01-01' }) }, coiList: {},
   });
   assert.ok(ids(r).includes('subjekt_zanikl'));
+  assert.equal(r.signals.find((s) => s.id === 'subjekt_zanikl').severity, 'high');
 });
 
 test('marketplace: nízké hodnocení, nový obchod, málo prodejů, odeslání mimo EU bez kontaktu', async () => {
@@ -225,4 +233,90 @@ test('parseCoi: běžný záznam se dvěma doménami a značkami v důvodu', () 
   assert.equal(l['a.cz'], 'x');
   assert.equal(l['b.cz'], 'x');
   assert.deepEqual(Object.keys(l).sort(), ['a.cz', 'b.cz']);
+});
+
+// --- fix wave A: external / skipped, paralelní fetchery, české znění ---
+const OLD = async () => rdap('2000-01-01T00:00:00+00:00');
+const run = (prodejce, o = {}) => sellerSignals({ x: X(prodejce), rezim: 'eshop', host: 'x.cz', nowMs: NOW, fetchers: { rdap: OLD, ares: async () => ({}) }, coiList: {}, ...o });
+
+test('external: RDAP, ČOI i ARES samostatně stačí; marketplace bez externích zdrojů je external:false', async () => {
+  assert.equal((await run({}, { coiList: null })).external, true, 'RDAP');
+  assert.equal((await run({}, { fetchers: { rdap: async () => { throw new Error('x'); } } })).external, true, 'ČOI');
+  const ares = await run({ ico: '27082440' }, { coiList: null, fetchers: { rdap: async () => { throw new Error('x'); }, ares: async () => ({}) } });
+  assert.equal(ares.external, true, 'ARES');
+  const mp = await sellerSignals({ x: X({ hodnoceni: 4.8 }), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, fetchers: {}, coiList: null });
+  assert.equal(mp.external, false);
+  assert.deepEqual(mp.skipped, []);
+  const bad = await run({ ico: '12345678' }, { coiList: null, fetchers: { rdap: async () => { throw new Error('x'); } } });
+  assert.equal(bad.external, false, 'neplatné IČO není externí zdroj');
+});
+
+test('skipped: RDAP bez použitelného data, ČOI bez seznamu a ARES s neplatnou odpovědí, v tomto pořadí', async () => {
+  const r = await run({ ico: '27082440' }, { coiList: null, fetchers: { rdap: async () => ({ events: [] }), ares: async () => 'oops' } });
+  assert.deepEqual(r.skipped, ['RDAP (stáří domény)', 'seznam ČOI', 'ARES']);
+  assert.equal(r.external, false);
+  assert.equal(r.status, 'unchecked');
+});
+
+test('skipped: ARES odmítnutí; dostupné zdroje v skipped nejsou', async () => {
+  const r = await run({ ico: '27082440' }, { fetchers: { rdap: OLD, ares: async () => { throw new Error('ARES 500'); } } });
+  assert.deepEqual(r.skipped, ['ARES']);
+  assert.equal(r.external, true);
+  const ok = await run({ ico: '27082440' });
+  assert.deepEqual(ok.skipped, []);
+});
+
+test('skipped: neplatné IČO a doména bez tečky ARES ani RDAP nevolají; marketplace s nedostupným ARES ho uvede', async () => {
+  let called = 0;
+  const f = { rdap: async () => { called++; return {}; }, ares: async () => { called++; return {}; } };
+  const a = await sellerSignals({ x: X({ ico: '12345678' }), rezim: 'eshop', host: 'intranet', nowMs: NOW, fetchers: f, coiList: {} });
+  assert.deepEqual(a.skipped, []);
+  assert.equal(called, 0);
+  const m = await sellerSignals({ x: X({ ico: '27082440' }), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, fetchers: { ares: async () => { throw new Error('x'); } }, coiList: null });
+  assert.deepEqual(m.skipped, ['ARES']);
+});
+
+test('RDAP a ARES se volají souběžně (obě volání začnou dřív, než některé skončí)', async () => {
+  const started = [];
+  let release;
+  const gate = new Promise((res) => { release = res; });
+  const p = sellerSignals({
+    x: X({ ico: '27082440' }), rezim: 'eshop', host: 'x.cz', nowMs: NOW, coiList: {},
+    fetchers: {
+      rdap: () => { started.push('rdap'); return gate.then(() => rdap('2000-01-01T00:00:00+00:00')); },
+      ares: () => { started.push('ares'); return gate.then(() => ({})); },
+    },
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(started.slice().sort(), ['ares', 'rdap'], 'před uvolněním musí běžet obě');
+  release();
+  const r = await p;
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(r.skipped, []);
+});
+
+test('coiList smí být promise; odmítnutý promise = seznam ČOI v skipped', async () => {
+  const hit = await run({}, { host: 'clarkscz.cz', coiList: Promise.resolve(parseCoi(COI_HTML)) });
+  assert.ok(ids(hit).includes('coi_seznam'));
+  const rej = await run({}, { coiList: Promise.reject(new Error('x')) });
+  assert.deepEqual(rej.skipped, ['seznam ČOI']);
+});
+
+test('čeština: před 1 dnem / 2 dny / 5 dny', async () => {
+  const ev = async (n) => (await sellerSignals({ x: X(), rezim: 'eshop', host: 'x.cz', nowMs: NOW, fetchers: { rdap: async () => rdap(new Date(NOW - n * 86400000).toISOString()) }, coiList: {} })).signals[0].evidence;
+  assert.equal(await ev(1), 'Doména x.cz byla zaregistrována před 1 dnem.');
+  assert.equal(await ev(2), 'Doména x.cz byla zaregistrována před 2 dny.');
+  assert.equal(await ev(5), 'Doména x.cz byla zaregistrována před 5 dny.');
+  assert.equal(await ev(100), 'Doména x.cz byla zaregistrována před 100 dny.');
+});
+
+test('čeština: počet prodejů, hodnocení s desetinnou čárkou, stáří obchodu', async () => {
+  const sig = async (p, id) => (await sellerSignals({ x: X(p), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, fetchers: {}, coiList: null })).signals.find((s) => s.id === id);
+  assert.equal((await sig({ pocet_prodeju: 10 }, 'malo_prodeju')).evidence, 'Počet prodejů: 10.');
+  assert.equal((await sig({ hodnoceni: 3.5 }, 'hodnoceni_nizke')).evidence, 'Hodnocení prodejce je 3,5.');
+  assert.equal((await sig({ hodnoceni: 3 }, 'hodnoceni_nizke')).evidence, 'Hodnocení prodejce je 3.');
+  assert.equal((await sig({ stari_obchodu_dny: 30 }, 'obchod_novy')).evidence, 'Obchod je starý 30 dní.');
+  assert.equal((await sig({ stari_obchodu_dny: 1 }, 'obchod_novy')).evidence, 'Obchod je starý 1 den.');
+  assert.equal((await sig({ stari_obchodu_dny: 3 }, 'obchod_novy')).evidence, 'Obchod je starý 3 dny.');
+  assert.equal((await sig({ stari_obchodu_dny: 0 }, 'obchod_novy')).evidence, 'Obchod je starý 0 dní.');
 });

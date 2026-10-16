@@ -170,3 +170,27 @@ test('SYSTEM_EXTRACT popisuje znacka a model (jen z nabídky, nehádat)', () => 
   assert.match(SYSTEM_EXTRACT, /"model":str\|null/);
   assert.match(SYSTEM_EXTRACT, /znacka a model/);
 });
+
+// --- fix wave A: filtr obviňujících řetězců v textech psaných modelem ---
+test('normalizeExtraction zahodí (nepřepíše) obviňující řetězce v nesouladech i nerealných parametrech', () => {
+  const x = normalizeExtraction({
+    nesoulady: ['Prodejce je podvodník', 'Fotka ukazuje jiný model', 'Nabídka je PODVOD', 'Podvodné fotky', 'Tento eshop je podvodnice', 'Vypadá to na zloděje? Zloděj!', 'Nelegální kopie', 'Hrozí trestní stíhání', 'Je to lump', 'Ti lumpové', 'Cena neodpovídá popisu'],
+    nerealne_parametry: ['Podvodný údaj o kapacitě', '30000 mAh za 199 Kč', 'Je podvod: 5G v ceně 100 Kč'],
+  });
+  assert.deepEqual(x.nesoulady, ['Fotka ukazuje jiný model', 'Cena neodpovídá popisu']);
+  assert.deepEqual(x.nerealne_parametry, ['30000 mAh za 199 Kč']);
+});
+
+test('filtr obvinění je bez diakritiky a velikosti písmen; neškodná slova (plumpy, podvozek) projdou', () => {
+  const x = normalizeExtraction({
+    nesoulady: ['PODVODNÍK', 'podvodnik', 'Podvodnici', 'NELEGÁLNÍ', 'Plumpy obal neodpovídá', 'Podvozek na fotce je jiný', 'Rozpor v ceně'],
+    nerealne_parametry: [],
+  });
+  assert.deepEqual(x.nesoulady, ['Plumpy obal neodpovídá', 'Podvozek na fotce je jiný', 'Rozpor v ceně']);
+});
+
+test('filtr obvinění se nevztahuje na ostatní pole (název produktu)', () => {
+  const x = normalizeExtraction({ produkt: { nazev: 'Kniha Podvodník Felix Krull' }, nesoulady: ['Podvodník'] });
+  assert.equal(x.produkt.nazev, 'Kniha Podvodník Felix Krull');
+  assert.deepEqual(x.nesoulady, []);
+});

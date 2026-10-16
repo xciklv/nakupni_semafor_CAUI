@@ -1,4 +1,5 @@
-const WEIGHT = { low: 1, medium: 3, high: 6 };
+// info = ukazuje se uživateli, do skóre se nepočítá (váha 0)
+const WEIGHT = { info: 0, low: 1, medium: 3, high: 6 };
 const SIGNAL_EVIDENCE_MAX = 300;
 
 function signal({ id, module, severity, title, evidence, source = null, hard = false }) {
