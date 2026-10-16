@@ -19,8 +19,12 @@ function resultClass(r) {
   return predictedClass(r.semafor);
 }
 
+function count(arr, cls) {
+  return arr.filter((r) => resultClass(r) === cls).length;
+}
+
 function share(arr, cls) {
-  return arr.length ? arr.filter((r) => resultClass(r) === cls).length / arr.length : null;
+  return arr.length ? count(arr, cls) / arr.length : null;
 }
 
 function computeMetrics(results) {
@@ -38,6 +42,33 @@ function computeMetrics(results) {
     neurceno_podvod: share(podvody, 'neurceno'),
     neurceno_ok: share(oks, 'neurceno'),
     chyby: list.filter((r) => resultClass(r) === 'chyba').length,
+    // Čitatelé podílů nahoře (jmenovatele jsou per_label_counts.podvod / .ok a total); pro výpis x/y.
+    pocty: {
+      recall_podvod: count(podvody, 'rizikove'),
+      falesny_poplach: count(oks, 'rizikove'),
+      neurceno: count(list, 'neurceno'),
+      neurceno_podvod: count(podvody, 'neurceno'),
+      neurceno_ok: count(oks, 'neurceno'),
+    },
+  };
+}
+
+// Metriky po skupinách (pole skupina u výsledku). Skupina 'coi' je kruhová (verdikt vychází ze stejného
+// seznamu ČOI), proto 'detection' je spočtená bez ní. Výsledek bez skupiny spadne do 'nezarazeno'.
+const CIRCULAR_GROUP = 'coi';
+function computeMetricsByGroup(results) {
+  const list = Array.isArray(results) ? results : [];
+  const buckets = {};
+  for (const r of list) {
+    const g = r && typeof r.skupina === 'string' && r.skupina ? r.skupina : 'nezarazeno';
+    (buckets[g] = buckets[g] || []).push(r);
+  }
+  const groups = {};
+  for (const g of Object.keys(buckets)) groups[g] = computeMetrics(buckets[g]);
+  return {
+    overall: computeMetrics(list),
+    groups,
+    detection: computeMetrics(list.filter((r) => !(r && r.skupina === CIRCULAR_GROUP))),
   };
 }
 
@@ -70,4 +101,4 @@ function topSignals(results, n = 10) {
   return [...acc.values()].sort((a, b) => b.count - a.count || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).slice(0, n);
 }
 
-module.exports = { LABELS, CLASSES, predictedClass, resultClass, computeMetrics, confusion, topSignals };
+module.exports = { LABELS, CLASSES, predictedClass, resultClass, computeMetrics, computeMetricsByGroup, confusion, topSignals };

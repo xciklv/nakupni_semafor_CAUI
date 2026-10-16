@@ -2,7 +2,7 @@
 // převod odpovědi na záznam, parsování argumentů a Markdown souhrn. I/O dělá run-eval.js.
 const fs = require('node:fs');
 const path = require('node:path');
-const { LABELS, computeMetrics, confusion, topSignals, resultClass } = require('./metrics');
+const { LABELS, computeMetrics, computeMetricsByGroup, confusion, topSignals, resultClass } = require('./metrics');
 
 const MIMES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
 
@@ -36,10 +36,28 @@ function buildRequestBody(c, screensDir) {
   return body;
 }
 
+// Skupina případu: explicitní 'skupina', jinak 'screens' pro screenshoty a 'synthetic' pro ostatní.
+function caseGroup(c) {
+  if (c && typeof c.skupina === 'string' && c.skupina) return c.skupina;
+  return c && Array.isArray(c.screenshotFiles) && c.screenshotFiles.length ? 'screens' : 'synthetic';
+}
+
+function errorRecord(c, chyba) {
+  return { id: c.id, label: c.label, skupina: caseGroup(c), stav: 'chyba', chyba: String(chyba).slice(0, 300) };
+}
+
+// Číselná proměnná prostředí; neplatná hodnota (prázdná, NaN, Infinity, záporná, u allowZero=false i 0) -> fallback.
+function readNumberEnv(value, fallback, allowZero = true) {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || (n === 0 && !allowZero)) return fallback;
+  return n;
+}
+
 // Odpověď webhooku -> záznam výsledku. Nikdy nevyhazuje; cokoli nečekaného je stav 'chyba'.
 function toResultRecord(c, j) {
-  const base = { id: c.id, label: c.label };
-  const fail = (chyba) => ({ ...base, stav: 'chyba', chyba: String(chyba).slice(0, 300) });
+  const base = { id: c.id, label: c.label, skupina: caseGroup(c) };
+  const fail = (chyba) => errorRecord(c, chyba);
   if (!j || typeof j !== 'object' || Array.isArray(j)) return fail('Neočekávaná odpověď (není JSON objekt)');
   if (j.stav === 'chyba') return fail(typeof j.chyba === 'string' && j.chyba ? j.chyba : 'Chyba bez popisu');
   if (j.stav === 'potrebuji_vice') return { ...base, stav: 'potrebuji_vice', zprava: typeof j.zprava === 'string' ? j.zprava : '' };
@@ -81,24 +99,70 @@ function selectCases(cases, opts) {
   return cases.filter((c) => (!opts.only || c.label === opts.only) && (!opts.ids || opts.ids.includes(c.id)));
 }
 
-const pct = (v) => (v === null || v === undefined ? 'n/a' : Math.round(v * 100) + ' %');
 const oneLine = (s) => String(s).replace(/\s+/g, ' ').trim().slice(0, 200);
 const sigText = (r) => (Array.isArray(r.signaly) && r.signaly.length ? r.signaly.join(', ') : 'žádné');
+// x/y (p %); n/a, když není jmenovatel.
+const frac = (x, y) => (y > 0 ? x + '/' + y + ' (' + Math.round((x / y) * 100) + ' %)' : 'n/a');
 
+const COI_NOTE = 'Skupina ČOI je kruhová: verdikt vychází ze stejného seznamu, proto jde jen o kontrolu funkčnosti řetězce, ne o měřítko detekce. Zařazení na seznam ČOI znamená rizikového provozovatele, ne prokázaný podvod.';
+const GROUP_ORDER = ['coi', 'legit', 'synthetic', 'screens'];
+const GROUP_TITLE = { coi: 'ČOI (coi)' };
+
+// Řádky s metrikami jedné množiny případů. Počítá se jen z vyhodnocených případů (bez chyb požadavků),
+// chyby jsou uvedeny zvlášť: ev = metriky vyhodnocených, all = metriky včetně chyb.
+function metricLines(ev, all) {
+  const p = ev.pocty;
+  return [
+    '- Zachycené podvody (oranžová nebo červená): ' + frac(p.recall_podvod, ev.per_label_counts.podvod),
+    '- Falešný poplach u legitimních nabídek: ' + frac(p.falesny_poplach, ev.per_label_counts.ok),
+    '- Nelze posoudit (šedá nebo žádost o víc údajů): ' + frac(p.neurceno, ev.total),
+    '- Nelze posoudit u podvodů: ' + frac(p.neurceno_podvod, ev.per_label_counts.podvod) + ', u legitimních nabídek: ' + frac(p.neurceno_ok, ev.per_label_counts.ok),
+    '- Chyby požadavků: ' + all.chyby,
+  ];
+}
+
+function outcomeKind(r) {
+  const cls = resultClass(r);
+  if (cls === 'chyba') return 'chyba';
+  if (cls === 'neurceno') return 'neurčeno';
+  return r.label === 'ok' ? 'falešný poplach' : 'zmeškaný podvod';
+}
+
+// Markdown souhrn. Procenta se vždy tisknou s jmenovatelem (x/y). Sazby se počítají jen z vyhodnocených
+// případů (stav jiný než chyba); computeMetrics v metrics.js zůstává definovaný nad všemi případy včetně chyb.
 function renderReport(results, meta) {
   const list = Array.isArray(results) ? results : [];
-  const m = computeMetrics(list);
+  const evaluated = list.filter((r) => resultClass(r) !== 'chyba');
+  const all = computeMetricsByGroup(list);
+  const ev = computeMetricsByGroup(evaluated);
+  const n = all.overall.total;
+  const chyby = all.overall.chyby;
   const cm = confusion(list);
   const L = [];
   L.push('# Výsledky testovací sady', '');
   L.push('- Datum: ' + ((meta && meta.datum) || 'neuvedeno') + ', API: ' + ((meta && meta.api) || 'neuvedeno'));
-  L.push('- Počet případů: ' + m.total + ' (ok: ' + m.per_label_counts.ok + ', sporné: ' + m.per_label_counts.sporne + ', podvod: ' + m.per_label_counts.podvod + ')');
-  L.push('- Zachycené podvody (oranžová nebo červená): ' + pct(m.recall_podvod));
-  L.push('- Falešný poplach u legitimních nabídek: ' + pct(m.falesny_poplach));
-  L.push('- Nelze posoudit (šedá nebo žádost o víc údajů), všechny případy: ' + pct(m.neurceno));
-  L.push('- Nelze posoudit u podvodů: ' + pct(m.neurceno_podvod) + ', u legitimních nabídek: ' + pct(m.neurceno_ok));
-  L.push('- Chyby požadavků: ' + m.chyby);
-  L.push('', '## Matice (skutečnost x výsledek)', '');
+  const pl = all.overall.per_label_counts;
+  L.push('- Počet případů: ' + n + ' (ok: ' + pl.ok + ', sporné: ' + pl.sporne + ', podvod: ' + pl.podvod + ')', '');
+  if (n < 100) L.push('Malý vzorek: výsledky jsou orientační (n = ' + n + ').');
+  if (chyby > 0) {
+    L.push('⚠ ' + chyby + ' z ' + n + ' požadavků skončilo chybou; metriky nejsou úplné.');
+    L.push('Vyhodnoceno: ' + (n - chyby) + '/' + n);
+  }
+  if (chyby === n) L.push('Žádný případ nebyl vyhodnocen.');
+  L.push('Procenta se počítají jen z vyhodnocených případů (bez chyb požadavků); chyby jsou uvedeny zvlášť.');
+  L.push('', '## Detekce (bez skupiny ČOI)', '');
+  L.push(...metricLines(ev.detection, all.detection));
+  for (const g of Object.keys(all.groups).sort((a, b) => {
+    const ia = GROUP_ORDER.indexOf(a), ib = GROUP_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || (a < b ? -1 : a > b ? 1 : 0);
+  })) {
+    const evg = ev.groups[g] || computeMetricsByGroup([]).overall;
+    L.push('', '## Skupina ' + (GROUP_TITLE[g] || g), '');
+    L.push('- Počet případů: ' + all.groups[g].total);
+    L.push(...metricLines(evg, all.groups[g]));
+    if (g === 'coi') L.push('', COI_NOTE);
+  }
+  L.push('', '## Matice (skutečnost x výsledek, všechny skupiny)', '');
   L.push('| Skutečnost | zelená | oranžová/červená | neurčeno | chyba |', '|---|---|---|---|---|');
   for (const l of LABELS) L.push('| ' + l + ' | ' + cm[l].ok + ' | ' + cm[l].rizikove + ' | ' + cm[l].neurceno + ' | ' + cm[l].chyba + ' |');
   L.push('', '## Nejčastější signály', '');
@@ -108,17 +172,18 @@ function renderReport(results, meta) {
     L.push('| Signál | Počet případů | ok / sporné / podvod |', '|---|---|---|');
     for (const t of top) L.push('| ' + t.id + ' | ' + t.count + ' | ' + t.per_label.ok + ' / ' + t.per_label.sporne + ' / ' + t.per_label.podvod + ' |');
   }
-  L.push('', '## Chybně zařazené případy', '');
-  const wrong = list.filter((r) => r && ((r.label === 'podvod' && resultClass(r) !== 'rizikove') || (r.label === 'ok' && resultClass(r) !== 'ok')));
-  if (!wrong.length) L.push('Žádné.');
-  for (const r of wrong) {
+  L.push('', '## Případy mimo očekávání', '');
+  const off = list.filter((r) => r && ((r.label === 'podvod' && resultClass(r) !== 'rizikove') || (r.label === 'ok' && resultClass(r) !== 'ok')));
+  if (!off.length) L.push('Žádné.');
+  for (const r of off) {
     const cls = resultClass(r);
     const got = cls === 'chyba' ? 'chyba' : (r.semafor || r.stav);
+    const skore = cls !== 'chyba' && r.skore !== undefined && r.skore !== null ? ', skóre ' + r.skore : '';
     const detail = cls === 'chyba' ? oneLine(r.chyba || 'bez popisu') : 'signály: ' + sigText(r);
-    L.push('- ' + r.id + ' (' + r.label + ' -> ' + got + (r.skore !== undefined && r.skore !== null ? ', skóre ' + r.skore : '') + '): ' + detail);
+    L.push('- ' + r.id + ' [' + (r.skupina || 'nezarazeno') + '] (' + outcomeKind(r) + ': ' + r.label + ' -> ' + got + skore + '): ' + detail);
   }
   const sporne = list.filter((r) => r && r.label === 'sporne');
-  L.push('', '## Sporné případy (do metrik se nepočítají)', '');
+  L.push('', '## Sporné případy (do metrik zachycení a falešného poplachu se nepočítají)', '');
   if (!sporne.length) L.push('Žádné.');
   for (const r of sporne) {
     const cls = resultClass(r);
@@ -127,4 +192,4 @@ function renderReport(results, meta) {
   return L.join('\n') + '\n';
 }
 
-module.exports = { mimeFromName, buildRequestBody, toResultRecord, parseArgs, selectCases, renderReport };
+module.exports = { mimeFromName, buildRequestBody, caseGroup, errorRecord, readNumberEnv, toResultRecord, parseArgs, selectCases, renderReport };

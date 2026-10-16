@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { predictedClass, resultClass, computeMetrics, confusion, topSignals } = require('../eval/metrics');
-const { mimeFromName, buildRequestBody, toResultRecord, selectCases, parseArgs, renderReport } = require('../eval/report');
+const { predictedClass, resultClass, computeMetrics, computeMetricsByGroup, confusion, topSignals } = require('../eval/metrics');
+const { mimeFromName, buildRequestBody, caseGroup, toResultRecord, errorRecord, readNumberEnv, selectCases, parseArgs, renderReport } = require('../eval/report');
 
 // ---- metrics ----
 
@@ -170,25 +170,37 @@ test('buildRequestBody: případ bez vstupu je chyba', () => {
 
 // ---- report: result record ----
 
-test('toResultRecord: ok odpověď zachová jen potřebná pole a ids signálů', () => {
-  const rec = toResultRecord({ id: 'a', label: 'podvod' }, {
+test('caseGroup: výchozí skupina podle druhu vstupu', () => {
+  assert.equal(caseGroup({ skupina: 'coi', odkaz: 'https://a.cz/' }), 'coi');
+  assert.equal(caseGroup({ screenshotFiles: ['a.png'] }), 'screens');
+  assert.equal(caseGroup({ text: 'x' }), 'synthetic');
+  assert.equal(caseGroup({ odkaz: 'https://a.cz/' }), 'synthetic');
+});
+
+test('toResultRecord: ok odpověď zachová jen potřebná pole a ids signálů, nese skupinu', () => {
+  const rec = toResultRecord({ id: 'a', label: 'podvod', skupina: 'coi' }, {
     stav: 'ok', semafor: 'červená', skore: 80, jistota: 'vysoká', shrnuti: 'dlouhý text', co_delat: ['x'],
     signaly: [{ id: 'sig1', titul: 't' }, { id: 'sig2' }], nezkontrolovano: ['prodejce'], upozorneni: 'u',
   });
-  assert.deepEqual(rec, { id: 'a', label: 'podvod', stav: 'ok', semafor: 'červená', skore: 80, jistota: 'vysoká', signaly: ['sig1', 'sig2'], nezkontrolovano: ['prodejce'] });
+  assert.deepEqual(rec, { id: 'a', label: 'podvod', skupina: 'coi', stav: 'ok', semafor: 'červená', skore: 80, jistota: 'vysoká', signaly: ['sig1', 'sig2'], nezkontrolovano: ['prodejce'] });
 });
 
 test('toResultRecord: potrebuji_vice, chyba a nesmyslné odpovědi', () => {
-  const c = { id: 'a', label: 'ok' };
-  assert.deepEqual(toResultRecord(c, { stav: 'potrebuji_vice', zprava: 'Vložte text' }), { id: 'a', label: 'ok', stav: 'potrebuji_vice', zprava: 'Vložte text' });
-  assert.deepEqual(toResultRecord(c, { stav: 'chyba', chyba: 'Moc dlouhé' }), { id: 'a', label: 'ok', stav: 'chyba', chyba: 'Moc dlouhé' });
+  const c = { id: 'a', label: 'ok', skupina: 'legit' };
+  assert.deepEqual(toResultRecord(c, { stav: 'potrebuji_vice', zprava: 'Vložte text' }), { id: 'a', label: 'ok', skupina: 'legit', stav: 'potrebuji_vice', zprava: 'Vložte text' });
+  assert.deepEqual(toResultRecord(c, { stav: 'chyba', chyba: 'Moc dlouhé' }), { id: 'a', label: 'ok', skupina: 'legit', stav: 'chyba', chyba: 'Moc dlouhé' });
   for (const bad of [null, undefined, 'text', 42, [], {}, { stav: 'jine' }, { stav: 'ok' }]) {
     const r = toResultRecord(c, bad);
     assert.equal(r.stav, 'chyba');
     assert.equal(r.id, 'a');
     assert.equal(r.label, 'ok');
+    assert.equal(r.skupina, 'legit');
     assert.equal(typeof r.chyba, 'string');
   }
+});
+
+test('errorRecord nese skupinu (výchozí podle vstupu)', () => {
+  assert.deepEqual(errorRecord({ id: 'a', label: 'ok', screenshotFiles: ['x.png'] }, 'chybí'), { id: 'a', label: 'ok', skupina: 'screens', stav: 'chyba', chyba: 'chybí' });
 });
 
 test('toResultRecord: ok odpověď s polopatickými poli nehází', () => {
@@ -196,6 +208,19 @@ test('toResultRecord: ok odpověď s polopatickými poli nehází', () => {
   assert.equal(r.semafor, 'zelená');
   assert.deepEqual(r.signaly, []);
   assert.deepEqual(r.nezkontrolovano, []);
+});
+
+test('readNumberEnv: neplatné hodnoty padají na výchozí', () => {
+  assert.equal(readNumberEnv(undefined, 1500), 1500);
+  assert.equal(readNumberEnv('', 1500), 1500);
+  assert.equal(readNumberEnv('abc', 1500), 1500);
+  assert.equal(readNumberEnv('NaN', 1500), 1500);
+  assert.equal(readNumberEnv('Infinity', 1500), 1500);
+  assert.equal(readNumberEnv('-5', 1500), 1500);
+  assert.equal(readNumberEnv('2500', 1500), 2500);
+  assert.equal(readNumberEnv('0', 1500), 0);
+  assert.equal(readNumberEnv('0', 60000, false), 60000);
+  assert.equal(readNumberEnv('10', 60000, false), 10);
 });
 
 // ---- report: CLI helpers ----
@@ -215,47 +240,178 @@ test('parseArgs a selectCases', () => {
 
 // ---- report: markdown ----
 
-test('renderReport: počty, matice, procenta, signály, chybně zařazené případy', () => {
-  const results = [
-    { id: 'p1', label: 'podvod', stav: 'ok', semafor: 'červená', skore: 90, signaly: ['sig-a', 'sig-b'] },
-    { id: 'p2', label: 'podvod', stav: 'ok', semafor: 'zelená', skore: 5, signaly: [] },
-    { id: 'o1', label: 'ok', stav: 'ok', semafor: 'oranžová', skore: 40, signaly: ['sig-a'] },
-    { id: 'o2', label: 'ok', stav: 'ok', semafor: 'zelená', skore: 0, signaly: [] },
-    { id: 's1', label: 'sporne', stav: 'potrebuji_vice', zprava: 'x' },
-    { id: 'o3', label: 'ok', stav: 'chyba', chyba: 'timeout' },
-  ];
-  const md = renderReport(results, { datum: '2026-10-16', api: 'http://x/webhook' });
-  assert.match(md, /^# Výsledky testovací sady/);
-  assert.match(md, /2026-10-16/);
-  assert.match(md, /Počet případů: 6/);
-  assert.match(md, /Zachycené podvody[^\n]*50 %/);
-  assert.match(md, /Falešný poplach[^\n]*33 %/);
-  assert.match(md, /Nelze posoudit[^\n]*17 %/);
-  assert.match(md, /Chyby[^\n]*1/);
-  assert.match(md, /\| podvod \| 1 \| 1 \| 0 \| 0 \|/);
-  assert.match(md, /\| ok \| 1 \| 1 \| 0 \| 1 \|/);
-  assert.match(md, /sig-a[^\n]*2/);
-  const wrong = md.split('## Chybně zařazené případy')[1];
-  assert.ok(wrong, 'sekce chybně zařazených případů');
-  assert.match(wrong, /p2[^\n]*zelená/);
-  assert.match(wrong, /o1[^\n]*oranžová[^\n]*sig-a/);
-  assert.match(wrong, /o3[^\n]*timeout/);
-  assert.ok(!/p1/.test(wrong));
+const mk = (id, label, skupina, semafor, extra = {}) => ({ id, label, skupina, stav: 'ok', semafor, skore: 0, signaly: [], ...extra });
+const err = (id, label, skupina, chyba = 'timeout') => ({ id, label, skupina, stav: 'chyba', chyba });
+const META = { datum: '2026-10-16', api: 'http://x/webhook' };
+const COI_NOTE = 'Skupina ČOI je kruhová: verdikt vychází ze stejného seznamu, proto jde jen o kontrolu funkčnosti řetězce, ne o měřítko detekce. Zařazení na seznam ČOI znamená rizikového provozovatele, ne prokázaný podvod.';
+
+// 4 coi podvody (3 rizikové), 4 legit ok (1 falešný poplach, 1 šedá), 2 synthetic podvody (1 zachycen), 1 synthetic ok, 1 sporné
+const MIXED = [
+  mk('c1', 'podvod', 'coi', 'červená'), mk('c2', 'podvod', 'coi', 'červená'), mk('c3', 'podvod', 'coi', 'oranžová'), mk('c4', 'podvod', 'coi', 'zelená'),
+  mk('l1', 'ok', 'legit', 'zelená'), mk('l2', 'ok', 'legit', 'zelená'), mk('l3', 'ok', 'legit', 'oranžová', { skore: 40, signaly: ['sig-a'] }), mk('l4', 'ok', 'legit', 'šedá'),
+  mk('s1', 'podvod', 'synthetic', 'červená', { signaly: ['sig-a', 'sig-b'] }), mk('s2', 'podvod', 'synthetic', 'zelená', { skore: 5 }),
+  mk('s3', 'ok', 'synthetic', 'zelená'),
+  { id: 's4', label: 'sporne', skupina: 'synthetic', stav: 'potrebuji_vice', zprava: 'x' },
+];
+
+test('computeMetricsByGroup: rozdělení po skupinách a detekce bez ČOI', () => {
+  const g = computeMetricsByGroup(MIXED);
+  assert.equal(g.overall.total, 12);
+  assert.deepEqual(Object.keys(g.groups).sort(), ['coi', 'legit', 'synthetic']);
+  assert.equal(g.groups.coi.total, 4);
+  assert.equal(g.groups.coi.recall_podvod, 0.75);
+  assert.equal(g.groups.coi.falesny_poplach, null);
+  assert.equal(g.groups.legit.total, 4);
+  assert.equal(g.groups.legit.falesny_poplach, 0.25);
+  assert.equal(g.groups.legit.neurceno_ok, 0.25);
+  assert.equal(g.groups.legit.recall_podvod, null);
+  assert.equal(g.groups.synthetic.total, 4);
+  assert.equal(g.groups.synthetic.recall_podvod, 0.5);
+  assert.equal(g.groups.synthetic.falesny_poplach, 0);
+  assert.equal(g.groups.synthetic.neurceno, 0.25);
+  // detekce = všechno kromě coi: 8 případů, 2 podvody (1 zachycen), 5 ok (1 falešný poplach), 2 neurčeno (šedá + potrebuji_vice)
+  assert.equal(g.detection.total, 8);
+  assert.equal(g.detection.recall_podvod, 0.5);
+  assert.equal(g.detection.falesny_poplach, 0.2);
+  assert.equal(g.detection.neurceno, 0.25);
+  assert.deepEqual(g.detection.per_label_counts, { ok: 5, sporne: 1, podvod: 2 });
+  // overall zahrnuje coi: recall podvodů 4/6
+  assert.equal(g.overall.recall_podvod, 4 / 6);
 });
 
-test('renderReport: prázdné metriky jako n/a a žádné chybné případy', () => {
-  const md = renderReport([{ id: 'o1', label: 'ok', stav: 'ok', semafor: 'zelená', signaly: [] }], { datum: '2026-10-16', api: 'x' });
-  assert.match(md, /Zachycené podvody[^\n]*n\/a/);
-  assert.match(md, /Falešný poplach[^\n]*0 %/);
-  assert.match(md, /žádné/i);
-  const empty = renderReport([], { datum: '2026-10-16', api: 'x' });
-  assert.match(empty, /Počet případů: 0/);
-  assert.match(empty, /n\/a/);
+test('computeMetricsByGroup: prázdný vstup, chybějící skupina, jen coi', () => {
+  const e = computeMetricsByGroup([]);
+  assert.equal(e.overall.total, 0);
+  assert.deepEqual(e.groups, {});
+  assert.equal(e.detection.total, 0);
+  assert.equal(e.detection.recall_podvod, null);
+  const only = computeMetricsByGroup([mk('c1', 'podvod', 'coi', 'červená')]);
+  assert.equal(only.detection.total, 0);
+  assert.equal(only.detection.recall_podvod, null);
+  assert.equal(only.groups.coi.recall_podvod, 1);
+  const none = computeMetricsByGroup([{ id: 'x', label: 'ok', semafor: 'zelená' }]);
+  assert.equal(none.groups.nezarazeno.total, 1);
+  assert.equal(none.detection.total, 1);
+});
+
+test('computeMetrics: pocty (čitatele) odpovídají podílům', () => {
+  const m = computeMetrics(MIXED);
+  assert.deepEqual(m.pocty, { recall_podvod: 4, falesny_poplach: 1, neurceno: 2, neurceno_podvod: 0, neurceno_ok: 1 });
+});
+
+test('renderReport: hlavička s detekcí bez ČOI, každé procento se jmenovatelem', () => {
+  const md = renderReport(MIXED, META);
+  const lines = md.split('\n');
+  assert.equal(lines[0], '# Výsledky testovací sady');
+  assert.ok(lines.includes('- Datum: 2026-10-16, API: http://x/webhook'));
+  assert.ok(lines.includes('- Počet případů: 12 (ok: 5, sporné: 1, podvod: 6)'));
+  assert.ok(lines.includes('Malý vzorek: výsledky jsou orientační (n = 12).'));
+  assert.ok(!md.includes('⚠'));
+  assert.ok(!md.includes('Vyhodnoceno:'));
+  const head = md.split('## Detekce (bez skupiny ČOI)')[1].split('\n## ')[0];
+  assert.ok(head.includes('- Zachycené podvody (oranžová nebo červená): 1/2 (50 %)'));
+  assert.ok(head.includes('- Falešný poplach u legitimních nabídek: 1/5 (20 %)'));
+  assert.ok(head.includes('- Nelze posoudit (šedá nebo žádost o víc údajů): 2/8 (25 %)'));
+  assert.ok(head.includes('- Nelze posoudit u podvodů: 0/2 (0 %), u legitimních nabídek: 1/5 (20 %)'));
+});
+
+test('renderReport: sekce po skupinách s vlastními x/y a poznámka u ČOI', () => {
+  const md = renderReport(MIXED, META);
+  const sec = (name) => md.split('## Skupina ' + name)[1].split('\n## ')[0];
+  const coi = sec('ČOI (coi)');
+  assert.ok(coi.includes('- Počet případů: 4'));
+  assert.ok(coi.includes('- Zachycené podvody (oranžová nebo červená): 3/4 (75 %)'));
+  assert.ok(coi.includes('- Falešný poplach u legitimních nabídek: n/a'));
+  assert.ok(coi.includes(COI_NOTE));
+  const legit = sec('legit');
+  assert.ok(legit.includes('- Falešný poplach u legitimních nabídek: 1/4 (25 %)'));
+  assert.ok(legit.includes('- Zachycené podvody (oranžová nebo červená): n/a'));
+  assert.ok(!legit.includes('kruhová'));
+  const syn = sec('synthetic');
+  assert.ok(syn.includes('- Zachycené podvody (oranžová nebo červená): 1/2 (50 %)'));
+  assert.ok(!syn.includes('kruhová'));
+  assert.ok(!md.includes('## Skupina screens'));
+  // pořadí: detekce před skupinami, ČOI před legit
+  assert.ok(md.indexOf('## Detekce') < md.indexOf('## Skupina ČOI'));
+  assert.ok(md.indexOf('## Skupina ČOI') < md.indexOf('## Skupina legit'));
+});
+
+test('renderReport: matice, signály a případy mimo očekávání s druhem', () => {
+  const md = renderReport(MIXED, META);
+  assert.ok(md.includes('| podvod | 2 | 4 | 0 | 0 |'));
+  assert.ok(md.includes('| ok | 3 | 1 | 1 | 0 |'));
+  assert.ok(md.includes('| sig-a | 2 | 1 / 0 / 1 |'));
+  assert.ok(!md.includes('## Chybně zařazené případy'));
+  const out = md.split('## Případy mimo očekávání')[1].split('\n## ')[0];
+  assert.ok(out.includes('- c4 [coi] (zmeškaný podvod: podvod -> zelená, skóre 0): signály: žádné'));
+  assert.ok(out.includes('- l3 [legit] (falešný poplach: ok -> oranžová, skóre 40): signály: sig-a'));
+  assert.ok(out.includes('- l4 [legit] (neurčeno: ok -> šedá, skóre 0): signály: žádné'));
+  assert.ok(out.includes('- s2 [synthetic] (zmeškaný podvod: podvod -> zelená, skóre 5): signály: žádné'));
+  assert.ok(!out.includes('c1'));
+  assert.ok(!out.includes('s4'));
+});
+
+test('renderReport: smíšený běh s chybami: varování, Vyhodnoceno, sazby jen z vyhodnocených', () => {
+  const r = [
+    mk('c1', 'podvod', 'coi', 'červená'), err('c2', 'podvod', 'coi'),
+    mk('l1', 'ok', 'legit', 'zelená'), mk('l2', 'ok', 'legit', 'oranžová'), err('l3', 'ok', 'legit', 'HTTP 500: x'),
+    mk('s1', 'podvod', 'synthetic', 'červená'), err('s2', 'podvod', 'synthetic'),
+  ];
+  const md = renderReport(r, META);
+  const lines = md.split('\n');
+  assert.ok(lines.includes('⚠ 3 z 7 požadavků skončilo chybou; metriky nejsou úplné.'));
+  assert.ok(lines.includes('Vyhodnoceno: 4/7'));
+  assert.ok(lines.includes('Procenta se počítají jen z vyhodnocených případů (bez chyb požadavků); chyby jsou uvedeny zvlášť.'));
+  assert.ok(!md.includes('Žádný případ nebyl vyhodnocen.'));
+  const head = md.split('## Detekce (bez skupiny ČOI)')[1].split('\n## ')[0];
+  assert.ok(head.includes('- Zachycené podvody (oranžová nebo červená): 1/1 (100 %)'));
+  assert.ok(head.includes('- Falešný poplach u legitimních nabídek: 1/2 (50 %)'));
+  assert.ok(head.includes('- Chyby požadavků: 2'));
+  const out = md.split('## Případy mimo očekávání')[1].split('\n## ')[0];
+  assert.ok(out.includes('- l3 [legit] (chyba: ok -> chyba): HTTP 500: x'));
+  assert.ok(out.includes('- c2 [coi] (chyba: podvod -> chyba): timeout'));
+});
+
+test('renderReport: běh, kde všechny požadavky selhaly, nesmí vypadat dokonale', () => {
+  const r = [err('c1', 'podvod', 'coi'), err('l1', 'ok', 'legit'), err('s1', 'podvod', 'synthetic'), err('s2', 'ok', 'synthetic')];
+  const md = renderReport(r, META);
+  const lines = md.split('\n');
+  assert.ok(lines.includes('⚠ 4 z 4 požadavků skončilo chybou; metriky nejsou úplné.'));
+  assert.ok(lines.includes('Vyhodnoceno: 0/4'));
+  assert.ok(lines.includes('Žádný případ nebyl vyhodnocen.'));
+  assert.ok(lines.includes('- Zachycené podvody (oranžová nebo červená): n/a'));
+  assert.ok(lines.includes('- Falešný poplach u legitimních nabídek: n/a'));
+  assert.ok(lines.includes('- Nelze posoudit (šedá nebo žádost o víc údajů): n/a'));
+  assert.ok(!/0\/0|\b0 %/.test(md));
+  assert.ok(lines.includes('Malý vzorek: výsledky jsou orientační (n = 4).'));
+});
+
+test('renderReport: bez varování o malém vzorku od 100 případů', () => {
+  const r = Array.from({ length: 100 }, (_, i) => mk('x' + i, 'ok', 'legit', 'zelená'));
+  const md = renderReport(r, META);
+  assert.ok(!md.includes('Malý vzorek'));
+  assert.ok(md.includes('- Falešný poplach u legitimních nabídek: 0/100 (0 %)'));
+});
+
+test('renderReport: prázdný vstup', () => {
+  const md = renderReport([], META);
+  assert.ok(md.includes('- Počet případů: 0 (ok: 0, sporné: 0, podvod: 0)'));
+  assert.ok(md.includes('Žádný případ nebyl vyhodnocen.'));
+  assert.ok(md.includes('Malý vzorek: výsledky jsou orientační (n = 0).'));
+  assert.ok(!md.includes('⚠'));
+});
+
+test('renderReport: výsledek bez skupiny nehází', () => {
+  const md = renderReport([{ id: 'x', label: 'ok', stav: 'ok', semafor: 'zelená', signaly: [] }], META);
+  assert.ok(md.includes('## Skupina nezarazeno'));
 });
 
 // ---- cases.json ----
 
 const CASES = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'eval', 'cases.json'), 'utf8'));
+const GROUPS = ['coi', 'legit', 'synthetic', 'screens'];
+const COI_POZNAMKA = 'ČOI = rizikový provozovatel, ne prokázaný podvod';
+const LEGIT_POZNAMKA = 'Obchod může blokovat automatické načtení; šedá je pak očekávaná.';
 
 test('cases.json: schéma', () => {
   assert.ok(Array.isArray(CASES));
@@ -265,6 +421,7 @@ test('cases.json: schéma', () => {
     assert.ok(!ids.has(c.id), 'duplicitní id ' + c.id);
     ids.add(c.id);
     assert.ok(['ok', 'sporne', 'podvod'].includes(c.label), 'label ' + c.id);
+    assert.ok(GROUPS.includes(c.skupina), 'skupina je povinná a z ' + GROUPS.join('/') + ': ' + c.id);
     assert.equal(typeof c.zdroj, 'string');
     assert.ok(c.zdroj.length > 0);
     if (c.poznamka !== undefined) assert.equal(typeof c.poznamka, 'string');
@@ -276,16 +433,24 @@ test('cases.json: schéma', () => {
       assert.ok(Array.isArray(c.screenshotFiles) && c.screenshotFiles.length > 0);
       for (const f of c.screenshotFiles) assert.match(f, /^[A-Za-z0-9._-]+\.(png|jpe?g|webp)$/i);
     }
-    assert.deepEqual(Object.keys(c).filter((k) => !['id', 'label', 'odkaz', 'text', 'screenshotFiles', 'zdroj', 'poznamka'].includes(k)), []);
+    assert.deepEqual(Object.keys(c).filter((k) => !['id', 'label', 'skupina', 'odkaz', 'text', 'screenshotFiles', 'zdroj', 'poznamka'].includes(k)), []);
+    // druh vstupu odpovídá skupině
+    const expected = { coi: 'odkaz', legit: 'odkaz', synthetic: 'text', screens: 'screenshotFiles' }[c.skupina];
+    assert.equal(kinds[0], expected, 'vstup ve skupině ' + c.skupina + ': ' + c.id);
   }
 });
 
-test('cases.json: složení sady', () => {
-  const n = (l, k) => CASES.filter((c) => c.label === l && c[k] !== undefined).length;
-  assert.equal(n('podvod', 'odkaz'), 15);
-  assert.equal(n('ok', 'odkaz'), 15);
-  assert.equal(CASES.filter((c) => c.text !== undefined).length, 4);
-  assert.equal(CASES.filter((c) => c.text !== undefined && c.label === 'sporne').length, 1);
+test('cases.json: složení sady po skupinách', () => {
+  const g = (s) => CASES.filter((c) => c.skupina === s);
+  assert.equal(g('coi').length, 15);
+  assert.ok(g('coi').every((c) => c.label === 'podvod' && c.poznamka === COI_POZNAMKA && /^ČOI seznam, stav \d{4}-\d{2}-\d{2}/.test(c.zdroj)));
+  assert.equal(g('legit').length, 15);
+  assert.ok(g('legit').every((c) => c.label === 'ok' && c.poznamka === LEGIT_POZNAMKA && c.zdroj === 'známý ověřený e-shop'));
+  assert.equal(g('synthetic').length, 4);
+  assert.deepEqual(g('synthetic').map((c) => c.label).sort(), ['ok', 'podvod', 'podvod', 'sporne']);
+  assert.equal(g('screens').length, 0);
+  assert.equal(CASES.length, 34);
   assert.ok(CASES.some((c) => /Ignoruj všechny instrukce/.test(c.text || '')));
   assert.equal(new Set(CASES.filter((c) => c.odkaz).map((c) => c.odkaz)).size, 30);
+  assert.ok(!CASES.some((c) => /blockchain/.test(c.id)));
 });

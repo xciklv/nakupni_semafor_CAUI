@@ -12,16 +12,20 @@
 //   DELAY_MS    pauza mezi požadavky v ms (výchozí 1500; případy se posílají postupně)
 //   TIMEOUT_MS  limit jednoho požadavku v ms (výchozí 60000)
 //
-// Případ v eval/cases.json: { id, label: "ok"|"sporne"|"podvod", zdroj, poznamka?, <vstup> }, kde <vstup> je
+// Případ v eval/cases.json: { id, label: "ok"|"sporne"|"podvod", skupina, zdroj, poznamka?, <vstup> }, kde <vstup> je
 // právě jedno z:
 //   "odkaz": "https://eshop.cz/"                      odkaz na e-shop nebo nabídku
 //   "text": "text nabídky ..."                         vložený text
 //   "screenshotFiles": ["temu-powerbanka.png"]         soubory v eval/screens/ (png, jpg, jpeg, webp)
 //
+// skupina: "coi" (seznam ČOI, kruhová: jen kontrola funkčnosti, ne měřítko detekce), "legit" (známé e-shopy),
+// "synthetic" (vlastní texty), "screens" (screenshoty). Chybí-li skupina, použije se "screens" pro screenshotFiles,
+// jinak "synthetic". Souhrn uvádí detekci bez skupiny ČOI zvlášť.
+//
 // Jak přidat případ se screenshotem (marketplace nabídky z Temu, AliExpressu, Allega):
 //   1. ulož screenshot do eval/screens/ (složka je v .gitignore, do gitu nejde)
 //   2. přidej do eval/cases.json záznam, např.
-//      { "id": "temu-powerbanka", "label": "podvod", "screenshotFiles": ["temu-powerbanka.png"], "zdroj": "vlastní screenshot 2026-10-20" }
+//      { "id": "temu-powerbanka", "label": "podvod", "skupina": "screens", "screenshotFiles": ["temu-powerbanka.png"], "zdroj": "vlastní screenshot 2026-10-20" }
 //   3. spusť node eval/run-eval.js --ids temu-powerbanka
 // Chybí-li soubor, případ se zapíše jako "chyba" a běh pokračuje.
 //
@@ -31,11 +35,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { computeMetrics } = require('./metrics');
-const { buildRequestBody, toResultRecord, parseArgs, selectCases, renderReport } = require('./report');
+const { buildRequestBody, toResultRecord, errorRecord, readNumberEnv, parseArgs, selectCases, renderReport } = require('./report');
 
 const API = process.env.API || 'http://127.0.0.1:5678/webhook/nakupni-kontrola';
-const DELAY_MS = Number(process.env.DELAY_MS ?? 1500);
-const TIMEOUT_MS = Number(process.env.TIMEOUT_MS ?? 60000);
+// Neplatná hodnota (nečíslo, záporná; u TIMEOUT_MS i 0) = výchozí.
+const DELAY_MS = readNumberEnv(process.env.DELAY_MS, 1500);
+const TIMEOUT_MS = readNumberEnv(process.env.TIMEOUT_MS, 60000, false);
 const SCREENS = path.join(__dirname, 'screens');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -45,7 +50,7 @@ async function runCase(c) {
   try {
     body = buildRequestBody(c, SCREENS);
   } catch (e) {
-    return { id: c.id, label: c.label, stav: 'chyba', chyba: e.message };
+    return errorRecord(c, e.message);
   }
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
@@ -55,14 +60,14 @@ async function runCase(c) {
     try {
       j = await res.json();
     } catch (_) {
-      return { id: c.id, label: c.label, stav: 'chyba', chyba: 'HTTP ' + res.status + ', odpověď není JSON' };
+      return errorRecord(c, 'HTTP ' + res.status + ', odpověď není JSON');
     }
     const rec = toResultRecord(c, j);
     if (rec.stav === 'chyba' && !rec.chyba.startsWith('HTTP')) rec.chyba = 'HTTP ' + res.status + ': ' + rec.chyba;
     return rec;
   } catch (e) {
     const timeout = e && e.name === 'AbortError';
-    return { id: c.id, label: c.label, stav: 'chyba', chyba: timeout ? 'Časový limit ' + TIMEOUT_MS + ' ms' : 'Požadavek selhal: ' + (e && e.message ? e.message : e) };
+    return errorRecord(c, timeout ? 'Časový limit ' + TIMEOUT_MS + ' ms' : 'Požadavek selhal: ' + (e && e.message ? e.message : e));
   } finally {
     clearTimeout(timer);
   }
