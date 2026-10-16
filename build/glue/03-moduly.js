@@ -45,11 +45,12 @@ try {
     } catch (e) { return []; }
   };
 
-  const offer = parsed.ok ? offerSignals(x) : { status: 'unchecked', signals: [] };
-  const safety = parsed.ok ? safetySignals(x) : { status: 'unchecked', signals: [] };
-  const gateQuery = parsed.ok ? safetyGateQuery(x) : null;
+  // Bez extrakce je x prázdné: nabídka a bezpečnost vrátí 'unchecked' samy, prodejce stále provede kontroly hostitele (eshop).
+  const offer = offerSignals(x);
+  const safety = safetySignals(x);
+  const gateQuery = safetyGateQuery(x);
   const [seller, gate] = await Promise.all([
-    parsed.ok ? sellerSignals({ x, rezim: ctx.rezim, host: ctx.host, fetchers, coiList, nowMs }) : { status: 'unchecked', signals: [] },
+    sellerSignals({ x, rezim: ctx.rezim, host: ctx.host, fetchers, coiList, nowMs }),
     gateQuery ? safetyGateFetch(gateQuery) : [],
   ]);
 

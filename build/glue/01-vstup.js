@@ -37,12 +37,14 @@ try {
     } catch (e) { pageStatus = 'nenacteno'; }
   }
   if (pageStatus !== 'nacteno') pageText = '';
-  const hasUsable = input.text || input.screenshoty.length || pageStatus === 'nacteno';
-  if (!hasUsable) {
+  // Kontroly hostitele e-shopu (ČOI, RDAP, ARES) nepotřebují ani LLM, ani obsah stránky: stačí URL e-shopu.
+  const hasContent = input.text || input.screenshoty.length || pageStatus === 'nacteno';
+  const hostCheckable = input.url && input.url.rezim === 'eshop';
+  if (!hasContent && !hostCheckable) {
     const zprava = 'Stránku se nepodařilo načíst (marketplace často blokují automatické čtení). Vložte prosím screenshot nabídky nebo zkopírovaný text.';
     return [{ json: { zkratka: true, status: 200, odpoved: needMoreInput(zprava) } }];
   }
-  return [{ json: { zkratka: false, input, pageText, rezim: input.url ? input.url.rezim : 'neznámé', host: input.url ? input.url.host : null } }];
+  return [{ json: { zkratka: false, input, pageText, rezim: input.url ? input.url.rezim : 'neznámé', host: input.url ? input.url.host : null, obsah: !!hasContent } }];
 } catch (e) {
   // Žádné detaily chyby ven: obecná hláška, aby webhook nikdy neodpověděl prázdným 200.
   return [{ json: { zkratka: true, status: 500, odpoved: { stav: 'chyba', chyba: 'Kontrola se nepodařila. Zkuste to prosím znovu.' } } }];
