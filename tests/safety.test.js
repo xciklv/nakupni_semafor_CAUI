@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizeExtraction } = require('../engine/llm');
-const { safetySignals } = require('../engine/safety');
+const { safetySignals, safetyGateQuery, safetyGateSignals } = require('../engine/safety');
 
 const X = (produkt) => normalizeExtraction({ produkt });
 
@@ -120,4 +120,102 @@ test('Charger 65W → low ce_chybi', () => {
 
 test('Charger s CE v tvrzeních → bez signálu', () => {
   assert.deepEqual(safetySignals(X({ nazev: 'Charger 65W', tvrzeni_certifikace: ['CE'] })).signals, []);
+});
+
+// --- Safety Gate (slabý signál gated značkou) ---
+const XB = (znacka, model, extra = {}) => X({ nazev: 'Powerbanka', znacka, model, ...extra });
+const ALERT = (brand, o = {}) => ({
+  reference: 'SR/00232/25', publicationDate: '2025-01-13T00:00:00.000+00:00',
+  product: { name: 'Power bank', nameSpecific: 'STB-200', brands: [{ brand }] },
+  risk: { riskType: [{ key: 'riskType.fire', name: 'FIRE' }] }, ...o,
+});
+
+test('safetyGateQuery: bez značky -> null', () => {
+  assert.equal(safetyGateQuery(X({ nazev: 'Powerbanka' })), null);
+  assert.equal(safetyGateQuery(XB(null, 'A1')), null);
+  assert.equal(safetyGateQuery(XB('   ', 'A1')), null);
+});
+
+test('safetyGateQuery: značka (+ model) -> fullTextSearch', () => {
+  assert.deepEqual(safetyGateQuery(XB('Anker', null)), { fullTextSearch: 'Anker' });
+  assert.deepEqual(safetyGateQuery(XB('Forever', 'STB-200')), { fullTextSearch: 'Forever STB-200' });
+});
+
+test('safetyGateQuery: sanitizace (diakritika pryč, jen písmena/číslice/mezera/pomlčka, mezery sloučeny)', () => {
+  assert.equal(safetyGateQuery(XB('Škoda', 'Žluťoučký "kůň" (v2)!')).fullTextSearch, 'Skoda Zlutoucky kun v2');
+  assert.equal(safetyGateQuery(XB('A  B\t&C', '  X--1  ')).fullTextSearch, 'A B C X--1');
+  assert.equal(safetyGateQuery(XB('Anker', '"; DROP{}')).fullTextSearch, 'Anker DROP');
+});
+
+test('safetyGateQuery: max 60 znaků; méně než 2 znaky -> null', () => {
+  const q = safetyGateQuery(XB('a'.repeat(50), 'b'.repeat(50)));
+  assert.ok(q.fullTextSearch.length <= 60);
+  assert.equal(safetyGateQuery(XB('X', null)), null);
+  assert.equal(safetyGateQuery(XB('***', null)), null);
+  assert.equal(safetyGateQuery(XB('日本', null)), null);
+  assert.deepEqual(safetyGateQuery(XB('HP', null)), { fullTextSearch: 'HP' });
+  assert.equal(safetyGateQuery(null), null);
+  assert.equal(safetyGateQuery({}), null);
+});
+
+test('safetyGateSignals: shoda značky -> jediný low signál, nikdy hard', () => {
+  const s = safetyGateSignals([ALERT('Anker'), ALERT('Anker', { reference: 'SR/2' })], XB('Anker', null));
+  assert.equal(s.length, 1);
+  assert.equal(s[0].id, 'safety_gate');
+  assert.equal(s[0].module, 'safety');
+  assert.equal(s[0].severity, 'low');
+  assert.equal(s[0].hard, false);
+  assert.equal(s[0].title, 'Značka byla v EU nahlášena v databázi nebezpečných výrobků');
+  assert.equal(s[0].source, 'EU Safety Gate (CC BY 4.0)');
+  assert.match(s[0].evidence, /nalezeno 2 upozornění k značce Anker/);
+  assert.match(s[0].evidence, /SR\/00232\/25/);
+  assert.match(s[0].evidence, /FIRE/);
+  assert.match(s[0].evidence, /Netýká se nutně této nabídky/);
+  assert.ok(s[0].evidence.length <= 300);
+});
+
+test('safetyGateSignals: celá slova, ne podřetězce (Anker vs Tanker)', () => {
+  assert.deepEqual(safetyGateSignals([ALERT('Tanker'), ALERT('Banker Co')], XB('Anker', null)), []);
+  assert.equal(safetyGateSignals([ALERT('Anker Innovations')], XB('Anker', null)).length, 1);
+  assert.equal(safetyGateSignals([ALERT('Forever STB-200')], XB('Forever', null)).length, 1);
+});
+
+test('safetyGateSignals: bez ohledu na velikost písmen a diakritiku, vícenásobná slova', () => {
+  assert.equal(safetyGateSignals([ALERT('ŠKODA')], XB('skoda', null)).length, 1);
+  assert.equal(safetyGateSignals([ALERT('skoda')], XB('Škoda', null)).length, 1);
+  assert.equal(safetyGateSignals([ALERT('Industry\nELECTRONICS')], XB('industry electronics', null)).length, 1);
+  assert.deepEqual(safetyGateSignals([ALERT('Industry ELECTRONICS')], XB('electronics industry', null)), []);
+});
+
+test('safetyGateSignals: s modelem musí model sedět v product.name / nameSpecific', () => {
+  assert.equal(safetyGateSignals([ALERT('Forever')], XB('Forever', 'STB-200')).length, 1);
+  assert.equal(safetyGateSignals([ALERT('Forever')], XB('Forever', 'stb 200')).length, 1);
+  assert.deepEqual(safetyGateSignals([ALERT('Forever')], XB('Forever', 'XYZ-900')), []);
+  assert.deepEqual(safetyGateSignals([ALERT('Forever')], XB('Forever', 'STB-20')), []);
+  const inName = ALERT('Ikea', { product: { name: 'VARMFRONT powerbanka', nameSpecific: null, brands: [{ brand: 'Ikea' }] } });
+  assert.equal(safetyGateSignals([inName], XB('IKEA', 'Varmfront')).length, 1);
+  // model uvedený jen ve značce alertu nestačí
+  const onlyInBrand = ALERT('Forever STB-200', { product: { name: 'Power bank', nameSpecific: null, brands: [{ brand: 'Forever STB-200' }] } });
+  assert.deepEqual(safetyGateSignals([onlyInBrand], XB('Forever', 'STB-200')), []);
+});
+
+test('safetyGateSignals: bez značky -> []', () => {
+  assert.deepEqual(safetyGateSignals([ALERT('Anker')], X({ nazev: 'Powerbanka' })), []);
+});
+
+test('safetyGateSignals: podivné tvary -> [] bez výjimky', () => {
+  const x = XB('Anker', null);
+  for (const a of [null, undefined, 'x', 5, {}, [], [null], [5, 'a'], [{}], [{ product: null }], [{ product: { brands: 'Anker' } }], [{ product: { brands: [null, { brand: 5 }, {}] } }]]) {
+    assert.deepEqual(safetyGateSignals(a, x), [], JSON.stringify(a));
+  }
+  assert.deepEqual(safetyGateSignals([ALERT('Anker')], null), []);
+  const s = safetyGateSignals([{ product: { brands: [{ brand: 'Anker' }] } }], x);
+  assert.equal(s.length, 1);
+  assert.equal(s[0].id, 'safety_gate');
+});
+
+test('safetySignals: status a ce_chybi beze změny, nezávisí na značce', () => {
+  const r = safetySignals(XB('Anker', 'A1263'));
+  assert.equal(r.status, 'ok');
+  assert.equal(r.signals[0].id, 'ce_chybi');
 });

@@ -1,3 +1,5 @@
+// Safety Gate je volitelné obohacení: jakákoli chyba/timeout/divná odpověď = žádný signál. Deadline je celkový (wall-clock), request má vlastní timeout 8 s.
+const SAFETY_GATE_DEADLINE_MS = 9000;
 try {
   const ctx = $('Vstup a načtení').first().json;
   const nowMs = Date.now();
@@ -26,11 +28,32 @@ try {
     }
   }
 
+  const safetyGateFetch = async (q) => {
+    try {
+      const req = Promise.resolve(this.helpers.httpRequest({
+        url: 'https://ec.europa.eu/safety-gate-alerts/public/api/search', method: 'POST', json: true, timeout: 8000,
+        ignoreHttpStatusErrors: true, returnFullResponse: true, headers: { 'Content-Type': 'application/json' },
+        body: { criteria: {}, pagination: { sortField: 'PUBLICATION_DATE', sortOrder: 'DESC', totalElements: 0, page: 0, numberElements: 20 }, fullTextSearch: q.fullTextSearch, language: 'en' },
+      }));
+      req.catch(() => {});
+      let timer;
+      const deadline = new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('deadline')), SAFETY_GATE_DEADLINE_MS); });
+      let r;
+      try { r = await Promise.race([req, deadline]); } finally { clearTimeout(timer); }
+      const b = r && r.statusCode === 200 ? r.body : null;
+      return b && typeof b === 'object' && !Array.isArray(b) ? safetyGateSignals(b.content, x) : [];
+    } catch (e) { return []; }
+  };
+
   const offer = parsed.ok ? offerSignals(x) : { status: 'unchecked', signals: [] };
   const safety = parsed.ok ? safetySignals(x) : { status: 'unchecked', signals: [] };
-  const seller = parsed.ok ? await sellerSignals({ x, rezim: ctx.rezim, host: ctx.host, fetchers, coiList, nowMs }) : { status: 'unchecked', signals: [] };
+  const gateQuery = parsed.ok ? safetyGateQuery(x) : null;
+  const [seller, gate] = await Promise.all([
+    parsed.ok ? sellerSignals({ x, rezim: ctx.rezim, host: ctx.host, fetchers, coiList, nowMs }) : { status: 'unchecked', signals: [] },
+    gateQuery ? safetyGateFetch(gateQuery) : [],
+  ]);
 
-  const signals = [...offer.signals, ...seller.signals, ...safety.signals];
+  const signals = [...offer.signals, ...seller.signals, ...safety.signals, ...gate];
   const verdict = computeVerdict(signals, { offer: offer.status, seller: seller.status, safety: safety.status });
   return [{ json: { verdict, signals, llmRequest: buildExplainRequest(verdict, signals) } }];
 } catch (e) {

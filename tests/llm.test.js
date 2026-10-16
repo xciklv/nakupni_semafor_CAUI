@@ -148,3 +148,25 @@ test('hodnocení a průměr jsou na škále 0-5, jinak null', () => {
 test('prompt uvádí škálu hodnocení 0-5 a pravidlo pro převod', () => {
   assert.match(SYSTEM_EXTRACT, /0-5/);
 });
+
+test('normalizeExtraction: produkt.znacka a produkt.model (trim, max 60 znaků, jinak null)', () => {
+  const p = (o) => normalizeExtraction({ produkt: o }).produkt;
+  assert.equal(p({ znacka: '  Anker ', model: ' A1263 ' }).znacka, 'Anker');
+  assert.equal(p({ znacka: '  Anker ', model: ' A1263 ' }).model, 'A1263');
+  assert.equal(p({}).znacka, null);
+  assert.equal(p({}).model, null);
+  for (const v of [undefined, null, '', '   ', 5, true, {}, ['Anker']]) {
+    assert.equal(p({ znacka: v, model: v }).znacka, null, JSON.stringify(v));
+    assert.equal(p({ znacka: v, model: v }).model, null, JSON.stringify(v));
+  }
+  assert.equal(p({ znacka: 'x'.repeat(60) }).znacka, 'x'.repeat(60));
+  assert.equal(p({ znacka: 'x'.repeat(61) }).znacka, null);
+  assert.equal(p({ model: 'y'.repeat(61) }).model, null);
+  assert.equal(normalizeExtraction(null).produkt.znacka, null);
+});
+
+test('SYSTEM_EXTRACT popisuje znacka a model (jen z nabídky, nehádat)', () => {
+  assert.match(SYSTEM_EXTRACT, /"znacka":str\|null/);
+  assert.match(SYSTEM_EXTRACT, /"model":str\|null/);
+  assert.match(SYSTEM_EXTRACT, /znacka a model/);
+});

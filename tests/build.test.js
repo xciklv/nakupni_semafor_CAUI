@@ -367,6 +367,126 @@ test('glue 03: výjimka uvnitř -> degraduje na šedou, nic neuniká', async () 
   assert.equal(JSON.stringify(out).includes('tajná'), false);
 });
 
+// --- glue 03: Safety Gate (slabý signál gated značkou; selhání = bez signálu) ---
+const SG_URL = 'https://ec.europa.eu/safety-gate-alerts/public/api/search';
+const extractBrand = (znacka, model) => ({ content: [{ type: 'text', text: JSON.stringify({ produkt: { nazev: 'Powerbanka', kategorie: 'elektronika', znacka, model, cena: 900, mena: 'CZK', tvrzeni_certifikace: ['CE'] }, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [] }) }] });
+const SG_ALERT = { reference: 'SR/00232/25', publicationDate: '2025-01-13T00:00:00.000+00:00', product: { name: 'Power bank', nameSpecific: 'STB-200', brands: [{ brand: 'Forever STB-200' }] }, risk: { riskType: [{ name: 'ENVIRONMENT' }] } };
+const sgCalls = (calls) => calls.filter((c) => c.url === SG_URL);
+const runSg = (extract, httpStub, o = {}) => runGlue('03-moduly.js', { json: extract, nodes: { 'Vstup a načtení': CTX_NEZNAME }, httpStub, ...o });
+
+test('glue 03 Safety Gate: znacka null -> endpoint se nikdy nevolá', async () => {
+  const { out, calls } = await runSg(extractBrand(null, 'X1'), () => { throw new Error('nemá se volat'); });
+  assert.equal(sgCalls(calls).length, 0);
+  assert.equal(calls.length, 0);
+  assert.equal(out.signals.some((s) => s.id === 'safety_gate'), false);
+});
+
+test('glue 03 Safety Gate: odeslaný požadavek (sanitizovaný dotaz, numberElements 20, totalElements 0)', async () => {
+  const { calls } = await runSg(extractBrand('Škoda "Auto"', 'STB-200!'), () => ({ statusCode: 200, body: { content: [] } }));
+  const c = sgCalls(calls);
+  assert.equal(c.length, 1);
+  assert.equal(c[0].method, 'POST');
+  assert.equal(c[0].json, true);
+  assert.equal(c[0].timeout, 8000);
+  assert.equal(c[0].ignoreHttpStatusErrors, true);
+  assert.equal(c[0].returnFullResponse, true);
+  assert.equal(c[0].headers['Content-Type'], 'application/json');
+  assert.deepEqual(JSON.parse(JSON.stringify(c[0].body)), {
+    criteria: {},
+    pagination: { sortField: 'PUBLICATION_DATE', sortOrder: 'DESC', totalElements: 0, page: 0, numberElements: 20 },
+    fullTextSearch: 'Skoda Auto STB-200',
+    language: 'en',
+  });
+});
+
+test('glue 03 Safety Gate: shodná značka+model -> low signál safety_gate, verdikt jinak nezměněn', async () => {
+  const ex = extractBrand('Forever', 'STB-200');
+  const base = await runSg(ex, () => ({ statusCode: 200, body: { content: [] } }));
+  const hit = await runSg(ex, () => ({ statusCode: 200, body: { content: [SG_ALERT] } }));
+  assert.equal(base.out.signals.some((s) => s.id === 'safety_gate'), false);
+  const sg = hit.out.signals.filter((s) => s.id === 'safety_gate');
+  assert.equal(sg.length, 1);
+  assert.equal(sg[0].severity, 'low');
+  assert.equal(sg[0].hard, false);
+  assert.equal(sg[0].module, 'safety');
+  assert.deepEqual(hit.out.signals.filter((s) => s.id !== 'safety_gate'), base.out.signals);
+  assert.equal(hit.out.verdict.score, base.out.verdict.score + 1);
+  assert.equal(hit.out.verdict.semafor, base.out.verdict.semafor);
+  assert.notEqual(hit.out.verdict.semafor, 'červená');
+});
+
+test('glue 03 Safety Gate: alert jiné značky (Tanker) ani jiného modelu signál nedá', async () => {
+  const tanker = { ...SG_ALERT, product: { ...SG_ALERT.product, brands: [{ brand: 'Tanker' }] } };
+  const r1 = await runSg(extractBrand('Anker', null), () => ({ statusCode: 200, body: { content: [tanker] } }));
+  assert.equal(r1.out.signals.some((s) => s.id === 'safety_gate'), false);
+  const r2 = await runSg(extractBrand('Forever', 'XYZ-9'), () => ({ statusCode: 200, body: { content: [SG_ALERT] } }));
+  assert.equal(r2.out.signals.some((s) => s.id === 'safety_gate'), false);
+});
+
+test('glue 03 Safety Gate: 500 / jiný status / výjimka / podivné tělo -> bez signálu a bez pádu', async () => {
+  const stubs = {
+    500: () => ({ statusCode: 500, body: { content: [SG_ALERT] } }),
+    405: () => ({ statusCode: 405, body: '<html>' }),
+    throws: () => { throw new Error('ECONNRESET tajná chyba'); },
+    rejects: () => Promise.reject(new Error('timeout')),
+    stringBody: () => ({ statusCode: 200, body: 'ne json' }),
+    nullBody: () => ({ statusCode: 200, body: null }),
+    arrayBody: () => ({ statusCode: 200, body: [SG_ALERT] }),
+    noContent: () => ({ statusCode: 200, body: { content: 'x' } }),
+    undef: () => undefined,
+  };
+  const base = await runSg(extractBrand('Forever', 'STB-200'), () => ({ statusCode: 200, body: { content: [] } }));
+  for (const [name, stub] of Object.entries(stubs)) {
+    const { out, calls } = await runSg(extractBrand('Forever', 'STB-200'), stub);
+    assert.equal(sgCalls(calls).length, 1, name);
+    assert.equal(out.signals.some((s) => s.id === 'safety_gate'), false, name);
+    assert.deepEqual(out.verdict, base.out.verdict, name);
+    assert.deepEqual(out.signals, base.out.signals, name);
+    assert.equal(JSON.stringify(out).includes('tajná'), false, name);
+  }
+});
+
+test('glue 03 Safety Gate: nikdy se nevracející request skončí do deadline, ostatní signály zůstanou', async () => {
+  const src = nodeCode('Moduly');
+  assert.match(src, /const SAFETY_GATE_DEADLINE_MS = \d+;/);
+  const fast = src.replace(/const SAFETY_GATE_DEADLINE_MS = \d+;/, 'const SAFETY_GATE_DEADLINE_MS = 50;');
+  assert.notEqual(fast, src);
+  const t0 = Date.now();
+  const { out, calls } = await runSg(extractBrand('Forever', 'STB-200'), () => new Promise(() => {}), { src: fast });
+  assert.ok(Date.now() - t0 < 1000, 'deadline nezabral');
+  assert.equal(sgCalls(calls).length, 1);
+  assert.equal(out.signals.some((s) => s.id === 'safety_gate'), false);
+  assert.ok(out.verdict && out.llmRequest);
+});
+
+test('glue 03 Safety Gate: pozdní odmítnutí po deadline nevyvolá unhandled rejection', async () => {
+  const src = nodeCode('Moduly').replace(/const SAFETY_GATE_DEADLINE_MS = \d+;/, 'const SAFETY_GATE_DEADLINE_MS = 20;');
+  const seen = [];
+  const onRej = (e) => seen.push(e);
+  process.on('unhandledRejection', onRej);
+  try {
+    await runSg(extractBrand('Forever', 'STB-200'), () => new Promise((_, rej) => setTimeout(() => rej(new Error('pozdě')), 80)), { src });
+    await new Promise((r) => setTimeout(r, 150));
+  } finally { process.off('unhandledRejection', onRej); }
+  assert.deepEqual(seen, []);
+});
+
+test('glue 03 Safety Gate: souběžně se seller fetchery, žádný nový požadavek bez značky (eshop)', async () => {
+  const stub = (o) => {
+    if (o.url.startsWith('https://coi.gov.cz/')) return coiHtml(150);
+    if (o.url.startsWith('https://rdap.')) return { events: [{ eventAction: 'registration', eventDate: '2015-01-01T00:00:00Z' }] };
+    if (o.url === SG_URL) return { statusCode: 200, body: { content: [SG_ALERT] } };
+    throw new Error('neočekávaný požadavek ' + o.url);
+  };
+  const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'clarkscz.cz' };
+  const withBrand = await runGlue('03-moduly.js', { json: extractBrand('Forever', 'STB-200'), nodes: { 'Vstup a načtení': ctx }, state: {}, httpStub: stub });
+  assert.ok(withBrand.out.signals.some((s) => s.id === 'safety_gate'));
+  assert.ok(withBrand.out.signals.some((s) => s.id === 'coi_seznam'));
+  assert.equal(sgCalls(withBrand.calls).length, 1);
+  const noBrand = await runGlue('03-moduly.js', { json: extractBrand(null, null), nodes: { 'Vstup a načtení': ctx }, state: {}, httpStub: stub });
+  assert.equal(sgCalls(noBrand.calls).length, 0);
+});
+
 // --- glue 04 ---
 const MOD_OK = { verdict: { semafor: 'oranžová', score: 4, confidence: 'střední', unchecked: ['seller'] }, signals: [{ id: 'cena_nizka', module: 'offer', severity: 'low', title: 'Cena je nízká', evidence: 'x', source: 'odhad modelu' }] };
 
