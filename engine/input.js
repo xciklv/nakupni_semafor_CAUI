@@ -1,6 +1,6 @@
 const MAX_TEXT = 20000;
 const MAX_SHOTS = 4;
-const MAX_SHOT_CHARS = 5500000;
+const MAX_SHOT_CHARS = 5000000;
 const MIMES = ['image/png', 'image/jpeg', 'image/webp'];
 const SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'cutt.ly', 'rebrand.ly', 's.click.aliexpress.com', 'a.aliexpress.com', 'temu.to'];
 const MARKETPLACES = ['temu.com', 'aliexpress.com', 'aliexpress.us', 'allegro.cz', 'allegro.pl', 'amazon.com', 'amazon.de', 'amazon.pl', 'ebay.com', 'ebay.de', 'shein.com', 'joom.com', 'vinted.cz'];
@@ -11,7 +11,9 @@ const INP_ASCII_RE = /^[\x21-\x5b\x5d-\x7e]+$/; // tisknutelné ASCII bez mezery
 const INP_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const INP_TLD_RE = /^([a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
 const INP_OCTET_RE = /^(0|[1-9][0-9]{0,2})$/;
-const INP_PRIVATE_SUFFIXES = ['localhost', 'local', 'internal', 'localdomain', 'lan', 'home.arpa'];
+const INP_PRIVATE_SUFFIXES = ['localhost', 'local', 'internal', 'localdomain', 'lan', 'home.arpa', 'svc', 'home', 'corp', 'intranet', 'private', 'test', 'invalid', 'example'];
+// Veřejné wildcard-DNS služby (libovolný název se přeloží na zadanou IP, tedy i na interní): host === d nebo pod d.
+const INP_REBIND_DOMAINS = ['nip.io', 'sslip.io', 'xip.io', 'localtest.me', 'lvh.me', 'traefik.me', 'local.gd', 'vcap.me', 'lacolhost.com', '1u.ms'];
 // Jedna linearní průchozí regex: komentář, nebo otevírací script/style/noscript.
 const INP_SKIP_RE = /<!--|<(script|style|noscript)(?![a-z0-9_:-])/gi;
 const INP_RAW_CLOSE = {
@@ -72,9 +74,10 @@ function normalizeUrl(raw) {
   const parts = authority.split(':');
   if (parts.length > 2) return bad('neplatná adresa');
   if (parts.length === 2 && INP_PORTS.indexOf(parts[1]) === -1) return bad('nepodporovaný port');
+  if (parts.length === 2 && ((scheme === 'http' && parts[1] === '443') || (scheme === 'https' && parts[1] === '80'))) return bad('nesprávný port');
   const fullHost = parts[0].toLowerCase().replace(/\.+$/, '');
   const interni = bad('odkaz míří na interní nebo neveřejnou adresu');
-  if (INP_PRIVATE_SUFFIXES.some((x) => fullHost === x || fullHost.endsWith('.' + x))) return interni;
+  if (INP_PRIVATE_SUFFIXES.concat(INP_REBIND_DOMAINS).some((x) => fullHost === x || fullHost.endsWith('.' + x))) return interni;
   const kind = inpParseHost(fullHost);
   if (kind === null) return bad('neplatná adresa');
   if (kind.ip && inpIpv4Blocked(kind.ip[0], kind.ip[1])) return interni;

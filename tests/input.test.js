@@ -101,7 +101,7 @@ const SSRF_BLOCKED = [
 
 const PUBLIC_OK = [
   'alza.cz', 'https://www.temu.com/cz/foo.html', 'http://93.184.216.34/', 'https://shop.cz:443/',
-  'https://shop.cz:80/', 'http://172.32.0.1/', 'http://100.128.0.1/',
+  'http://shop.cz:80/', 'https://shop.cz/', 'http://shop.cz/', 'http://172.32.0.1/', 'http://100.128.0.1/',
 ];
 
 test('vnitřní a neveřejné adresy → ok:false (SSRF)', () => {
@@ -192,7 +192,7 @@ for (const [label, html] of PATHOLOGICAL) {
 }
 
 test('hostname bez tečky (kromě IP literálů) → ok:false', () => {
-  for (const raw of ['https://constructor', 'https://__proto__', 'https://toString/x', 'https://intranet', 'http://hasOwnProperty/']) {
+  for (const raw of ['https://constructor', 'https://__proto__', 'https://toString/x', 'https://printer', 'http://hasOwnProperty/']) {
     const r = normalizeUrl(raw);
     assert.equal(r.ok, false, raw);
     assert.equal(r.duvod, 'neplatná adresa', raw);
@@ -249,6 +249,7 @@ const URL_CASES = [
   ['http://localhost/', false], ['localhost:5678/x', false], ['http://foo.local/', false], ['http://a.localhost/', false],
   ['http://x.internal/', false], ['http://x.localdomain/', false], ['http://x.lan/', false], ['http://x.home.arpa/', false],
   ['https://constructor', false], ['https://__proto__', false], ['https://intranet/x', false],
+  ['http://shop.cz:443/', false], ['https://shop.cz:80/', false],
   // zkracovače
   ['bit.ly/abc', false], ['https://m.bit.ly./x', false], ['https://s.click.aliexpress.com/e/x', false],
   // znaky mimo tisknutelné ASCII, mezery, řídicí znaky, zpětné lomítko
@@ -367,4 +368,61 @@ test('engine/*.js nepoužívá URL, URLSearchParams, structuredClone, Buffer, Te
 test('engine/input.js nemá mrtvý kód po parseru URL (IPv6 expanze)', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'engine', 'input.js'), 'utf8');
   assert.equal(/inpExpandIpv6|inpIpv6Blocked|inpIsBlockedHost/.test(src), false);
+});
+
+// --- fix wave B: další neveřejné přípony, wildcard-DNS služby, nesoulad schématu a portu, limit screenshotu ---
+test('rezervované a interní přípony (svc, home, corp, intranet, private, test, invalid, example) -> interní adresa', () => {
+  for (const suf of ['svc', 'home', 'corp', 'intranet', 'private', 'test', 'invalid', 'example']) {
+    for (const raw of ['http://x.' + suf + '/', 'https://a.b.' + suf + '/p?q=1', 'https://X.' + suf.toUpperCase() + './', 'http://' + suf + '/']) {
+      const r = normalizeUrl(raw);
+      assert.equal(r.ok, false, raw);
+      assert.match(r.duvod, /interní/, raw);
+    }
+  }
+  assert.equal(normalizeUrl('http://db.default.svc/').ok, false);
+  assert.equal(normalizeUrl('http://nas.home/').ok, false);
+});
+
+test('přípony se párují po celých štítcích: shop.cz, testshop.cz, example.cz, home.cz zůstávají veřejné', () => {
+  for (const raw of ['https://testshop.cz/', 'https://example.cz/p', 'https://home.cz/', 'https://privatelabel.cz/', 'https://www.svc-shop.cz/', 'https://mytest.com/']) {
+    assert.equal(normalizeUrl(raw).ok, true, raw);
+  }
+});
+
+test('wildcard-DNS a rebinding služby (nip.io, sslip.io, xip.io, localtest.me, lvh.me, traefik.me, local.gd, vcap.me, lacolhost.com, 1u.ms) -> odmítnuto', () => {
+  for (const d of ['nip.io', 'sslip.io', 'xip.io', 'localtest.me', 'lvh.me', 'traefik.me', 'local.gd', 'vcap.me', 'lacolhost.com', '1u.ms']) {
+    for (const raw of ['http://' + d + '/', 'http://127.0.0.1.' + d + '/', 'https://a.b.' + d + '/x', 'https://WWW.' + d.toUpperCase() + './']) {
+      const r = normalizeUrl(raw);
+      assert.equal(r.ok, false, raw);
+      assert.match(r.duvod, /interní/, raw);
+    }
+  }
+});
+
+test('služby se párují po celých štítcích: onip.io, mynip.io.cz, notlocal.gd.cz zůstávají veřejné', () => {
+  for (const raw of ['https://onip.io/', 'https://nip.io.cz/', 'https://local.gd.cz/', 'https://xlvh.me/']) {
+    assert.equal(normalizeUrl(raw).ok, true, raw);
+  }
+});
+
+test('nesoulad schématu a portu (http:443, https:80) -> nesprávný port; výchozí porty a bez portu projdou', () => {
+  for (const raw of ['http://x.cz:443/', 'https://x.cz:80/', 'http://x.cz:443', 'https://x.cz:80/a?b=1', 'x.cz:80/p']) {
+    const r = normalizeUrl(raw);
+    assert.equal(r.ok, false, raw);
+    assert.equal(r.duvod, 'nesprávný port', raw);
+  }
+  assert.equal(normalizeUrl('http://x.cz:81/').duvod, 'nepodporovaný port');
+  assert.deepEqual(normalizeUrl('http://x.cz:80/a').url, 'http://x.cz/a');
+  assert.deepEqual(normalizeUrl('https://x.cz:443/a').url, 'https://x.cz/a');
+  assert.equal(normalizeUrl('https://x.cz/a').ok, true);
+  assert.equal(normalizeUrl('http://x.cz/a').ok, true);
+  assert.equal(normalizeUrl('x.cz:443/p').ok, true);
+});
+
+test('validateInput: screenshot nad 5 000 000 znaků -> 413, přesně 5 000 000 projde', () => {
+  const sh = (n) => ({ screenshoty: [{ mime: 'image/png', data: 'A'.repeat(n) }] });
+  assert.equal(validateInput(sh(5000000)).ok, true);
+  const r = validateInput(sh(5000001));
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 413);
 });

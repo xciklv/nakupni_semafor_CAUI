@@ -268,3 +268,32 @@ test('fallbackAdvice (šedá): zmínka o nedostupných zdrojích jen když něja
   assert.equal(fallbackAdvice({ semafor: 'šedá', unchecked: ['seller'], skipped: [] }).shrnuti, base, 'nezkontrolovaný modul už vysvětluje základní text');
   for (const sem of ['zelená', 'oranžová', 'červená']) assert.equal(fallbackAdvice({ semafor: sem, unchecked: ['seller'], skipped: ['ARES'] }).shrnuti, fallbackAdvice({ semafor: sem }).shrnuti);
 });
+
+// --- fix wave B: tvar požadavku na vysvětlení (I3) ---
+test('požadavek na vysvětlení: přesný model, max_tokens 1500, thinking vypnuté (Haiku 5.5 disabled přijímá)', () => {
+  const v = computeVerdict([sg('a', 'medium')], OK3);
+  const r = buildExplainRequest(v, [sg('a', 'medium')]);
+  assert.equal(r.model, 'claude-haiku-5-5');
+  assert.equal(r.max_tokens, 1500);
+  assert.deepEqual(r.thinking, { type: 'disabled' });
+  assert.equal('output_config' in r, false);
+  assert.equal('temperature' in r, false);
+  assert.equal(typeof r.system, 'string');
+  assert.ok(r.system.length > 100);
+  assert.deepEqual(Object.keys(r).sort(), ['max_tokens', 'messages', 'model', 'system', 'thinking']);
+  assert.equal(r.messages.length, 1);
+  assert.equal(r.messages[0].role, 'user');
+  assert.equal(typeof r.messages[0].content, 'string');
+  const payload = JSON.parse(r.messages[0].content);
+  assert.equal(payload.semafor, v.semafor);
+  assert.equal(payload.signaly[0].titul, 'T a');
+});
+
+test('parseExplanation čte jen textové bloky: thinking blok před textem nevadí', () => {
+  const api = { content: [
+    { type: 'thinking', thinking: 'Úvaha {"shrnuti":"ZLE","co_delat":["x"]}', signature: 's' },
+    { type: 'text', text: '{"shrnuti":"Pozor.","co_delat":["Nekupuj."]}' },
+  ] };
+  assert.deepEqual(parseExplanation(api), { ok: true, shrnuti: 'Pozor.', co_delat: ['Nekupuj.'] });
+  assert.equal(parseExplanation({ content: [{ type: 'thinking', thinking: '{"shrnuti":"a","co_delat":[]}' }] }).ok, false);
+});

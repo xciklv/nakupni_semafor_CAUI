@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { buildBundle, buildWorkflow } = require('../build/build-workflow');
+const { buildBundle, buildWorkflow, resolveQuota } = require('../build/build-workflow');
 const { runInRealisticSandbox, runCodeNode } = require('./sandbox');
 
 const root = path.join(__dirname, '..');
@@ -212,8 +212,8 @@ test('glue 01: veřejný odkaz projde parserem a stáhne se přesně normalizova
   assert.equal(out.zkratka, false);
   assert.equal(out.host, 'alza.cz');
   assert.equal(out.rezim, 'eshop');
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'https://www.alza.cz/x');
+  assert.deepEqual(calls.map((c) => c.method), ['HEAD', 'GET']);
+  assert.ok(calls.every((c) => c.url === 'https://www.alza.cz/x'));
 });
 
 test('glue 01: přesměrování 302 se nenásleduje; e-shop pokračuje bez obsahu, nic dalšího se nestahuje', async () => {
@@ -225,10 +225,12 @@ test('glue 01: přesměrování 302 se nenásleduje; e-shop pokračuje bez obsah
   assert.equal(out.pageText, '');
   assert.equal(out.rezim, 'eshop');
   assert.equal(out.host, 'example.cz');
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].disableFollowRedirect, true);
-  assert.equal(calls[0].ignoreHttpStatusErrors, true);
-  assert.equal(calls[0].returnFullResponse, true);
+  assert.deepEqual(calls.map((c) => c.method), ['HEAD', 'GET']);
+  for (const c of calls) {
+    assert.equal(c.disableFollowRedirect, true, c.method);
+    assert.equal(c.ignoreHttpStatusErrors, true, c.method);
+    assert.equal(c.returnFullResponse, true, c.method);
+  }
 });
 
 test('glue 01: stránka 200 -> pokračuje s neprázdným pageText', async () => {
@@ -276,7 +278,8 @@ test('glue 01: limit kvóty je jedna pojmenovaná konstanta na začátku', () =>
 test('glue 01: bez AbortSignal v sandboxu (realita n8n) nikdy se nevracející request skončí do deadline (marketplace -> potrebuji_vice, e-shop pokračuje)', async () => {
   const src = nodeCode('Vstup a načtení');
   assert.match(src, /const FETCH_DEADLINE_MS = \d+;/);
-  const fast = src.replace(/const FETCH_DEADLINE_MS = \d+;/, 'const FETCH_DEADLINE_MS = 50;');
+  assert.match(src, /const FETCH_HEAD_DEADLINE_MS = 5000;/);
+  const fast = src.replace(/const FETCH_DEADLINE_MS = \d+;/, 'const FETCH_DEADLINE_MS = 50;').replace(/const FETCH_HEAD_DEADLINE_MS = \d+;/, 'const FETCH_HEAD_DEADLINE_MS = 50;');
   assert.notEqual(fast, src);
   const t0 = Date.now();
   const { out, calls } = await runGlue('01-vstup.js', {
@@ -286,8 +289,9 @@ test('glue 01: bez AbortSignal v sandboxu (realita n8n) nikdy se nevracející r
   assert.ok(Date.now() - t0 < 1000, 'deadline nezabral');
   assert.equal(out.zkratka, true);
   assert.equal(out.odpoved.stav, 'potrebuji_vice');
-  assert.equal(calls.length, 1);
+  assert.deepEqual(calls.map((c) => c.method), ['HEAD', 'GET']);
   assert.equal(calls[0].abortSignal, undefined);
+  assert.equal(calls[1].abortSignal, undefined);
   const e = await runGlue('01-vstup.js', { json: { body: { odkaz: 'https://example.cz/p' } }, src: fast, httpStub: () => new Promise(() => {}) });
   assert.equal(e.out.zkratka, false);
   assert.equal(e.out.obsah, false);
@@ -301,6 +305,145 @@ test('glue 01: pokud runtime AbortSignal má, signál se předá requestu', asyn
   });
   assert.ok(calls[0].abortSignal, 'chybí abortSignal');
   assert.equal(typeof calls[0].abortSignal.aborted, 'boolean');
+});
+
+// --- fix wave B: meze stahování stránky (HEAD předkontrola, Range, Accept) ---
+const HTML_OK = '<html>' + 'text '.repeat(200) + '</html>';
+const methodsOf = (calls) => calls.map((c) => c.method);
+// Stub: na HEAD odpoví head, na GET get.
+const headGet = (head, get = () => ({ statusCode: 200, body: HTML_OK })) => (o) => (o.method === 'HEAD' ? head(o) : get(o));
+
+test('glue 01: HEAD říká application/pdf -> GET se nevolá; e-shop pokračuje bez obsahu, marketplace -> potrebuji_vice', async () => {
+  const stub = headGet(() => ({ statusCode: 200, headers: { 'content-type': 'application/pdf' }, body: '' }));
+  const e = await runGlue01({ odkaz: 'https://example.cz/p' }, { httpStub: stub });
+  assert.deepEqual(methodsOf(e.calls), ['HEAD']);
+  assert.equal(e.out.zkratka, false);
+  assert.equal(e.out.obsah, false);
+  assert.equal(e.out.pageText, '');
+  assert.equal(e.out.rezim, 'eshop');
+  const m = await runGlue01({ odkaz: 'https://www.temu.com/p' }, { httpStub: stub });
+  assert.deepEqual(methodsOf(m.calls), ['HEAD']);
+  assert.equal(m.out.zkratka, true);
+  assert.equal(m.out.odpoved.stav, 'potrebuji_vice');
+});
+
+test('glue 01: HEAD content-type se hodnotí bez ohledu na velikost písmen v názvu hlavičky i hodnotě; text/html a xhtml projdou', async () => {
+  const types = [['Content-Type', 'TEXT/HTML; charset=UTF-8'], ['CONTENT-TYPE', 'application/xhtml+xml'], ['content-type', 'text/html']];
+  for (const [k, v] of types) {
+    const { calls, out } = await runGlue01({ odkaz: 'https://example.cz/p' }, { httpStub: headGet(() => ({ statusCode: 200, headers: { [k]: v }, body: '' })) });
+    assert.deepEqual(methodsOf(calls), ['HEAD', 'GET'], k + ': ' + v);
+    assert.equal(out.obsah, true);
+  }
+  for (const [k, v] of [['Content-Type', 'Application/PDF'], ['CONTENT-TYPE', 'image/png'], ['content-type', 'application/octet-stream'], ['content-type', 'text/htmlx']]) {
+    const { calls } = await runGlue01({ odkaz: 'https://example.cz/p' }, { httpStub: headGet(() => ({ statusCode: 200, headers: { [k]: v }, body: '' })) });
+    assert.deepEqual(methodsOf(calls), ['HEAD'], k + ': ' + v);
+  }
+});
+
+test('glue 01: HEAD content-length nad 3 000 000 -> GET se nevolá; přesně 3 000 000 a nečíselné hodnoty projdou', async () => {
+  const big = await runGlue01({ odkaz: 'https://example.cz/p' }, { httpStub: headGet(() => ({ statusCode: 200, headers: { 'Content-Length': '50000000', 'content-type': 'text/html' }, body: '' })) });
+  assert.deepEqual(methodsOf(big.calls), ['HEAD']);
+  assert.equal(big.out.obsah, false);
+  const m = await runGlue01({ odkaz: 'https://www.temu.com/p' }, { httpStub: headGet(() => ({ statusCode: 200, headers: { 'content-length': '3000001' }, body: '' })) });
+  assert.deepEqual(methodsOf(m.calls), ['HEAD']);
+  assert.equal(m.out.odpoved.stav, 'potrebuji_vice');
+  for (const cl of ['3000000', '12', 'abc', '']) {
+    const { calls } = await runGlue01({ odkaz: 'https://example.cz/p' }, { httpStub: headGet(() => ({ statusCode: 200, headers: { 'content-length': cl }, body: '' })) });
+    assert.deepEqual(methodsOf(calls), ['HEAD', 'GET'], 'content-length ' + cl);
+  }
+});
+
+test('glue 01: HEAD 405 / 404 / 500 / výjimka -> GET se přesto zavolá a stránka se načte', async () => {
+  const heads = [() => ({ statusCode: 405, headers: { 'content-type': 'application/pdf' }, body: '' }), () => ({ statusCode: 404, headers: {}, body: '' }),
+    () => ({ statusCode: 500, headers: { 'content-length': '99999999' }, body: '' }), () => { throw new Error('ECONNRESET'); }, () => Promise.reject(new Error('x'))];
+  for (const h of heads) {
+    const { calls, out } = await runGlue01({ odkaz: 'https://example.cz/p' }, { httpStub: headGet(h) });
+    assert.deepEqual(methodsOf(calls), ['HEAD', 'GET']);
+    assert.equal(out.obsah, true);
+    assert.ok(out.pageText.length > 0);
+  }
+});
+
+test('glue 01: HEAD bez content-type (2xx) -> GET se zavolá', async () => {
+  const { calls, out } = await runGlue01({ odkaz: 'https://example.cz/p' }, { httpStub: headGet(() => ({ statusCode: 200, headers: {}, body: '' })) });
+  assert.deepEqual(methodsOf(calls), ['HEAD', 'GET']);
+  assert.equal(out.obsah, true);
+});
+
+test('glue 01: GET posílá Range a Accept, HEAD má stejné bezpečné volby; 206 i 200 se přijmou', async () => {
+  for (const statusCode of [200, 206]) {
+    const { calls, out } = await runGlue01({ odkaz: 'https://example.cz/p' }, { httpStub: headGet(() => ({ statusCode: 200, headers: { 'content-type': 'text/html' }, body: '' }), () => ({ statusCode, body: HTML_OK })) });
+    const get = calls.find((c) => c.method === 'GET');
+    const head = calls.find((c) => c.method === 'HEAD');
+    assert.equal(get.headers.Range, 'bytes=0-2000000');
+    assert.equal(get.headers.Accept, 'text/html,application/xhtml+xml');
+    assert.equal(get.headers['Accept-Language'], 'cs');
+    assert.equal(get.disableFollowRedirect, true);
+    assert.equal(head.disableFollowRedirect, true);
+    assert.equal(head.ignoreHttpStatusErrors, true);
+    assert.equal(head.returnFullResponse, true);
+    assert.equal(head.timeout, 5000);
+    assert.equal(out.obsah, true, 'status ' + statusCode);
+  }
+});
+
+test('glue 01: HEAD, který nikdy neodpoví, se po krátkém deadline přeskočí a GET proběhne', async () => {
+  const src = nodeCode('Vstup a načtení').replace(/const FETCH_HEAD_DEADLINE_MS = \d+;/, 'const FETCH_HEAD_DEADLINE_MS = 40;');
+  const t0 = Date.now();
+  const { calls, out } = await runGlue('01-vstup.js', {
+    json: { body: { odkaz: 'https://example.cz/p' } }, src,
+    httpStub: headGet(() => new Promise(() => {})),
+  });
+  assert.ok(Date.now() - t0 < 1500, 'HEAD deadline nezabral');
+  assert.deepEqual(methodsOf(calls), ['HEAD', 'GET']);
+  assert.equal(out.obsah, true);
+});
+
+test('glue 01: HEAD a GET předají abortSignal, pokud ho runtime má', async () => {
+  const { calls } = await runGlue('01-vstup.js', {
+    json: { body: { odkaz: 'https://example.cz/p' } },
+    globals: { AbortSignal: { timeout: () => ({ aborted: false }) } },
+    httpStub: headGet(() => ({ statusCode: 200, headers: {}, body: '' })),
+  });
+  assert.equal(calls.length, 2);
+  for (const c of calls) assert.ok(c.abortSignal, c.method);
+});
+
+// --- fix wave B: QUOTA_PER_DAY při sestavení ---
+const quotaOf = (src) => /^\s*const MAX_DENNE = (\d+);/m.exec(src)[1];
+const vstupSrc = (wf) => wf.nodes.find((n) => n.name === 'Vstup a načtení').parameters.jsCode;
+
+test('build: výchozí limit zůstává 200 (bez volby i s prázdnou hodnotou)', () => {
+  assert.equal(quotaOf(nodeCode('Vstup a načtení')), '200');
+  assert.equal(quotaOf(vstupSrc(buildWorkflow({ credId: 'C', credName: 'N', quotaPerDay: undefined }))), '200');
+  assert.equal(resolveQuota('', () => assert.fail('nemá varovat')), 200);
+});
+
+test('build: quotaPerDay se dosadí do glue 01 (jen tam) a limit se v běhu skutečně uplatní', async () => {
+  const wf = buildWorkflow({ credId: 'C', credName: 'N', quotaPerDay: 3 });
+  const src = vstupSrc(wf);
+  assert.equal(quotaOf(src), '3');
+  assert.equal(src.split('const MAX_DENNE').length, 2);
+  assert.equal(JSON.stringify(wf.nodes.filter((n) => n.name !== 'Vstup a načtení')).includes('MAX_DENNE'), false);
+  const state = {};
+  const run = () => runGlue('01-vstup.js', { json: { body: { text: 'Powerbanka 199 Kč' } }, src, state });
+  for (let i = 0; i < 3; i++) assert.equal((await run()).out.zkratka, false);
+  assert.equal((await run()).out.status, 429);
+  assert.equal(quotaOf(vstupSrc(buildWorkflow({ credId: 'C', credName: 'N', quotaPerDay: '100000' }))), '100000');
+  assert.equal(quotaOf(vstupSrc(buildWorkflow({ credId: 'C', credName: 'N', quotaPerDay: '1' }))), '1');
+});
+
+test('build: neplatný QUOTA_PER_DAY -> výchozí 200 s varováním', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  for (const bad of ['abc', '0', '-5', '100001', '1.5', '1e3', 0, -1, 2.5, NaN, '12 3', true]) {
+    const before = warn.mock.callCount();
+    const wf = buildWorkflow({ credId: 'C', credName: 'N', quotaPerDay: bad });
+    assert.equal(quotaOf(vstupSrc(wf)), '200', String(bad));
+    assert.equal(warn.mock.callCount(), before + 1, 'varování pro ' + String(bad));
+  }
+  const seen = [];
+  assert.equal(resolveQuota('x', (m) => seen.push(m)), 200);
+  assert.match(seen[0], /QUOTA_PER_DAY/);
 });
 
 test('glue 01: kvóta je zdokumentovaná v komentáři na začátku', () => {
@@ -1078,11 +1221,11 @@ function loadPage(opts = {}) {
     static revokeObjectURL(u) { log.push('revoke:' + u); }
   }
   const ctx = vm.createContext({
-    document: dom.document, location: { href: 'http://x/webhook/nakupni-kontrola-web' }, URL: FakeURL, Image: FakeImage, console,
+    document: dom.document, location: { href: opts.href || 'http://x/webhook/nakupni-kontrola-web' }, URL: FakeURL, Image: FakeImage, console,
     fetch: async (...args) => { fetchCalls.push(args); if (opts.fetchFail) throw new Error('síť'); return { json: async () => ({}) }; },
   });
-  vm.runInContext(m[1] + '\n;this.__render = render; this.__toJpegBase64 = toJpegBase64;', ctx);
-  return { render: ctx.__render, toJpeg: ctx.__toJpegBase64, dom, log, fetchCalls };
+  vm.runInContext(m[1] + '\n;this.__render = render; this.__toJpegBase64 = toJpegBase64; this.__apiUrl = apiUrl; this.__API = API;', ctx);
+  return { render: ctx.__render, toJpeg: ctx.__toJpegBase64, apiUrl: ctx.__apiUrl, API: ctx.__API, dom, log, fetchCalls };
 }
 
 test('render: ok odpověď s HTML v dukazu se vykreslí jako prostý text, bez innerHTML', () => {
@@ -1094,7 +1237,7 @@ test('render: ok odpověď s HTML v dukazu se vykreslí jako prostý text, bez i
   assert.equal(dom.all.filter((n) => n.textContent === payload).length, 1);
   assert.equal(dom.all.filter((n) => n.htmlWrites > 0).length, 0);
   assert.equal(dom.all.filter((n) => Object.keys(n.attrs).some((k) => /^on/i.test(k))).length, 0);
-  assert.ok(texts(dom.document.getElementById('out')).includes('Riziko: červená'));
+  assert.ok(texts(dom.document.getElementById('out')).includes('Vysoké riziko'));
 });
 
 test('render: chyba zobrazí text chyby', () => {
@@ -1239,7 +1382,7 @@ test('render: nepovolené semafor/závažnost se nahradí šedou/low, třídy js
   render({ stav: 'ok', semafor: 'card err', shrnuti: 'x', co_delat: [], signaly: [{ zavaznost: 'zelená zelená', titul: 'T', dukaz: 'D', modul: 'M' }] });
   const badge = dom.all.find((n) => n.className.startsWith('light'));
   assert.equal(badge.className, 'light šedá');
-  assert.equal(badge.textContent, 'Riziko: šedá');
+  assert.equal(badge.textContent, 'Nelze posoudit');
   const sig = dom.all.find((n) => n.className.startsWith('sig'));
   assert.equal(sig.className, 'sig low');
   for (const n of dom.all) for (const t of n.className.split(' ')) assert.ok(ALLOWED_CLASSES.has(t), 'nepovolená třída: ' + t);
@@ -1250,7 +1393,7 @@ test('render: povolený semafor se zobrazí beze změny', () => {
   render({ stav: 'ok', semafor: 'zelená', shrnuti: 'x', co_delat: [], signaly: [{ zavaznost: 'high', titul: 'T', dukaz: 'D', modul: 'M' }] });
   const badge = dom.all.find((n) => n.className.startsWith('light'));
   assert.equal(badge.className, 'light zelená');
-  assert.equal(badge.textContent, 'Riziko: zelená');
+  assert.equal(badge.textContent, 'Nízké riziko');
   assert.equal(dom.all.find((n) => n.className.startsWith('sig')).className, 'sig high');
 });
 
@@ -1328,4 +1471,83 @@ test('CSS: color-scheme light dark na :root a overflow-wrap:anywhere pro .card, 
   const css = cssOf();
   assert.match(css, /:root\s*\{[^}]*color-scheme:\s*light dark/);
   assert.match(css, /\.card,\s*\.sig,\s*p\s*\{[^}]*overflow-wrap:\s*anywhere/);
+});
+
+// --- fix wave B: adresa API (M1), soukromí a zdroje (M2), srozumitelné štítky verdiktu a nápověda (M3) ---
+test('apiUrl: poslední segment nakupni-kontrola-web se nahradí; query, hash i koncová lomítka se zahodí', () => {
+  const { apiUrl } = loadPage();
+  const cases = [
+    ['http://x/webhook/nakupni-kontrola-web', 'http://x/webhook/nakupni-kontrola'],
+    ['http://x/webhook/nakupni-kontrola-web/', 'http://x/webhook/nakupni-kontrola'],
+    ['http://x/webhook/nakupni-kontrola-web///', 'http://x/webhook/nakupni-kontrola'],
+    ['http://x/webhook/nakupni-kontrola-web?a=1#b', 'http://x/webhook/nakupni-kontrola'],
+    ['http://x/webhook/nakupni-kontrola-web/?a=1#b', 'http://x/webhook/nakupni-kontrola'],
+    ['http://x/webhook/nakupni-kontrola-web#b', 'http://x/webhook/nakupni-kontrola'],
+    ['http://x/webhook-test/nakupni-kontrola-web', 'http://x/webhook-test/nakupni-kontrola'],
+    ['https://n8n.example.org:5678/webhook-test/nakupni-kontrola-web/?x=/y/z', 'https://n8n.example.org:5678/webhook-test/nakupni-kontrola'],
+    ['https://host/prefix/webhook/nakupni-kontrola-web', 'https://host/prefix/webhook/nakupni-kontrola'],
+  ];
+  for (const [href, want] of cases) assert.equal(apiUrl(href), want, href);
+});
+
+test('apiUrl: adresa bez cesty nevyhodí výjimku a nepoškodí hostitele', () => {
+  const { apiUrl } = loadPage();
+  assert.equal(apiUrl('http://x'), 'http://x/nakupni-kontrola');
+  assert.equal(apiUrl('http://x/'), 'http://x/nakupni-kontrola');
+  assert.doesNotThrow(() => apiUrl(undefined));
+});
+
+test('stránka volá API na adrese odvozené z location (včetně lomítka na konci) a posílá POST', async () => {
+  const p = await submitPage({ href: 'http://x/webhook-test/nakupni-kontrola-web/?a=1#b' }, []);
+  assert.equal(p.API, 'http://x/webhook-test/nakupni-kontrola');
+  assert.equal(p.fetchCalls.length, 1);
+  assert.equal(p.fetchCalls[0][0], 'http://x/webhook-test/nakupni-kontrola');
+  assert.equal(p.fetchCalls[0][1].method, 'POST');
+});
+
+test('stránka: poznámka o soukromí zmiňuje odeslání službě Claude (Anthropic) a zdroje dat; bez odkazů', () => {
+  const html = pageHtml();
+  assert.ok(html.includes('Screenshoty ani texty neukládáme. Pro vyhodnocení se odesílají službě Claude (Anthropic).'));
+  assert.ok(html.includes('Zdroje dat: seznam rizikových e-shopů ČOI, ARES, RDAP (CZ.NIC), EU Safety Gate © Evropská unie (CC BY 4.0).'));
+  assert.equal(/https?:\/\//.test(html), false);
+  assert.equal(/<a\b/i.test(html), false);
+});
+
+test('stránka: u tlačítka je viditelná nápověda o délce kontroly a při čekání se ukazuje Kontroluji…', async () => {
+  const html = pageHtml();
+  const btn = html.indexOf('id="go"');
+  const hint = html.indexOf('Kontrola může trvat až 30 sekund.');
+  assert.ok(btn > 0 && hint > btn && hint - btn < 300, 'nápověda hned za tlačítkem');
+  assert.match(html, /<p[^>]*class="hint"[^>]*>Kontrola může trvat až 30 sekund\./);
+  const p = loadPage();
+  p.dom.byId.shots.files = [];
+  const done = p.dom.byId.f.listeners.submit({ preventDefault() {} });
+  assert.equal(p.dom.byId.go.textContent, 'Kontroluji…');
+  assert.equal(p.dom.byId.go.disabled, true);
+  await settle(done);
+  assert.equal(p.dom.byId.go.textContent, 'Zkontrolovat');
+});
+
+test('render: štítek verdiktu je srozumitelný text pro každý semafor a odpovídá barevné třídě', () => {
+  const want = { 'zelená': 'Nízké riziko', 'oranžová': 'Střední riziko', 'červená': 'Vysoké riziko', 'šedá': 'Nelze posoudit' };
+  for (const [semafor, label] of Object.entries(want)) {
+    const { render, dom } = loadPage();
+    render({ stav: 'ok', semafor, shrnuti: 'x', co_delat: [], signaly: [] });
+    const badge = dom.all.find((n) => n.className.startsWith('light'));
+    assert.equal(badge.className, 'light ' + semafor);
+    assert.equal(badge.textContent, label);
+    assert.ok(!/Riziko:/.test(badge.textContent));
+    for (const n of dom.all) for (const c of n.className.split(' ')) assert.ok(ALLOWED_CLASSES.has(c), 'nepovolená třída: ' + c);
+  }
+});
+
+test('render: štítek verdiktu se nikdy nebere z odpovědi (XSS, neznámý nebo vnořený semafor -> Nelze posoudit)', () => {
+  for (const semafor of ['<img src=x onerror=alert(1)>', 'červená červená', '__proto__', 'constructor', 'toString', {}, ['červená'], null, 5]) {
+    const { render, dom } = loadPage();
+    render({ stav: 'ok', semafor, shrnuti: 'x', co_delat: [], signaly: [] });
+    const badge = dom.all.find((n) => n.className.startsWith('light'));
+    assert.equal(badge.className, 'light šedá', JSON.stringify(semafor));
+    assert.equal(badge.textContent, 'Nelze posoudit', JSON.stringify(semafor));
+    assert.equal(dom.all.filter((n) => n.htmlWrites > 0).length, 0);
+  }
 });

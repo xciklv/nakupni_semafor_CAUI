@@ -44,17 +44,30 @@
     <input id="shots" type="file" accept="image/png,image/jpeg,image/webp" multiple>
     <p id="limit" class="hint" aria-live="polite"></p>
     <button id="go" type="submit">Zkontrolovat</button>
-    <p class="hint">Screenshoty ani texty neukládáme. Výsledek je pomůcka, ne právní verdikt.</p>
+    <p id="cekani" class="hint">Kontrola může trvat až 30 sekund.</p>
+    <p class="hint">Screenshoty ani texty neukládáme. Pro vyhodnocení se odesílají službě Claude (Anthropic). Výsledek je pomůcka, ne právní verdikt.</p>
+    <p class="hint zdroje">Zdroje dat: seznam rizikových e-shopů ČOI, ARES, RDAP (CZ.NIC), EU Safety Gate © Evropská unie (CC BY 4.0).</p>
   </form>
   <div id="out" aria-live="polite"></div>
 </main>
 <script>
-const API = new URL('nakupni-kontrola', location.href).href;
+// Adresa API z adresy stránky: bez query a hashe a bez koncových lomítek se poslední segment (nakupni-kontrola-web) nahradí
+// segmentem nakupni-kontrola; funguje pro /webhook/ i /webhook-test/ a pro adresu s lomítkem na konci.
+function apiUrl(href) {
+  const m = /^([a-z][a-z0-9+.-]*:\/\/[^\/?#]*)([^?#]*)/i.exec(String(href));
+  if (!m) return 'nakupni-kontrola';
+  const segmenty = m[2].split('/').filter((x) => x !== '');
+  segmenty[segmenty.length > 0 ? segmenty.length - 1 : 0] = 'nakupni-kontrola';
+  return m[1] + '/' + segmenty.join('/');
+}
+const API = apiUrl(location.href);
 const CHYBA_OBECNA = 'Kontrola se nepodařila. Zkuste to prosím znovu.';
 const CHYBA_ZPRACOVANI = 'Obrázek se nepodařilo zpracovat.';
 const CHYBA_NACTENI = 'Obrázek se nepodařilo načíst.';
 const MAX_SNIMKU = 4;
 const SEMAFORY = ['zelená', 'oranžová', 'červená', 'šedá'];
+// Srozumitelný štítek verdiktu: text je druhý (nebarevný) signál vedle barvy.
+const SEMAFOR_STITEK = { 'zelená': 'Nízké riziko', 'oranžová': 'Střední riziko', 'červená': 'Vysoké riziko', 'šedá': 'Nelze posoudit' };
 const ZAVAZNOSTI = ['info', 'low', 'medium', 'high'];
 // Závažnost se ukazuje i textem, ne jen barvou.
 const ZAVAZNOST_STITEK = { info: 'Informace', low: 'Nízká', medium: 'Střední', high: 'Vysoká' };
@@ -109,7 +122,7 @@ function render(r) {
   if (r.stav === 'chyba') { card.append(el('p', str(r.chyba) || CHYBA_OBECNA, 'err')); out.append(card); return; }
   if (r.stav === 'potrebuji_vice') { card.append(el('p', str(r.zprava))); out.append(card); return; }
   const semafor = povoleno(str(r.semafor), SEMAFORY, 'šedá');
-  card.append(el('span', 'Riziko: ' + semafor, 'light ' + semafor));
+  card.append(el('span', SEMAFOR_STITEK[semafor], 'light ' + semafor));
   card.append(el('p', str(r.shrnuti)));
   card.append(el('p', 'Jistota kontroly: ' + str(r.jistota), 'hint'));
   const nezkontrolovano = strs(r.nezkontrolovano);

@@ -12,11 +12,24 @@ function buildBundle() {
     .replace(/^if \(typeof (require|module) !== 'undefined'.*$/gm, '');
 }
 
-const glue = (f) => fs.readFileSync(path.join(__dirname, 'glue', f), 'utf8');
+const QUOTA_DEFAULT = 200;
+// Denní limit kontrol (1..100000). Neplatná hodnota -> výchozí 200 s varováním; nedefinovaná/prázdná hodnota -> výchozí bez varování.
+function resolveQuota(v, warn = console.warn) {
+  if (v === undefined || v === null || v === '') return QUOTA_DEFAULT;
+  const t = String(v).trim();
+  const n = /^[0-9]+$/.test(t) ? Number(t) : NaN;
+  if (Number.isInteger(n) && n >= 1 && n <= 100000) return n;
+  warn('QUOTA_PER_DAY="' + v + '" není celé číslo 1..100000, použije se ' + QUOTA_DEFAULT + '.');
+  return QUOTA_DEFAULT;
+}
+
+// Hodnota limitu se dosazuje do zdroje glue při sestavení (v běhu Code nodu žádný přístup k env není).
+const glue = (f, quota = QUOTA_DEFAULT) => fs.readFileSync(path.join(__dirname, 'glue', f), 'utf8')
+  .replace(/^(\s*const MAX_DENNE = )\d+;/m, '$1' + quota + ';');
 // Code nody nesdílejí scope, proto KAŽDÝ nese celý bundle enginu.
-const code = (name, file, pos) => ({
+const code = (name, file, pos, quota) => ({
   id: name, name, type: 'n8n-nodes-base.code', typeVersion: 2, position: pos,
-  parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: buildBundle() + '\n' + glue(file) },
+  parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: buildBundle() + '\n' + glue(file, quota) },
 });
 const claude = (name, pos, credId, credName) => ({
   id: name, name, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: pos, onError: 'continueRegularOutput',
@@ -30,13 +43,14 @@ const claude = (name, pos, credId, credName) => ({
   credentials: { anthropicApi: { id: credId, name: credName } },
 });
 
-function buildWorkflow({ credId, credName }) {
+function buildWorkflow({ credId, credName, quotaPerDay }) {
+  const quota = resolveQuota(quotaPerDay);
   const nodes = [
     // allowedOrigins '*': HTML servírované z webhooku běží v CSP sandboxu bez allow-same-origin (n8n-core html-sandbox.js),
     // takže jeho origin je 'null' a fetch na tento webhook je cross-origin.
     { id: 'Webhook', name: 'Webhook', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [0, 0], webhookId: '2477b1ff-1caf-474d-9db3-1104c8e3ca48',
       parameters: { httpMethod: 'POST', path: 'nakupni-kontrola', responseMode: 'responseNode', options: { allowedOrigins: '*' } } },
-    code('Vstup a načtení', '01-vstup.js', [220, 0]),
+    code('Vstup a načtení', '01-vstup.js', [220, 0], quota),
     { id: 'Stačí vstup?', name: 'Stačí vstup?', type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [440, 0],
       parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
         conditions: [{ id: 'c1', leftValue: '={{ $json.zkratka }}', rightValue: false, operator: { type: 'boolean', operation: 'false', singleValue: true } }], combinator: 'and' } } },
@@ -83,9 +97,9 @@ function buildWorkflow({ credId, credName }) {
 if (require.main === module) {
   const credId = process.env.CRED_ID;
   if (!credId) { console.error('Nastav CRED_ID (id Anthropic credentialu z n8n).'); process.exit(1); }
-  const wf = buildWorkflow({ credId, credName: process.env.CRED_NAME || 'Anthropic account' });
+  const wf = buildWorkflow({ credId, credName: process.env.CRED_NAME || 'Anthropic account', quotaPerDay: process.env.QUOTA_PER_DAY });
   fs.writeFileSync(path.join(root, 'workflow.json'), JSON.stringify(wf, null, 2));
   console.log('workflow.json zapsán, nodů:', wf.nodes.length);
 }
 
-module.exports = { buildBundle, buildWorkflow };
+module.exports = { buildBundle, buildWorkflow, resolveQuota };

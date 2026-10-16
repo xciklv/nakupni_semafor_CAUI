@@ -25,7 +25,9 @@ function buildExtractRequest(input, pageText) {
   if (input.text) parts.push('Text vložený uživatelem:\n' + safe(input.text));
   const content = input.screenshoty.map((s) => ({ type: 'image', source: { type: 'base64', media_type: s.mime, data: s.data } }));
   content.push({ type: 'text', text: '<nabidka>\n' + parts.join('\n\n') + '\n</nabidka>\n\nVrať pouze JSON.' });
-  return { model: 'claude-sonnet-5-5', max_tokens: 2000, system: SYSTEM_EXTRACT, messages: [{ role: 'user', content }] };
+  // Sonnet 5.5 odmítá thinking:{type:'disabled'} (400); minimální myšlení řeší output_config.effort (claude-api skill, 'Thinking & Effort').
+  // max_tokens 8000: tokeny myšlení se do limitu počítají, malý limit by uřízl JSON.
+  return { model: 'claude-sonnet-5-5', max_tokens: 8000, output_config: { effort: 'low' }, system: SYSTEM_EXTRACT, messages: [{ role: 'user', content }] };
 }
 
 function parseLlmJson(api) {
@@ -60,7 +62,7 @@ const llmIco = (v) => {
   return t.padStart(8, '0');
 };
 // Texty nesouladů a nereálných parametrů píše model a ukazují se uživateli: obviňující věty se zahazují (nepřepisují).
-const LLM_ACCUSATION_RE = /podvod|\bfraud\b|\bscam|podvodnik|podvodnic|podvodn[ey]|je podvod|zlodej|\blump\b|\blump(i|ove|ovi|u|a)\b|nelegalni|trestn/;
+const LLM_ACCUSATION_RE = /podvod(?!ni)|\bfraud\b|\bscam|podvodnik|podvodnic|podvodn[ey]|je podvod|zlodej|\blump\b|\blump(i|ove|ovi|u|a)\b|nelegalni|trestn/;
 const llmAccuses = (t) => LLM_ACCUSATION_RE.test(String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
 const llmClean = (v) => llmArr(v).filter((t) => !llmAccuses(t));
 const LLM_BRAND_MAX = 60;

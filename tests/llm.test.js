@@ -202,3 +202,53 @@ test('filtr obvinění: kmen podvod + fraud/scam se zahazuje, běžné věty zů
   assert.deepEqual(x.nesoulady, keep);
   assert.deepEqual(x.nerealne_parametry, keep);
 });
+
+// --- fix wave B: tvar požadavku na extrakci (I3) ---
+test('požadavek na extrakci: přesný model, max_tokens 8000, nízké úsilí; thinking se neposílá (Sonnet 5.5 by disabled odmítl)', () => {
+  const r = buildExtractRequest(input({ text: 'Powerbanka' }), '');
+  assert.equal(r.model, 'claude-sonnet-5-5');
+  assert.equal(r.max_tokens, 8000);
+  assert.deepEqual(r.output_config, { effort: 'low' });
+  assert.equal('thinking' in r, false);
+  assert.equal('temperature' in r, false);
+  assert.equal(typeof r.system, 'string');
+  assert.equal(r.system, SYSTEM_EXTRACT);
+  assert.ok(r.system.length > 200);
+  assert.deepEqual(Object.keys(r).sort(), ['max_tokens', 'messages', 'model', 'output_config', 'system']);
+});
+
+test('požadavek na extrakci: jedna user zpráva, obrázky jako base64 bloky před jediným textovým blokem', () => {
+  const shots = [{ mime: 'image/jpeg', data: 'AAAA' }, { mime: 'image/png', data: 'BBBB' }];
+  const r = buildExtractRequest(input({ text: 'T', screenshoty: shots }), 'Text stránky');
+  assert.equal(r.messages.length, 1);
+  assert.equal(r.messages[0].role, 'user');
+  const c = r.messages[0].content;
+  assert.equal(c.length, 3);
+  assert.deepEqual(c[0], { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } });
+  assert.deepEqual(c[1], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'BBBB' } });
+  assert.equal(c[2].type, 'text');
+  assert.match(c[2].text, /Text stránky/);
+  const bez = buildExtractRequest(input({ text: 'T' }), '').messages[0].content;
+  assert.equal(bez.length, 1);
+  assert.equal(bez[0].type, 'text');
+});
+
+test('parseLlmJson čte jen textové bloky: thinking blok před textem nevadí, JSON v thinking se ignoruje', () => {
+  const api = { content: [
+    { type: 'thinking', thinking: 'Úvaha {"produkt":{"nazev":"ZLE"}}', signature: 'sig' },
+    { type: 'text', text: '{"produkt":{"nazev":"Dobře"}}' },
+  ] };
+  const r = parseLlmJson(api);
+  assert.equal(r.ok, true);
+  assert.equal(r.data.produkt.nazev, 'Dobře');
+  assert.equal(parseLlmJson({ content: [{ type: 'thinking', thinking: '{"a":1}' }] }).ok, false);
+  assert.equal(parseLlmJson({ content: [{ type: 'redacted_thinking', data: 'x' }, { type: 'text', text: '{"a":1}' }] }).ok, true);
+});
+
+test('filtr obvinění: podvodní (= podvodní, pod vodou) zůstává, podvodná/podvodnou/podvody se zahazují', () => {
+  const keep = ['Podvodní kamera na fotce neodpovídá', 'Podvodní svítilna bez uvedené hloubky', 'podvodni'];
+  const drop = ['Podvodná nabídka', 'Podvodnou nabídku', 'Podvody', 'podvodné fotky', 'Podvodníci', 'Podvodník'];
+  const x = normalizeExtraction({ nesoulady: keep.concat(drop), nerealne_parametry: keep.concat(drop) });
+  assert.deepEqual(x.nesoulady, keep);
+  assert.deepEqual(x.nerealne_parametry, keep);
+});

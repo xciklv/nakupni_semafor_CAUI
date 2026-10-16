@@ -35,7 +35,8 @@ function buildExplainRequest(verdict, signals) {
     nezkontrolovano: explainUnchecked(verdict),
     signaly: signals.map((s) => ({ zavaznost: s.severity, titul: s.title, dukaz: s.evidence })),
   };
-  return { model: 'claude-haiku-5-5', max_tokens: 600, system: SYSTEM_EXPLAIN, messages: [{ role: 'user', content: JSON.stringify(payload) }] };
+  // Haiku 5.5 (výchozí effort medium) přijímá thinking:{type:'disabled'} (claude-api skill, 'Thinking & Effort'); max_tokens 1500 je rezerva.
+  return { model: 'claude-haiku-5-5', max_tokens: 1500, thinking: { type: 'disabled' }, system: SYSTEM_EXPLAIN, messages: [{ role: 'user', content: JSON.stringify(payload) }] };
 }
 
 // Lowercase, accent-free form used by the wording and consistency checks.
