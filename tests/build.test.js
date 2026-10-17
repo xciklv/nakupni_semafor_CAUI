@@ -469,6 +469,23 @@ test('glue 01: výjimka kdekoli v těle -> 500 s obecnou hláškou, nic neuniká
   }
 });
 
+test('glue 01: screenshot s nepovoleným mime nebo nepřípustnými daty -> 400 a žádná LLM fáze (zkratka, bez vstupu pro extrakci)', async () => {
+  const HOSTILE = ['AA AA', 'AA"}],"x":"', 'data:image/png;base64,AAAA', 'AAAé', 'AAAA\n', '', '<script>alert(1)</script>'];
+  const shots = [{ mime: 'image/gif', data: 'AAAA' }, { mime: 'text/html', data: 'AAAA' }, { mime: 'image/svg+xml', data: 'AAAA' }]
+    .concat(HOSTILE.map((data) => ({ mime: 'image/png', data })));
+  for (const sh of shots) {
+    const { out, state } = await runGlue01({ text: '', odkaz: '', screenshoty: [sh] });
+    assert.equal(out.zkratka, true, JSON.stringify(sh));
+    assert.equal(out.status, 400, JSON.stringify(sh));
+    assert.equal(out.odpoved.chyba, 'Nepodporovaný formát obrázku (PNG, JPEG, WEBP).');
+    assert.equal('input' in out, false);
+    assert.equal(state.count, undefined, 'neplatný vstup nespotřebuje kvótu');
+  }
+  const { out } = await runGlue01({ text: '', odkaz: '', screenshoty: [{ mime: 'image/png', data: 'iVBORw0KGgo=' }] });
+  assert.equal(out.zkratka, false);
+  assert.equal(out.input.screenshoty.length, 1);
+});
+
 // --- glue 02 ---
 test('glue 02: sestaví požadavek na extrakci (node nese bundle)', async () => {
   const { out } = await runGlue('02-extrakce-req.js', { json: { input: { text: 'Powerbanka 199 Kč', screenshoty: [], url: null }, pageText: '' } });
@@ -1514,7 +1531,7 @@ test('stránka volá API na adrese odvozené z location (včetně lomítka na ko
 
 test('stránka: poznámka o soukromí zmiňuje odeslání službě OpenAI a zdroje dat; bez odkazů', () => {
   const html = pageHtml();
-  assert.ok(html.includes('Screenshoty ani texty neukládáme. Pro vyhodnocení se odesílají službě OpenAI.'));
+  assert.ok(html.includes('Screenshoty ani odkazy sami neukládáme; pro vyhodnocení se odesílají službě OpenAI, která je může podle svých podmínek po omezenou dobu uchovávat.'));
   assert.ok(html.includes('Zdroje dat: seznam rizikových e-shopů ČOI, ARES, RDAP (CZ.NIC), EU Safety Gate © Evropská unie (CC BY 4.0).'));
   assert.equal(/https?:\/\//.test(html), false);
   assert.equal(/<a\b/i.test(html), false);
@@ -1846,17 +1863,17 @@ test('modely: výchozí hodnoty = konstanty enginu; glue 02 nese jen model extra
 });
 
 test('modely: modelExtract/modelExplain se dosadí do glue a v běhu skutečně skončí v požadavcích (i v degradační větvi)', async () => {
-  const wf = buildWorkflow({ credId: 'C', credName: 'N', modelExtract: 'gpt-6-astra', modelExplain: 'ft:gpt-6-luna:org:x.y_z-1' });
+  const wf = buildWorkflow({ credId: 'C', credName: 'N', modelExtract: 'gpt-6-astra', modelExplain: 'gpt-6-luna:org:x.y_z-1' });
   assert.equal(modelOf(wf, 'Sestavit extrakci', 'MODEL_EXTRACT')[1], 'gpt-6-astra');
-  assert.equal(modelOf(wf, 'Moduly', 'MODEL_EXPLAIN')[1], 'ft:gpt-6-luna:org:x.y_z-1');
+  assert.equal(modelOf(wf, 'Moduly', 'MODEL_EXPLAIN')[1], 'gpt-6-luna:org:x.y_z-1');
   const code = (n) => wf.nodes.find((x) => x.name === n).parameters.jsCode;
   const r2 = await runCodeNode(code('Sestavit extrakci'), { json: { input: { text: 'Powerbanka 199 Kč', screenshoty: [], url: null }, pageText: '' } });
   assert.equal(r2.out.llmRequest.model, 'gpt-6-astra');
   const ctx = { zkratka: false, input: { text: 'x', screenshoty: [], url: null }, pageText: '', rezim: 'neznámé', host: null };
   const r3 = await runCodeNode(code('Moduly'), { json: { error: { message: '401' } }, nodes: { 'Vstup a načtení': ctx } });
-  assert.equal(r3.out.llmRequest.model, 'ft:gpt-6-luna:org:x.y_z-1');
+  assert.equal(r3.out.llmRequest.model, 'gpt-6-luna:org:x.y_z-1');
   const r3catch = await runCodeNode(code('Moduly'), { json: {}, nodes: { 'Vstup a načtení': () => { throw new Error('x'); } } });
-  assert.equal(r3catch.out.llmRequest.model, 'ft:gpt-6-luna:org:x.y_z-1');
+  assert.equal(r3catch.out.llmRequest.model, 'gpt-6-luna:org:x.y_z-1');
 });
 
 test('modely: neplatná hodnota -> výchozí s varováním; prázdná/nedefinovaná -> výchozí bez varování', (t) => {
@@ -1874,7 +1891,20 @@ test('modely: neplatná hodnota -> výchozí s varováním; prázdná/nedefinova
     assert.equal(resolveModel(v, 'def', 'X', () => assert.fail('nemá varovat')), 'def');
   }
   assert.equal(warn.mock.callCount(), before);
-  for (const ok of ['gpt-6.1-sol', 'a', 'x'.repeat(64), 'ft:gpt-6-luna:org:name.v2_1']) assert.equal(resolveModel(ok, 'def', 'X', () => assert.fail('nemá varovat')), ok);
+  for (const ok of ['gpt-6', 'gpt-6.1-sol', 'gpt-6-luna', 'gpt-6' + 'x'.repeat(58)]) assert.equal(resolveModel(ok, 'def', 'X', () => assert.fail('nemá varovat')), ok);
+  // platné id, které není GPT-6: použije se, ale s varováním (požadavek vždy posílá reasoning_effort)
+  const warned = [];
+  for (const id of ['gpt-5', 'a', 'x'.repeat(64), 'ft:gpt-6-luna:org:name.v2_1', 'GPT-6']) {
+    assert.equal(resolveModel(id, 'def', 'LLM_MODEL_EXPLAIN', (m) => warned.push(m)), id);
+  }
+  assert.equal(warned.length, 5);
+  assert.equal(warned[0], 'LLM_MODEL_EXPLAIN: gpt-5 is not a GPT-6 model; the request always sends reasoning_effort (low for extraction, none for explanation) and may be rejected with HTTP 400 — override only with GPT-6 models that accept these values.');
+  const warnSpy = t.mock.method(console, 'warn', () => {});
+  const wfW = buildWorkflow({ credId: 'C', credName: 'N', modelExtract: 'gpt-5-mini', modelExplain: 'gpt-6-x' });
+  assert.equal(modelOf(wfW, 'Sestavit extrakci', 'MODEL_EXTRACT')[1], 'gpt-5-mini');
+  assert.equal(modelOf(wfW, 'Moduly', 'MODEL_EXPLAIN')[1], 'gpt-6-x');
+  assert.equal(warnSpy.mock.callCount(), 1);
+  assert.match(warnSpy.mock.calls[0].arguments[0], /^LLM_MODEL_EXTRACT: gpt-5-mini is not a GPT-6 model/);
   const seen = [];
   assert.equal(resolveModel('špatné jméno', 'def', 'LLM_MODEL_EXTRACT', (m) => seen.push(m)), 'def');
   assert.equal(seen.length, 1);

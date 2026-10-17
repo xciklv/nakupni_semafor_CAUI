@@ -205,7 +205,7 @@ test('filtr obvinění: kmen podvod + fraud/scam se zahazuje, běžné věty zů
   assert.deepEqual(x.nerealne_parametry, keep);
 });
 
-/// --- provider switch (OpenAI Chat Completions): tvar požadavku na extrakci ---
+// --- provider switch (OpenAI Chat Completions): tvar požadavku na extrakci ---
 test('požadavek na extrakci: přesné klíče, model, max_completion_tokens, reasoning_effort, response_format; žádná pole Anthropic', () => {
   const r = buildExtractRequest(input({ text: 'Powerbanka' }), '');
   assert.deepEqual(Object.keys(r).sort(), ['max_completion_tokens', 'messages', 'model', 'reasoning_effort', 'response_format']);

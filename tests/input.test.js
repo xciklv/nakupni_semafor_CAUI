@@ -58,6 +58,34 @@ test('nepodporovaný formát obrázku → 400', () => {
   assert.equal(validateInput({ screenshoty: [{ mime: 'image/gif', data: 'AAAA' }] }).status, 400);
 });
 
+const FORMAT_CHYBA = 'Nepodporovaný formát obrázku (PNG, JPEG, WEBP).';
+
+test('data screenshotu: platné base64 projde', () => {
+  for (const data of ['AAAA', 'QUJD', 'QQ==', 'QUI=', 'abc+/0123456789XYZ', 'A'.repeat(200)]) {
+    assert.equal(validateInput({ screenshoty: [{ mime: 'image/png', data }] }).ok, true, data);
+  }
+});
+
+test('data screenshotu: prázdná, s mezerami, novými řádky, uvozovkami, data: prefixem, unicode nebo víc "=" se odmítají (400)', () => {
+  const bad = ['', 'AA AA', 'AAAA\n', 'AA\nAA', 'AA"AA', "AA'AA", 'data:image/png;base64,AAAA', 'AAAé', 'AA AA', 'AAA===', 'A=AA', '<svg/>', 'AAAA\0'];
+  for (const data of bad) {
+    const r = validateInput({ screenshoty: [{ mime: 'image/png', data }] });
+    assert.equal(r.ok, false, JSON.stringify(data));
+    assert.equal(r.status, 400, JSON.stringify(data));
+    assert.equal(r.chyba, FORMAT_CHYBA);
+  }
+});
+
+test('data screenshotu: 5 MB platného base64 se ověří rychle (lineárně), o znak víc je 413', () => {
+  const t0 = Date.now();
+  const r = validateInput({ screenshoty: [{ mime: 'image/jpeg', data: 'A'.repeat(5000000) }] });
+  assert.equal(r.ok, true);
+  const bad = validateInput({ screenshoty: [{ mime: 'image/jpeg', data: 'A'.repeat(4999999) + '!' }] });
+  assert.equal(bad.status, 400);
+  assert.ok(Date.now() - t0 < 1000, 'validace trvala ' + (Date.now() - t0) + ' ms');
+  assert.equal(validateInput({ screenshoty: [{ mime: 'image/png', data: 'A'.repeat(5000001) }] }).status, 413);
+});
+
 test('neplatný odkaz bez dalšího vstupu → 400, s textem projde bez odkazu', () => {
   assert.equal(validateInput({ odkaz: 'bit.ly/x' }).status, 400);
   const r = validateInput({ odkaz: 'bit.ly/x', text: 'nabídka' });

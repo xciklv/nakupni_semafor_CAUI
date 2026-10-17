@@ -2,6 +2,7 @@ const MAX_TEXT = 20000;
 const MAX_SHOTS = 4;
 const MAX_SHOT_CHARS = 5000000;
 const MIMES = ['image/png', 'image/jpeg', 'image/webp'];
+const INP_B64_RE = /^[A-Za-z0-9+/]+={0,2}$/; // čisté base64 bez prefixu a bílých znaků (lineární)
 const SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'cutt.ly', 'rebrand.ly', 's.click.aliexpress.com', 'a.aliexpress.com', 'temu.to'];
 const MARKETPLACES = ['temu.com', 'aliexpress.com', 'aliexpress.us', 'allegro.cz', 'allegro.pl', 'amazon.com', 'amazon.de', 'amazon.pl', 'ebay.com', 'ebay.de', 'shein.com', 'joom.com', 'vinted.cz'];
 const INP_MAX_HTML = 2000000;
@@ -102,6 +103,7 @@ function validateInput(body) {
   for (const sh of shots) {
     if (!sh || !MIMES.includes(sh.mime) || typeof sh.data !== 'string') return { ok: false, status: 400, chyba: 'Nepodporovaný formát obrázku (PNG, JPEG, WEBP).' };
     if (sh.data.length > MAX_SHOT_CHARS) return { ok: false, status: 413, chyba: 'Screenshot je příliš velký.' };
+    if (!INP_B64_RE.test(sh.data)) return { ok: false, status: 400, chyba: 'Nepodporovaný formát obrázku (PNG, JPEG, WEBP).' };
   }
   return { ok: true, input: { text, screenshoty: shots, url: url && url.ok ? url : null } };
 }

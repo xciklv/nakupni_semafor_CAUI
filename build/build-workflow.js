@@ -30,7 +30,10 @@ function resolveQuota(v, warn = console.warn) {
 // Id modelu (LLM_MODEL_EXTRACT / LLM_MODEL_EXPLAIN): /^[A-Za-z0-9._:-]{1,64}$/. Neplatná hodnota -> výchozí s varováním; nedefinovaná/prázdná -> výchozí bez varování.
 function resolveModel(v, def, envName, warn = console.warn) {
   if (v === undefined || v === null || v === '') return def;
-  if (typeof v === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(v)) return v;
+  if (typeof v === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(v)) {
+    if (!v.startsWith('gpt-6')) warn(envName + ': ' + v + ' is not a GPT-6 model; the request always sends reasoning_effort (low for extraction, none for explanation) and may be rejected with HTTP 400 — override only with GPT-6 models that accept these values.');
+    return v;
+  }
   warn(envName + '="' + String(v).slice(0, 80) + '" není platné id modelu (A-Z a-z 0-9 . _ : -, 1..64 znaků), použije se ' + def + '.');
   return def;
 }
