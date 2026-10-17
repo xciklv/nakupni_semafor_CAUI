@@ -1169,6 +1169,7 @@ function makeFakeDom(opts = {}) {
   const all = [];
   const byId = {};
   const log = opts.log || [];
+  const state = { focused: null };
   const ctx2d = {
     set fillStyle(v) { log.push('fillStyle:' + v); },
     fillRect() { log.push('fillRect'); },
@@ -1178,8 +1179,17 @@ function makeFakeDom(opts = {}) {
     constructor(tag) {
       this.tagName = tag; this.children = []; this.textContent = ''; this.className = '';
       this.attrs = {}; this.htmlWrites = 0; this.files = []; this.value = ''; this.disabled = false; this.listeners = {};
+      this.clicks = 0; this.focusCount = 0; this.src = '';
+      const self = this;
+      this.classList = {
+        add(c) { if (!self.className.split(' ').includes(c)) self.className = (self.className + ' ' + c).trim(); },
+        remove(c) { self.className = self.className.split(' ').filter((x) => x && x !== c).join(' '); },
+        contains(c) { return self.className.split(' ').includes(c); },
+      };
       all.push(this);
     }
+    click() { this.clicks++; }
+    focus() { this.focusCount++; state.focused = this; }
     append(...nodes) { this.children.push(...nodes); }
     replaceChildren(...nodes) { this.children = nodes; }
     addEventListener(type, fn) { this.listeners[type] = fn; }
@@ -1192,8 +1202,10 @@ function makeFakeDom(opts = {}) {
   const document = {
     createElement: (tag) => new FakeEl(tag),
     getElementById: (id) => byId[id] || (byId[id] = new FakeEl('div')),
+    listeners: {},
+    addEventListener(type, fn) { this.listeners[type] = fn; },
   };
-  return { document, all, byId };
+  return { document, all, byId, state };
 }
 function texts(node, acc = []) {
   if (node.textContent) acc.push(node.textContent);
@@ -1217,8 +1229,9 @@ function loadPage(opts = {}) {
       }, 0);
     }
   }
+  let blobN = 0;
   class FakeURL extends URL {
-    static createObjectURL() { return 'blob:test'; }
+    static createObjectURL() { const u = opts.uniqueBlobs ? 'blob:test-' + (++blobN) : 'blob:test'; log.push('create:' + u); return u; }
     static revokeObjectURL(u) { log.push('revoke:' + u); }
   }
   const ctx = vm.createContext({
@@ -1288,7 +1301,7 @@ async function settle(p, ms = 300) {
     return await Promise.race([p.then((value) => ({ ok: true, value }), (error) => ({ ok: false, error })), timeout]);
   } finally { clearTimeout(t); }
 }
-const ALLOWED_CLASSES = new Set(['', 'card', 'light', 'sig', 'err', 'hint', 'zelená', 'oranžová', 'červená', 'šedá', 'high', 'medium', 'low', 'info', 'sev']);
+const ALLOWED_CLASSES = new Set(['', 'card', 'light', 'sig', 'err', 'hint', 'zelená', 'oranžová', 'červená', 'šedá', 'high', 'medium', 'low', 'info', 'sev', 'polozka', 'nahled', 'nazev', 'sekundarni']);
 const CHYBA_ZPRACOVANI = 'Obrázek se nepodařilo zpracovat.';
 const CHYBA_NACTENI = 'Obrázek se nepodařilo načíst.';
 
@@ -1341,7 +1354,8 @@ test('toJpegBase64: onerror -> reject s hláškou o načtení a objectURL se uvo
 
 async function submitPage(opts, files) {
   const p = loadPage(opts);
-  p.dom.byId.shots.files = files;
+  p.dom.byId.odkaz.value = opts.odkaz !== undefined ? opts.odkaz : 'https://obchod.example/a';
+  if (files.length) { p.dom.byId.shots.files = files; p.dom.byId.shots.listeners.change(); }
   const r = await settle(p.dom.byId.f.listeners.submit({ preventDefault() {} }));
   assert.ok(!r.timeout, 'submit se nedokončil');
   return { ...p, go: p.dom.byId.go, out: p.dom.byId.out };
@@ -1368,14 +1382,6 @@ test('submit: síťová chyba ukáže obecnou hlášku a tlačítko se povolí',
   assert.ok(texts(out).includes(CHYBA_OBECNA));
   assert.equal(go.disabled, false);
   assert.equal(go.textContent, 'Zkontrolovat');
-});
-
-test('change: více než 4 soubory -> upozornění, zkontrolují se první 4', async () => {
-  const { dom } = loadPage();
-  dom.byId.shots.files = [1, 2, 3, 4, 5, 6];
-  dom.byId.shots.listeners.change();
-  assert.match(dom.byId.limit.textContent, /6 souborů/);
-  assert.match(dom.byId.limit.textContent, /prvních 4/);
 });
 
 test('render: nepovolené semafor/závažnost se nahradí šedou/low, třídy jsou jen z whitelistu', () => {
@@ -1521,7 +1527,7 @@ test('stránka: u tlačítka je viditelná nápověda o délce kontroly a při �
   assert.ok(btn > 0 && hint > btn && hint - btn < 300, 'nápověda hned za tlačítkem');
   assert.match(html, /<p[^>]*class="hint"[^>]*>Kontrola může trvat až 30 sekund\./);
   const p = loadPage();
-  p.dom.byId.shots.files = [];
+  p.dom.byId.odkaz.value = 'https://obchod.example/a';
   const done = p.dom.byId.f.listeners.submit({ preventDefault() {} });
   assert.equal(p.dom.byId.go.textContent, 'Kontroluji…');
   assert.equal(p.dom.byId.go.disabled, true);
@@ -1551,6 +1557,236 @@ test('render: štítek verdiktu se nikdy nebere z odpovědi (XSS, neznámý nebo
     assert.equal(badge.textContent, 'Nelze posoudit', JSON.stringify(semafor));
     assert.equal(dom.all.filter((n) => n.htmlWrites > 0).length, 0);
   }
+});
+
+// --- zjednodušený vstup: odkaz NEBO screenshot (bez textového pole) ---
+const IMG = (name, type = 'image/png') => ({ name, type });
+// Jen aktuálně zobrazený strom seznamu (dom.all obsahuje i dřívější, už nahrazené uzly).
+const potomci = (n) => n.children.flatMap((c) => [c, ...potomci(c)]);
+const NAHLEDY = (dom) => potomci(dom.byId.seznam).filter((n) => n.tagName === 'img');
+const KRIZKY = (dom) => potomci(dom.byId.seznam).filter((n) => n.tagName === 'button' && n.attrs['aria-label'] === 'Odebrat screenshot');
+const seznamNazvu = (dom) => potomci(dom.byId.seznam).filter((n) => n.className === 'nazev').map((n) => n.textContent);
+function pasteEvent(items, target) {
+  const e = { target, prevented: false, clipboardData: { items }, preventDefault() { e.prevented = true; } };
+  return e;
+}
+const pasteImg = (name) => ({ kind: 'file', type: 'image/png', getAsFile: () => IMG(name) });
+const pasteTxt = (t) => ({ kind: 'string', type: 'text/plain', getAsFile: () => null, getAsString: (cb) => cb(t) });
+function dropEvent(files) {
+  const e = { prevented: false, dataTransfer: { files }, preventDefault() { e.prevented = true; }, stopPropagation() {} };
+  return e;
+}
+
+test('stránka: textové pole je pryč (žádné id text, žádný textarea, žádný popisek)', () => {
+  const html = pageHtml();
+  assert.equal(/id="text"|<textarea|getElementById\(\s*['"]text['"]\s*\)|zkopírovaný text/i.test(html), false);
+});
+
+test('stránka: úvodní věta, popisek odkazu, tlačítko Vybrat screenshot a file input s accept image/*', () => {
+  const html = pageHtml();
+  assert.ok(html.includes('Stačí odkaz na nabídku, nebo screenshot celé nabídky včetně údajů o prodejci. Nic nemusíš kopírovat.'));
+  assert.match(html, /<label for="odkaz">Odkaz na nabídku<\/label>/);
+  assert.match(html, /<button id="vybrat" type="button"[^>]*>Vybrat screenshot<\/button>/);
+  const fi = /<input\b[^>]*id="shots"[^>]*>/.exec(html);
+  assert.ok(fi, 'file input');
+  assert.match(fi[0], /type="file"/);
+  assert.match(fi[0], /accept="image\/\*"/);
+  assert.match(fi[0], /\bmultiple\b/);
+  assert.match(html, /id="drop"/);
+  assert.match(html, /aria-live="polite"/);
+  assert.match(cssOf(), /\.drop\.highlight\s*\{[^}]*outline:\s*\d+px solid/);
+  assert.match(cssOf(), /:focus-visible/);
+});
+
+test('submit bez odkazu i screenshotu: nápověda ve výsledcích, API se nevolá, tlačítko zůstane povolené', async () => {
+  const p = await submitPage({ odkaz: '   ' }, []);
+  assert.deepEqual(texts(p.out), ['Vlož odkaz nebo screenshot nabídky.']);
+  assert.equal(p.fetchCalls.length, 0);
+  const go = p.dom.document.getElementById('go');
+  assert.equal(go.disabled, false);
+  assert.notEqual(go.textContent, 'Kontroluji…');
+});
+
+test('submit jen s odkazem: tělo {odkaz, text:"", screenshoty:[]}', async () => {
+  const p = await submitPage({ odkaz: 'https://obchod.example/nabidka' }, []);
+  assert.equal(p.fetchCalls.length, 1);
+  assert.deepEqual(JSON.parse(p.fetchCalls[0][1].body), { odkaz: 'https://obchod.example/nabidka', text: '', screenshoty: [] });
+});
+
+test('submit jen se screenshotem (bez odkazu): odešle odkaz "" a jeden JPEG', async () => {
+  const p = await submitPage({ odkaz: '' }, [IMG('a.png')]);
+  assert.equal(p.fetchCalls.length, 1);
+  const body = JSON.parse(p.fetchCalls[0][1].body);
+  assert.equal(body.odkaz, '');
+  assert.equal(body.text, '');
+  assert.deepEqual(body.screenshoty, [{ mime: 'image/jpeg', data: 'A'.repeat(200) }]);
+});
+
+test('submit s odkazem i screenshotem: pošle obojí', async () => {
+  const p = await submitPage({ odkaz: 'https://obchod.example/x' }, [IMG('a.png'), IMG('b.jpg', 'image/jpeg')]);
+  const body = JSON.parse(p.fetchCalls[0][1].body);
+  assert.equal(body.odkaz, 'https://obchod.example/x');
+  assert.equal(body.text, '');
+  assert.equal(body.screenshoty.length, 2);
+});
+
+test('vybrat: tlačítko otevře výběr souborů (shots.click)', () => {
+  const { dom } = loadPage();
+  dom.byId.vybrat.listeners.click();
+  assert.equal(dom.byId.shots.clicks, 1);
+});
+
+test('výběr souborů: seznam náhledů s názvy, tlačítko × s aria-label, input se vyprázdní', () => {
+  const { dom } = loadPage({ uniqueBlobs: true });
+  dom.byId.shots.files = [IMG('a.png'), IMG('b.jpg', 'image/jpeg')];
+  dom.byId.shots.listeners.change();
+  assert.deepEqual(seznamNazvu(dom), ['a.png', 'b.jpg']);
+  assert.equal(dom.byId.seznam.children.length, 2);
+  assert.equal(KRIZKY(dom).length, 2);
+  assert.ok(KRIZKY(dom).every((k) => k.textContent === '×' && k.attrs.type === 'button'));
+  assert.equal(NAHLEDY(dom).length, 2);
+  assert.equal(dom.byId.shots.value, '', 'stejný soubor jde vybrat znovu');
+  assert.equal(dom.byId.limit.textContent, '');
+});
+
+test('výběr více než 4 souborů: zobrazí se první 4 a upozornění', () => {
+  const { dom } = loadPage();
+  dom.byId.shots.files = [1, 2, 3, 4, 5, 6].map((i) => IMG('s' + i + '.png'));
+  dom.byId.shots.listeners.change();
+  assert.equal(dom.byId.seznam.children.length, 4);
+  assert.deepEqual(seznamNazvu(dom), ['s1.png', 's2.png', 's3.png', 's4.png']);
+  assert.match(dom.byId.limit.textContent, /6 souborů/);
+  assert.match(dom.byId.limit.textContent, /prvních 4/);
+});
+
+test('limit 4 platí napříč způsoby: 3 z výběru + 2 vložené -> 4 a upozornění', () => {
+  const { dom } = loadPage();
+  dom.byId.shots.files = [IMG('a.png'), IMG('b.png'), IMG('c.png')];
+  dom.byId.shots.listeners.change();
+  dom.document.listeners.paste(pasteEvent([pasteImg('p1.png'), pasteImg('p2.png')], null));
+  assert.equal(dom.byId.seznam.children.length, 4);
+  assert.deepEqual(seznamNazvu(dom), ['a.png', 'b.png', 'c.png', 'p1.png']);
+  assert.match(dom.byId.limit.textContent, /prvních 4/);
+});
+
+test('drop souborů na oblast: obrázky se přidají, ostatní soubory ne, výchozí akce prohlížeče se zruší', () => {
+  const { dom } = loadPage();
+  const e = dropEvent([IMG('d1.png'), { name: 'doc.pdf', type: 'application/pdf' }, IMG('d2.webp', 'image/webp')]);
+  dom.byId.drop.listeners.drop(e);
+  assert.equal(e.prevented, true);
+  assert.deepEqual(seznamNazvu(dom), ['d1.png', 'd2.webp']);
+  const ov = { prevented: false, preventDefault() { this.prevented = true; } };
+  dom.byId.drop.listeners.dragover(ov);
+  assert.equal(ov.prevented, true, 'dragover musí zrušit výchozí akci, jinak drop nepřijde');
+});
+
+test('drop na oblast více než 4 souborů: omezení a upozornění', () => {
+  const { dom } = loadPage();
+  dom.byId.drop.listeners.drop(dropEvent([1, 2, 3, 4, 5].map((i) => IMG('d' + i + '.png'))));
+  assert.equal(dom.byId.seznam.children.length, 4);
+  assert.match(dom.byId.limit.textContent, /5 souborů/);
+});
+
+test('paste obrázku ze schránky: přidá se do seznamu a výchozí akce se zruší', () => {
+  const { dom } = loadPage();
+  const e = pasteEvent([pasteTxt('x'), pasteImg('image.png')], dom.byId.f);
+  dom.document.listeners.paste(e);
+  assert.deepEqual(seznamNazvu(dom), ['image.png']);
+  assert.equal(e.prevented, true);
+});
+
+test('paste jen textu: nic se nepřidá a vložení odkazu do pole se nezruší', () => {
+  const { dom } = loadPage();
+  const e = pasteEvent([pasteTxt('https://obchod.example/a')], dom.byId.odkaz);
+  dom.document.listeners.paste(e);
+  assert.equal(dom.byId.seznam.children.length, 0);
+  assert.equal(e.prevented, false);
+  assert.doesNotThrow(() => dom.document.listeners.paste({ target: dom.byId.odkaz, preventDefault() { throw new Error('nemá se volat'); } }));
+  assert.equal(dom.byId.seznam.children.length, 0);
+});
+
+test('paste obrázku při zaměřeném jiném textovém poli se ignoruje, v poli pro odkaz se obrázek přidá', () => {
+  const { dom } = loadPage();
+  dom.document.listeners.paste(pasteEvent([pasteImg('a.png')], { tagName: 'TEXTAREA' }));
+  assert.equal(dom.byId.seznam.children.length, 0);
+  dom.document.listeners.paste(pasteEvent([pasteImg('b.png')], dom.byId.odkaz));
+  assert.deepEqual(seznamNazvu(dom), ['b.png']);
+});
+
+test('× odebere screenshot, uvolní jeho blob URL a vrátí fokus na Vybrat screenshot', () => {
+  const { dom, log } = loadPage({ uniqueBlobs: true });
+  dom.byId.shots.files = [IMG('a.png'), IMG('b.png'), IMG('c.png'), IMG('d.png'), IMG('e.png')];
+  dom.byId.shots.listeners.change();
+  assert.match(dom.byId.limit.textContent, /prvních 4/);
+  KRIZKY(dom)[1].listeners.click();
+  assert.deepEqual(seznamNazvu(dom).slice(-3), ['a.png', 'c.png', 'd.png']);
+  assert.equal(dom.byId.seznam.children.length, 3);
+  assert.equal(dom.byId.limit.textContent, '');
+  assert.ok(log.includes('revoke:blob:test-2'), log.join(','));
+  assert.equal(dom.state.focused, dom.byId.vybrat);
+});
+
+test('submit: po dokončení kontroly se náhledy uvolní a seznam vyprázdní; při chybě zůstanou', async () => {
+  const ok = await submitPage({ uniqueBlobs: true }, [IMG('a.png'), IMG('b.png')]);
+  assert.ok(ok.log.includes('revoke:blob:test-1') && ok.log.includes('revoke:blob:test-2'), ok.log.join(','));
+  assert.equal(ok.dom.byId.seznam.children.length, 0);
+  const chyba = await submitPage({ uniqueBlobs: true, fetchFail: true }, [IMG('a.png')]);
+  assert.equal(chyba.dom.byId.seznam.children.length, 1);
+  assert.equal(chyba.log.includes('revoke:blob:test-1'), false);
+});
+
+test('hostile názvy souborů se vykreslí jen jako textContent (žádné innerHTML ani on* atributy)', () => {
+  const { dom } = loadPage();
+  const zlo = '<img src=x onerror=alert(1)>.png';
+  dom.byId.shots.files = [IMG(zlo)];
+  dom.byId.shots.listeners.change();
+  dom.document.listeners.paste(pasteEvent([{ kind: 'file', type: 'image/png', getAsFile: () => IMG('"><script>alert(2)</script>.png') }], null));
+  assert.equal(dom.all.filter((n) => n.textContent === zlo).length, 2, 'jednou za každé překreslení seznamu, vždy jako textContent');
+  assert.deepEqual(seznamNazvu(dom), [zlo, '"><script>alert(2)</script>.png']);
+  assert.equal(dom.all.filter((n) => n.htmlWrites > 0).length, 0);
+  assert.equal(dom.all.filter((n) => Object.keys(n.attrs).some((k) => /^on/i.test(k))).length, 0);
+  assert.equal(NAHLEDY(dom).length, 2);
+  assert.ok(NAHLEDY(dom).every((i) => !i.src.includes('<')));
+});
+
+test('náhledy: src je jen blob URL vytvořená stránkou; ve zdroji žádné jiné přiřazení src', () => {
+  const { dom, log } = loadPage({ uniqueBlobs: true });
+  dom.byId.shots.files = [IMG('a.png'), IMG('b.png')];
+  dom.byId.shots.listeners.change();
+  const vytvorene = new Set(log.filter((l) => l.startsWith('create:')).map((l) => l.slice(7)));
+  const nahledy = NAHLEDY(dom);
+  assert.equal(nahledy.length, 2);
+  for (const i of nahledy) assert.ok(vytvorene.has(i.src), 'src ' + i.src);
+  const html = pageHtml();
+  const prirazeni = [...html.matchAll(/\.src\s*=\s*([^;]+);/g)].map((m) => m[1].trim());
+  assert.ok(prirazeni.length >= 2);
+  for (const rhs of prirazeni) assert.equal(rhs, 'url', 'src smí dostat jen lokální proměnnou url z createObjectURL: ' + rhs);
+  assert.equal(/setAttribute\(\s*['"](src|href|srcset)['"]/.test(html), false);
+});
+
+test('potrebuji_vice: zpráva serveru, řádek o screenshotu, zvýrazněná oblast a fokus na Vybrat screenshot', () => {
+  const { render, dom } = loadPage();
+  render({ stav: 'potrebuji_vice', zprava: 'Stránku se nepodařilo přečíst.' });
+  const t = texts(dom.byId.out);
+  assert.ok(t.includes('Stránku se nepodařilo přečíst.'));
+  assert.ok(t.includes('Zkus přidat screenshot nabídky.'));
+  assert.ok(dom.byId.drop.classList.contains('highlight'));
+  assert.equal(dom.state.focused, dom.byId.vybrat);
+});
+
+test('zvýraznění zmizí s dalším výsledkem i po přidání screenshotu; ostatní stavy ho nenastaví', () => {
+  const { render, dom } = loadPage();
+  render({ stav: 'ok', semafor: 'zelená', shrnuti: 'x', co_delat: [], signaly: [] });
+  assert.equal(dom.byId.drop.classList.contains('highlight'), false);
+  assert.equal(dom.state.focused, null);
+  render({ stav: 'potrebuji_vice', zprava: 'Z' });
+  assert.ok(dom.byId.drop.classList.contains('highlight'));
+  render({ stav: 'chyba', chyba: 'E' });
+  assert.equal(dom.byId.drop.classList.contains('highlight'), false);
+  render({ stav: 'potrebuji_vice', zprava: 'Z' });
+  dom.byId.shots.files = [IMG('a.png')];
+  dom.byId.shots.listeners.change();
+  assert.equal(dom.byId.drop.classList.contains('highlight'), false);
 });
 
 // --- provider switch: OpenAI HTTP nody, credential, modely ---

@@ -16,10 +16,21 @@
   .card, .sig, p { overflow-wrap:anywhere; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
   label { display:block; font-weight:600; margin:12px 0 4px; }
-  input[type=text], textarea { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
-  textarea { min-height:90px; resize:vertical; }
+  input[type=text] { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  button:focus-visible, input:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
   button { background:var(--accent); color:var(--on); border:0; border-radius:8px; padding:12px 20px; font:inherit; font-weight:600; cursor:pointer; margin-top:16px; }
   button:disabled { opacity:.6; cursor:wait; }
+  button.sekundarni { background:transparent; color:var(--accent); border:2px solid var(--accent); margin-top:8px; }
+  .nebo { margin:16px 0 0; text-align:center; color:var(--muted); }
+  .drop { margin-top:12px; padding:12px 16px 16px; border:2px dashed var(--line); border-radius:12px; }
+  .drop.dragging { border-color:var(--accent); }
+  .drop.highlight { outline:3px solid var(--orange); outline-offset:2px; }
+  .drop .nadpis { display:block; font-weight:600; }
+  .seznam { list-style:none; margin:8px 0 0; padding:0; }
+  .polozka { display:flex; align-items:center; gap:12px; padding:6px 0; }
+  .polozka .nazev { flex:1; min-width:0; overflow-wrap:anywhere; }
+  .nahled { width:56px; height:56px; object-fit:cover; border-radius:6px; border:1px solid var(--line); flex:none; }
+  .polozka button { margin:0; padding:6px 12px; min-width:44px; min-height:44px; flex:none; }
   .hint { color:var(--muted); font-size:.9rem; }
   .light { display:inline-block; padding:8px 18px; border-radius:999px; color:var(--on); font-weight:700; font-size:1.2rem; }
   .zelená { background:var(--green); } .oranžová { background:var(--orange); } .červená { background:var(--red); } .šedá { background:var(--gray); }
@@ -34,15 +45,19 @@
 <body>
 <main>
   <h1>Nákupní kontrola</h1>
-  <p class="lead">Vložte odkaz, text nebo screenshot nabídky a zjistěte rizikové signály dřív, než zaplatíte.</p>
+  <p class="lead">Stačí odkaz na nabídku, nebo screenshot celé nabídky včetně údajů o prodejci. Nic nemusíš kopírovat.</p>
   <form id="f" class="card">
     <label for="odkaz">Odkaz na nabídku</label>
     <input id="odkaz" type="text" placeholder="adresa nabídky…" autocomplete="off">
-    <label for="text">Nebo zkopírovaný text nabídky</label>
-    <textarea id="text" placeholder="Název, cena, popis, prodejce, recenze…"></textarea>
-    <label for="shots">Nebo screenshoty (až 4, včetně údajů o prodejci)</label>
-    <input id="shots" type="file" accept="image/png,image/jpeg,image/webp" multiple>
-    <p id="limit" class="hint" aria-live="polite"></p>
+    <p class="nebo" aria-hidden="true">nebo</p>
+    <div id="drop" class="drop" role="group" aria-labelledby="drop-nadpis">
+      <span id="drop-nadpis" class="nadpis">Screenshot nabídky (až 4, včetně údajů o prodejci)</span>
+      <button id="vybrat" type="button" class="sekundarni">Vybrat screenshot</button>
+      <input id="shots" type="file" accept="image/*" multiple hidden>
+      <p class="hint">Nebo obrázek přetáhni sem, případně ho vlož ze schránky (Ctrl+V).</p>
+      <ul id="seznam" class="seznam"></ul>
+      <p id="limit" class="hint" aria-live="polite"></p>
+    </div>
     <button id="go" type="submit">Zkontrolovat</button>
     <p id="cekani" class="hint">Kontrola může trvat až 30 sekund.</p>
     <p class="hint">Screenshoty ani texty neukládáme. Pro vyhodnocení se odesílají službě OpenAI. Výsledek je pomůcka, ne právní verdikt.</p>
@@ -74,6 +89,14 @@ const ZAVAZNOST_STITEK = { info: 'Informace', low: 'Nízká', medium: 'Střední
 const out = document.getElementById('out');
 const shots = document.getElementById('shots');
 const limit = document.getElementById('limit');
+const odkazEl = document.getElementById('odkaz');
+const drop = document.getElementById('drop');
+const vybrat = document.getElementById('vybrat');
+const seznam = document.getElementById('seznam');
+const NAPOVEDA_PRAZDNY = 'Vlož odkaz nebo screenshot nabídky.';
+const NAPOVEDA_SCREENSHOT = 'Zkus přidat screenshot nabídky.';
+// Vybrané screenshoty: { file, url } (url je blob URL jen pro náhled, uvolní se při odebrání a po kontrole).
+let vybrane = [];
 
 function el(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
 function isObj(v) { return v !== null && typeof v === 'object'; }
@@ -117,10 +140,17 @@ function chybaObrazku(err) { return !!err && typeof err.message === 'string' && 
 
 function render(r) {
   out.replaceChildren();
+  drop.classList.remove('highlight');
   const card = el('div', null, 'card');
   if (!isObj(r) || !['ok', 'chyba', 'potrebuji_vice'].includes(r.stav)) { card.append(el('p', CHYBA_OBECNA, 'err')); out.append(card); return; }
   if (r.stav === 'chyba') { card.append(el('p', str(r.chyba) || CHYBA_OBECNA, 'err')); out.append(card); return; }
-  if (r.stav === 'potrebuji_vice') { card.append(el('p', str(r.zprava))); out.append(card); return; }
+  if (r.stav === 'potrebuji_vice') {
+    card.append(el('p', str(r.zprava)), el('p', NAPOVEDA_SCREENSHOT));
+    out.append(card);
+    drop.classList.add('highlight');
+    vybrat.focus();
+    return;
+  }
   const semafor = povoleno(str(r.semafor), SEMAFORY, 'šedá');
   card.append(el('span', SEMAFOR_STITEK[semafor], 'light ' + semafor));
   card.append(el('p', str(r.shrnuti)));
@@ -149,22 +179,99 @@ function render(r) {
   out.append(wc);
 }
 
-function upozornitNaPocet() {
-  const n = shots.files.length;
-  limit.textContent = n > MAX_SNIMKU ? 'Vybrali jste ' + n + ' souborů; zkontrolujeme jen prvních ' + MAX_SNIMKU + '.' : '';
+function jeObrazek(f) {
+  if (!isObj(f)) return false;
+  if (typeof f.type === 'string' && f.type !== '') return f.type.indexOf('image/') === 0;
+  return /\.(png|jpe?g|webp)$/i.test(str(f.name));
 }
-shots.addEventListener('change', upozornitNaPocet);
+
+function uvolnitNahledy() { vybrane.forEach((v) => URL.revokeObjectURL(v.url)); vybrane = []; }
+
+function vykreslitSeznam() {
+  seznam.replaceChildren();
+  vybrane.forEach((v) => {
+    const li = el('li', null, 'polozka');
+    const img = el('img', null, 'nahled');
+    const url = v.url;
+    img.alt = '';
+    img.src = url;
+    const x = el('button', '×', 'sekundarni');
+    x.setAttribute('type', 'button');
+    x.setAttribute('aria-label', 'Odebrat screenshot');
+    x.addEventListener('click', () => odebrat(v));
+    li.append(img, el('span', str(v.file.name) || 'screenshot', 'nazev'), x);
+    seznam.append(li);
+  });
+}
+
+function odebrat(v) {
+  URL.revokeObjectURL(v.url);
+  vybrane = vybrane.filter((x) => x !== v);
+  limit.textContent = '';
+  vykreslitSeznam();
+  vybrat.focus();
+}
+
+// Přidá obrázky (výběr, přetažení i schránka): celkem nejvýš MAX_SNIMKU, ostatní se ignorují s upozorněním.
+function pridat(soubory) {
+  const nove = [...soubory].filter(jeObrazek);
+  if (!nove.length) return;
+  const celkem = vybrane.length + nove.length;
+  nove.slice(0, Math.max(0, MAX_SNIMKU - vybrane.length)).forEach((file) => vybrane.push({ file, url: URL.createObjectURL(file) }));
+  limit.textContent = celkem > MAX_SNIMKU ? 'Vybrali jste ' + celkem + ' souborů; zkontrolujeme jen prvních ' + MAX_SNIMKU + '.' : '';
+  drop.classList.remove('highlight');
+  vykreslitSeznam();
+}
+
+vybrat.addEventListener('click', () => shots.click());
+shots.addEventListener('change', () => { const f = [...shots.files]; shots.value = ''; pridat(f); });
+
+function prevzitDrop(e) {
+  e.preventDefault();
+  if (e.stopPropagation) e.stopPropagation();
+  drop.classList.remove('dragging');
+  if (e.dataTransfer && e.dataTransfer.files) pridat(e.dataTransfer.files);
+}
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragging'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('dragging'));
+drop.addEventListener('drop', prevzitDrop);
+// Soubor pustený mimo oblast by jinak otevřel obrázek a stránka by o zadání přišla.
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', prevzitDrop);
+
+// Vložení obrázku ze schránky kdekoli na stránce; textové vložení (odkaz do pole) se nechá být.
+document.addEventListener('paste', (e) => {
+  const t = e.target;
+  if (t && t !== odkazEl && /^(input|textarea|select)$/i.test(str(t.tagName))) return;
+  const polozky = e.clipboardData && e.clipboardData.items ? [...e.clipboardData.items] : [];
+  const soubory = polozky.filter((i) => i.kind === 'file' && typeof i.type === 'string' && i.type.indexOf('image/') === 0)
+    .map((i) => i.getAsFile()).filter(Boolean);
+  if (!soubory.length) return;
+  e.preventDefault();
+  pridat(soubory);
+});
 
 document.getElementById('f').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const odkaz = odkazEl.value.trim();
+  const files = vybrane.map((v) => v.file);
+  if (!odkaz && !files.length) {
+    out.replaceChildren();
+    const card = el('div', null, 'card');
+    card.append(el('p', NAPOVEDA_PRAZDNY));
+    out.append(card);
+    odkazEl.focus();
+    return;
+  }
   const go = document.getElementById('go');
   go.disabled = true; go.textContent = 'Kontroluji…';
   try {
-    const files = [...shots.files].slice(0, MAX_SNIMKU);
     const screenshoty = await Promise.all(files.map(toJpegBase64));
     const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ odkaz: document.getElementById('odkaz').value, text: document.getElementById('text').value, screenshoty }) });
-    render(await res.json());
+      body: JSON.stringify({ odkaz, text: '', screenshoty }) });
+    const data = await res.json();
+    uvolnitNahledy(); vykreslitSeznam(); limit.textContent = '';
+    render(data);
   } catch (err) {
     render({ stav: 'chyba', chyba: chybaObrazku(err) ? err.message : CHYBA_OBECNA });
   } finally { go.disabled = false; go.textContent = 'Zkontrolovat'; }
