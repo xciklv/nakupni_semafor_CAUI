@@ -3,6 +3,10 @@ const path = require('node:path');
 
 const ENGINE = ['signals', 'scoring', 'input', 'llm', 'offer', 'seller', 'safety', 'explain'];
 const root = path.join(__dirname, '..');
+// Výchozí modely mají jediný zdroj pravdy v enginu (testované konstanty).
+const MODEL_EXTRACT_DEFAULT = require('../engine/llm').LLM_MODEL_EXTRACT_DEFAULT;
+const MODEL_EXPLAIN_DEFAULT = require('../engine/explain').LLM_MODEL_EXPLAIN_DEFAULT;
+const CRED_NAME_DEFAULT = 'OpenAI account';
 
 // Spojí moduly enginu do jednoho scope; jednořádkové require/module.exports guardy odstraní.
 function buildBundle() {
@@ -23,45 +27,57 @@ function resolveQuota(v, warn = console.warn) {
   return QUOTA_DEFAULT;
 }
 
-// Hodnota limitu se dosazuje do zdroje glue při sestavení (v běhu Code nodu žádný přístup k env není).
-const glue = (f, quota = QUOTA_DEFAULT) => fs.readFileSync(path.join(__dirname, 'glue', f), 'utf8')
-  .replace(/^(\s*const MAX_DENNE = )\d+;/m, '$1' + quota + ';');
+// Id modelu (LLM_MODEL_EXTRACT / LLM_MODEL_EXPLAIN): /^[A-Za-z0-9._:-]{1,64}$/. Neplatná hodnota -> výchozí s varováním; nedefinovaná/prázdná -> výchozí bez varování.
+function resolveModel(v, def, envName, warn = console.warn) {
+  if (v === undefined || v === null || v === '') return def;
+  if (typeof v === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(v)) return v;
+  warn(envName + '="' + String(v).slice(0, 80) + '" není platné id modelu (A-Z a-z 0-9 . _ : -, 1..64 znaků), použije se ' + def + '.');
+  return def;
+}
+
+// Hodnota limitu a ids modelů se dosazují do zdroje glue při sestavení (v běhu Code nodu žádný přístup k env není).
+// Modely jsou ověřené regulárním výrazem (bez uvozovek a zpětných lomítek), replacer-funkce chrání před speciálními vzory v náhradě.
+const glue = (f, o = {}) => fs.readFileSync(path.join(__dirname, 'glue', f), 'utf8')
+  .replace(/^(\s*const MAX_DENNE = )\d+;/m, (m, p) => p + (o.quota === undefined ? QUOTA_DEFAULT : o.quota) + ';')
+  .replace(/^(\s*const MODEL_EXTRACT = )'[^']*';/m, (m, p) => p + "'" + (o.modelExtract || MODEL_EXTRACT_DEFAULT) + "';")
+  .replace(/^(\s*const MODEL_EXPLAIN = )'[^']*';/m, (m, p) => p + "'" + (o.modelExplain || MODEL_EXPLAIN_DEFAULT) + "';");
 // Code nody nesdílejí scope, proto KAŽDÝ nese celý bundle enginu.
-const code = (name, file, pos, quota) => ({
+const code = (name, file, pos, o) => ({
   id: name, name, type: 'n8n-nodes-base.code', typeVersion: 2, position: pos,
-  parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: buildBundle() + '\n' + glue(file, quota) },
+  parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: buildBundle() + '\n' + glue(file, o) },
 });
-const claude = (name, pos, credId, credName) => ({
+const llm = (name, pos, credId, credName) => ({
   id: name, name, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: pos, onError: 'continueRegularOutput',
   parameters: {
-    method: 'POST', url: 'https://api.anthropic.com/v1/messages',
-    authentication: 'predefinedCredentialType', nodeCredentialType: 'anthropicApi',
-    sendHeaders: true, headerParameters: { parameters: [{ name: 'anthropic-version', value: '2023-06-01' }] },
+    method: 'POST', url: 'https://api.openai.com/v1/chat/completions',
+    authentication: 'predefinedCredentialType', nodeCredentialType: 'openAiApi',
     sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.llmRequest) }}',
     options: { timeout: 60000 },
   },
-  credentials: { anthropicApi: { id: credId, name: credName } },
+  credentials: { openAiApi: { id: credId, name: credName } },
 });
 
-function buildWorkflow({ credId, credName, quotaPerDay }) {
+function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, modelExtract, modelExplain }) {
   const quota = resolveQuota(quotaPerDay);
+  const mExtract = resolveModel(modelExtract, MODEL_EXTRACT_DEFAULT, 'LLM_MODEL_EXTRACT');
+  const mExplain = resolveModel(modelExplain, MODEL_EXPLAIN_DEFAULT, 'LLM_MODEL_EXPLAIN');
   const nodes = [
     // allowedOrigins '*': HTML servírované z webhooku běží v CSP sandboxu bez allow-same-origin (n8n-core html-sandbox.js),
     // takže jeho origin je 'null' a fetch na tento webhook je cross-origin.
     { id: 'Webhook', name: 'Webhook', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [0, 0], webhookId: '2477b1ff-1caf-474d-9db3-1104c8e3ca48',
       parameters: { httpMethod: 'POST', path: 'nakupni-kontrola', responseMode: 'responseNode', options: { allowedOrigins: '*' } } },
-    code('Vstup a načtení', '01-vstup.js', [220, 0], quota),
+    code('Vstup a načtení', '01-vstup.js', [220, 0], { quota }),
     { id: 'Stačí vstup?', name: 'Stačí vstup?', type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [440, 0],
       parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
         conditions: [{ id: 'c1', leftValue: '={{ $json.zkratka }}', rightValue: false, operator: { type: 'boolean', operation: 'false', singleValue: true } }], combinator: 'and' } } },
-    // Bez obsahu (jen URL e-shopu) se Claude extrakce přeskočí: Moduly provedou aspoň kontroly hostitele.
+    // Bez obsahu (jen URL e-shopu) se LLM extrakce přeskočí: Moduly provedou aspoň kontroly hostitele.
     { id: 'Je obsah?', name: 'Je obsah?', type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [660, 0],
       parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
         conditions: [{ id: 'c2', leftValue: '={{ $json.obsah }}', rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' } } },
-    code('Sestavit extrakci', '02-extrakce-req.js', [880, -100]),
-    claude('Claude – extrakce', [1100, -100], credId, credName),
-    code('Moduly', '03-moduly.js', [1320, 0]),
-    claude('Claude – vysvětlení', [1540, 0], credId, credName),
+    code('Sestavit extrakci', '02-extrakce-req.js', [880, -100], { modelExtract: mExtract }),
+    llm('LLM – extrakce', [1100, -100], credId, credName),
+    code('Moduly', '03-moduly.js', [1320, 0], { modelExplain: mExplain }),
+    llm('LLM – vysvětlení', [1540, 0], credId, credName),
     code('Odpověď', '04-odpoved.js', [1760, 0]),
     { id: 'Respond', name: 'Respond', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [1980, 0],
       parameters: { respondWith: 'json', responseBody: '={{ JSON.stringify($json.odpoved) }}', options: { responseCode: '={{ $json.status }}' } } },
@@ -80,10 +96,10 @@ function buildWorkflow({ credId, credName, quotaPerDay }) {
     ...link('Vstup a načtení', 'Stačí vstup?'),
     'Stačí vstup?': { main: [[{ node: 'Je obsah?', type: 'main', index: 0 }], [{ node: 'Respond – více vstupu', type: 'main', index: 0 }]] },
     'Je obsah?': { main: [[{ node: 'Sestavit extrakci', type: 'main', index: 0 }], [{ node: 'Moduly', type: 'main', index: 0 }]] },
-    ...link('Sestavit extrakci', 'Claude – extrakce'),
-    ...link('Claude – extrakce', 'Moduly'),
-    ...link('Moduly', 'Claude – vysvětlení'),
-    ...link('Claude – vysvětlení', 'Odpověď'),
+    ...link('Sestavit extrakci', 'LLM – extrakce'),
+    ...link('LLM – extrakce', 'Moduly'),
+    ...link('Moduly', 'LLM – vysvětlení'),
+    ...link('LLM – vysvětlení', 'Odpověď'),
     ...link('Odpověď', 'Respond'),
     ...link('Webhook – stránka', 'Respond – stránka'),
   };
@@ -94,12 +110,19 @@ function buildWorkflow({ credId, credName, quotaPerDay }) {
   } };
 }
 
+// Volby sestavení z prostředí. Bez id credentialu (OPENAI_CRED_ID, záloha CRED_ID) vrací null.
+function cliOptions(env) {
+  const credId = env.OPENAI_CRED_ID || env.CRED_ID;
+  if (!credId) return null;
+  return { credId, credName: env.OPENAI_CRED_NAME || CRED_NAME_DEFAULT, quotaPerDay: env.QUOTA_PER_DAY, modelExtract: env.LLM_MODEL_EXTRACT, modelExplain: env.LLM_MODEL_EXPLAIN };
+}
+
 if (require.main === module) {
-  const credId = process.env.CRED_ID;
-  if (!credId) { console.error('Nastav CRED_ID (id Anthropic credentialu z n8n).'); process.exit(1); }
-  const wf = buildWorkflow({ credId, credName: process.env.CRED_NAME || 'Anthropic account', quotaPerDay: process.env.QUOTA_PER_DAY });
+  const opts = cliOptions(process.env);
+  if (!opts) { console.error('Nastav OPENAI_CRED_ID (id OpenAI credentialu typu openAiApi z n8n; záloha: CRED_ID).'); process.exit(1); }
+  const wf = buildWorkflow(opts);
   fs.writeFileSync(path.join(root, 'workflow.json'), JSON.stringify(wf, null, 2));
   console.log('workflow.json zapsán, nodů:', wf.nodes.length);
 }
 
-module.exports = { buildBundle, buildWorkflow, resolveQuota };
+module.exports = { buildBundle, buildWorkflow, resolveQuota, resolveModel, cliOptions, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT };

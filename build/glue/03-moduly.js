@@ -1,3 +1,5 @@
+// Id modelu vysvětlení se dosazuje při sestavení (LLM_MODEL_EXPLAIN); výchozí hodnota = LLM_MODEL_EXPLAIN_DEFAULT v engine/explain.js.
+const MODEL_EXPLAIN = 'gpt-6-luna';
 // Safety Gate je volitelné obohacení: jakákoli chyba/timeout/divná odpověď = žádný signál. Deadline je celkový (wall-clock), request má vlastní timeout 8 s.
 const SAFETY_GATE_DEADLINE_MS = 9000;
 // Wall-clock deadline zdrojů prodejce (n8n timeout je jen idle/socket timeout; pomalý server by kontrolu držel déle). Deadline = selhání zdroje.
@@ -73,9 +75,9 @@ try {
 
   const signals = [...offer.signals, ...seller.signals, ...safety.signals, ...gate];
   const verdict = computeVerdict(signals, { offer: offer.status, seller: seller.status, safety: safety.status }, { external: seller.external, skipped: coiStale ? seller.skipped.concat(['seznam ČOI (neaktuální)']) : seller.skipped });
-  return [{ json: { verdict, signals, llmRequest: buildExplainRequest(verdict, signals) } }];
+  return [{ json: { verdict, signals, llmRequest: buildExplainRequest(verdict, signals, MODEL_EXPLAIN) } }];
 } catch (e) {
   // Degradace místo pádu: bez dat z modulů vznikne šedý verdikt a běh pokračuje k vysvětlení.
   const verdict = computeVerdict([], { offer: 'unchecked', seller: 'unchecked', safety: 'unchecked' });
-  return [{ json: { verdict, signals: [], llmRequest: buildExplainRequest(verdict, []) } }];
+  return [{ json: { verdict, signals: [], llmRequest: buildExplainRequest(verdict, [], MODEL_EXPLAIN) } }];
 }

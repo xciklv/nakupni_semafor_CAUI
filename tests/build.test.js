@@ -3,10 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { buildBundle, buildWorkflow, resolveQuota } = require('../build/build-workflow');
+const { buildBundle, buildWorkflow, resolveQuota, resolveModel, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT } = require('../build/build-workflow');
 const { runInRealisticSandbox, runCodeNode } = require('./sandbox');
 
 const root = path.join(__dirname, '..');
+// Odpověď OpenAI Chat Completions s textovým obsahem (objekt se serializuje na JSON).
+const openai = (obj) => ({ choices: [{ index: 0, message: { role: 'assistant', content: typeof obj === 'string' ? obj : JSON.stringify(obj) }, finish_reason: 'stop' }] });
 const GLUE_FILES = ['01-vstup.js', '02-extrakce-req.js', '03-moduly.js', '04-odpoved.js'];
 const glueSrc = (f) => fs.readFileSync(path.join(root, 'build', 'glue', f), 'utf8');
 
@@ -72,14 +74,14 @@ test('skener duplicit zachytí function, const, let, var i destructuring', () =>
 });
 
 test('workflow má všechny nody a propojení', () => {
-  const wf = buildWorkflow({ credId: 'CRED1', credName: 'Anthropic account' });
+  const wf = buildWorkflow({ credId: 'CRED1', credName: 'OpenAI account' });
   const names = wf.nodes.map((n) => n.name);
-  for (const n of ['Webhook', 'Vstup a načtení', 'Stačí vstup?', 'Je obsah?', 'Sestavit extrakci', 'Claude – extrakce', 'Moduly', 'Claude – vysvětlení', 'Odpověď', 'Respond', 'Respond – více vstupu']) {
+  for (const n of ['Webhook', 'Vstup a načtení', 'Stačí vstup?', 'Je obsah?', 'Sestavit extrakci', 'LLM – extrakce', 'Moduly', 'LLM – vysvětlení', 'Odpověď', 'Respond', 'Respond – více vstupu']) {
     assert.ok(names.includes(n), 'chybí node ' + n);
   }
   assert.equal(wf.nodes.find((n) => n.name === 'Webhook').parameters.path, 'nakupni-kontrola');
   assert.ok(wf.connections['Webhook']);
-  assert.equal(wf.nodes.find((n) => n.name === 'Claude – extrakce').credentials.anthropicApi.id, 'CRED1');
+  assert.equal(wf.nodes.find((n) => n.name === 'LLM – extrakce').credentials.openAiApi.id, 'CRED1');
 });
 
 test('workflow: každé spojení míří na existující node a IF má dva výstupy', () => {
@@ -95,7 +97,7 @@ test('workflow: každé spojení míří na existující node a IF má dva výst
   assert.equal(wf.connections['Stačí vstup?'].main[1][0].node, 'Respond – více vstupu');
 });
 
-test('workflow: Je obsah? true -> Sestavit extrakci, false -> Moduly (bez Claude extrakce)', () => {
+test('workflow: Je obsah? true -> Sestavit extrakci, false -> Moduly (bez LLM extrakce)', () => {
   const wf = buildWorkflow({ credId: 'C', credName: 'N' });
   const iff = wf.nodes.find((n) => n.name === 'Je obsah?');
   const ref = wf.nodes.find((n) => n.name === 'Stačí vstup?');
@@ -106,7 +108,7 @@ test('workflow: Je obsah? true -> Sestavit extrakci, false -> Moduly (bez Claude
   assert.equal(wf.connections['Je obsah?'].main.length, 2);
   assert.deepEqual(wf.connections['Je obsah?'].main[0], [{ node: 'Sestavit extrakci', type: 'main', index: 0 }]);
   assert.deepEqual(wf.connections['Je obsah?'].main[1], [{ node: 'Moduly', type: 'main', index: 0 }]);
-  assert.equal(wf.connections['Claude – extrakce'].main[0][0].node, 'Moduly');
+  assert.equal(wf.connections['LLM – extrakce'].main[0][0].node, 'Moduly');
 });
 
 test('workflow: settings nic neukládá (soukromí) a zachovává executionOrder v1', () => {
@@ -474,7 +476,7 @@ test('glue 02: sestaví požadavek na extrakci (node nese bundle)', async () => 
   assert.ok(Array.isArray(out.llmRequest.messages));
 });
 
-test('glue 02: výjimka -> llmRequest null (Claude node selže a tok degraduje), nic neuniká', async () => {
+test('glue 02: výjimka -> llmRequest null (LLM node selže a tok degraduje), nic neuniká', async () => {
   for (const c of [{ $input: { first: () => { throw new Error('tajná chyba'); } } }, { json: {} }, { json: { input: null } }]) {
     const { out } = await runGlue('02-extrakce-req.js', c);
     assert.deepEqual(out, { llmRequest: null });
@@ -483,9 +485,9 @@ test('glue 02: výjimka -> llmRequest null (Claude node selže a tok degraduje),
 
 // --- glue 03 ---
 const CTX_NEZNAME = { zkratka: false, input: { text: 'Powerbanka 199 Kč', screenshoty: [], url: null }, pageText: '', rezim: 'neznámé', host: null };
-const EXTRACT_OK = { content: [{ type: 'text', text: '{"produkt":{"nazev":"Powerbanka","kategorie":"elektronika","cena":199,"mena":"CZK","referencni_cena_odhad":{"min":800,"max":1200,"mena":"CZK"}},"prodejce":{},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}' }] };
+const EXTRACT_OK = openai('{"produkt":{"nazev":"Powerbanka","kategorie":"elektronika","cena":199,"mena":"CZK","referencni_cena_odhad":{"min":800,"max":1200,"mena":"CZK"}},"prodejce":{},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}');
 
-test('glue 03: chyba Claude (error) -> šedá, vše nezkontrolováno, požadavek na vysvětlení', async () => {
+test('glue 03: chyba LLM (error) -> šedá, vše nezkontrolováno, požadavek na vysvětlení', async () => {
   const { out, calls } = await runGlue('03-moduly.js', { json: { error: { message: '401' } }, nodes: { 'Vstup a načtení': CTX_NEZNAME } });
   assert.equal(out.verdict.semafor, 'šedá');
   assert.deepEqual(out.verdict.unchecked, ['offer', 'seller', 'safety']);
@@ -518,7 +520,7 @@ test('glue 03: eshop na seznamu ČOI -> červená; seznam se cachuje do static d
     if (o.url.startsWith('https://ares.gov.cz/')) return { statusCode: 404, body: {} };
     throw new Error('neočekávaný požadavek ' + o.url);
   };
-  const extract = { content: [{ type: 'text', text: '{"produkt":{"nazev":"Mikina","kategorie":"oblečení","cena":500,"mena":"CZK"},"prodejce":{"ico":"27082440"},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}' }] };
+  const extract = openai('{"produkt":{"nazev":"Mikina","kategorie":"oblečení","cena":500,"mena":"CZK"},"prodejce":{"ico":"27082440"},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}');
   const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'clarkscz.cz' };
   const coiCalls = (calls) => calls.filter((c) => c.url.startsWith('https://coi.gov.cz/')).length;
   const r1 = await runGlue('03-moduly.js', { json: extract, nodes: { 'Vstup a načtení': ctx }, state, httpStub: stub });
@@ -543,7 +545,7 @@ test('glue 03: výjimka uvnitř -> degraduje na šedou, nic neuniká', async () 
 
 // --- glue 03: Safety Gate (slabý signál gated značkou; selhání = bez signálu) ---
 const SG_URL = 'https://ec.europa.eu/safety-gate-alerts/public/api/search';
-const extractBrand = (znacka, model) => ({ content: [{ type: 'text', text: JSON.stringify({ produkt: { nazev: 'Powerbanka', kategorie: 'elektronika', znacka, model, cena: 900, mena: 'CZK', tvrzeni_certifikace: ['CE'] }, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [] }) }] });
+const extractBrand = (znacka, model) => openai({ produkt: { nazev: 'Powerbanka', kategorie: 'elektronika', znacka, model, cena: 900, mena: 'CZK', tvrzeni_certifikace: ['CE'] }, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [] });
 const SG_ALERT = { reference: 'SR/00232/25', publicationDate: '2025-01-13T00:00:00.000+00:00', product: { name: 'Power bank', nameSpecific: 'STB-200', brands: [{ brand: 'Forever STB-200' }] }, risk: { riskType: [{ name: 'ENVIRONMENT' }] } };
 const sgCalls = (calls) => calls.filter((c) => c.url === SG_URL);
 const runSg = (extract, httpStub, o = {}) => runGlue('03-moduly.js', { json: extract, nodes: { 'Vstup a načtení': CTX_NEZNAME }, httpStub, ...o });
@@ -682,7 +684,7 @@ test('glue 04: chyba vysvětlení -> status 200, stav ok a záložní text', asy
 
 test('glue 04: validní vysvětlení se použije', async () => {
   const text = JSON.stringify({ shrnuti: 'Nabídka má několik signálů, které stojí za pozornost.', co_delat: ['Porovnejte cenu u jiných prodejců.'] });
-  const { out } = await runGlue('04-odpoved.js', { json: { content: [{ type: 'text', text }] }, nodes: { Moduly: MOD_OK } });
+  const { out } = await runGlue('04-odpoved.js', { json: openai(text), nodes: { Moduly: MOD_OK } });
   assert.equal(out.status, 200);
   assert.equal(out.odpoved.shrnuti, 'Nabídka má několik signálů, které stojí za pozornost.');
   assert.deepEqual(out.odpoved.co_delat, ['Porovnejte cenu u jiných prodejců.']);
@@ -693,21 +695,20 @@ test('glue 04: výjimka -> 500 s obecnou hláškou bez úniku detailů', async (
   assert.deepEqual(out, { status: 500, odpoved: { stav: 'chyba', chyba: 'Kontrola se nepodařila. Zkuste to prosím znovu.' } });
 });
 
-// --- end-to-end: všechny čtyři Code nody po sobě, Claude HTTP nody simulované stubem ---
-const ERR_CLAUDE = { error: { message: 'no credential' } };
-const anthropic = (obj) => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj) }] });
-const EXTRACT_POWERBANKA = anthropic({
+// --- end-to-end: všechny čtyři Code nody po sobě, LLM HTTP nody simulované stubem ---
+const ERR_LLM = { error: { message: 'no credential' } };
+const EXTRACT_POWERBANKA = openai({
   produkt: { nazev: 'Powerbanka', kategorie: 'elektronika', cena: 199, mena: 'CZK', referencni_cena_odhad: { min: 800, max: 1200, mena: 'CZK' } },
   prodejce: { zeme_odeslani: 'CN', kontakt_uveden: false }, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [],
 });
-const EXPLAIN_OK = anthropic({ shrnuti: 'Cena je mnohem nižší než obvyklá a chybí kontakt na prodejce, proto je nabídka riziková.', co_delat: ['Porovnejte cenu u jiných prodejců.', 'Neplaťte předem.'] });
+const EXPLAIN_OK = openai({ shrnuti: 'Cena je mnohem nižší než obvyklá a chybí kontakt na prodejce, proto je nabídka riziková.', co_delat: ['Porovnejte cenu u jiných prodejců.', 'Neplaťte předem.'] });
 
 // Tok se prochází podle buildWorkflow().connections: IF nody se vyhodnotí z jejich podmínky ($json.pole, operace true/false),
-// Claude HTTP nody jsou simulované stubem (extract/explain; odpověď příslušného nodu) a zaznamenají se do claudeCalls.
+// LLM HTTP nody jsou simulované stubem (extract/explain; odpověď příslušného nodu) a zaznamenají se do llmCalls.
 // Vrací final (výstup posledního nodu), výstupy Code nodů r1..r4 (nevolané = undefined) a visited (pořadí nodů).
-async function runFlow(body, { extract = ERR_CLAUDE, explain = ERR_CLAUDE, httpStub, state = {} } = {}) {
-  const claudeCalls = [], visited = [], nodes = {}, res = {};
-  const stubs = { 'Claude – extrakce': extract, 'Claude – vysvětlení': explain };
+async function runFlow(body, { extract = ERR_LLM, explain = ERR_LLM, httpStub, state = {} } = {}) {
+  const llmCalls = [], visited = [], nodes = {}, res = {};
+  const stubs = { 'LLM – extrakce': extract, 'LLM – vysvětlení': explain };
   const codeKey = { 'Vstup a načtení': 'r1', 'Sestavit extrakci': 'r2', Moduly: 'r3', 'Odpověď': 'r4' };
   let name = 'Vstup a načtení', input = { body }, final;
   for (let guard = 0; guard < 20; guard++) {
@@ -718,7 +719,7 @@ async function runFlow(body, { extract = ERR_CLAUDE, explain = ERR_CLAUDE, httpS
       const r = await runNode(name, { json: input, nodes, state, httpStub });
       res[codeKey[name]] = r; nodes[name] = r.out; out = r.out;
     } else if (node.type === 'n8n-nodes-base.httpRequest') {
-      claudeCalls.push(name); out = stubs[name];
+      llmCalls.push(name); out = stubs[name];
     } else if (node.type === 'n8n-nodes-base.if') {
       const c = node.parameters.conditions.conditions[0];
       const v = input[/^=\{\{ \$json\.(\w+) \}\}$/.exec(c.leftValue)[1]];
@@ -728,10 +729,10 @@ async function runFlow(body, { extract = ERR_CLAUDE, explain = ERR_CLAUDE, httpS
     if (!next || !next.length) { final = out; break; }
     name = next[0].node; input = out;
   }
-  return { final, ...res, claudeCalls, visited };
+  return { final, ...res, llmCalls, visited };
 }
 
-test('e2e (a): text a selhání Claude -> 200, stav ok, šedá, nezkontrolováno nabídka/prodejce/bezpečnost', async () => {
+test('e2e (a): text a selhání LLM -> 200, stav ok, šedá, nezkontrolováno nabídka/prodejce/bezpečnost', async () => {
   const f = await runFlow({ text: 'Powerbanka 30000 mAh jen 199 Kč! Odesíláme z Číny.' });
   assert.equal(typeof f.r2.out.llmRequest.model, 'string', 'Sestavit extrakci sestaví požadavek');
   assert.equal(f.final.status, 200);
@@ -754,10 +755,10 @@ test('e2e (b): validní extrakce a vysvětlení -> signály, není zelená, vysv
 
 test('e2e (b): vysvětlení, které neprojde guardy (podvodník, tvrzení o bezpečnosti, nevalidní tvar), se nepoužije', async () => {
   const bad = [
-    anthropic({ shrnuti: 'Prodejce je podvodník.', co_delat: ['Nekupujte.'] }),
-    anthropic({ shrnuti: 'Nabídka je bezpečná, můžete koupit.', co_delat: ['Kupte to.'] }),
-    anthropic('to není JSON'),
-    anthropic({ shrnuti: 'Jen shrnutí bez rad.' }),
+    openai({ shrnuti: 'Prodejce je podvodník.', co_delat: ['Nekupujte.'] }),
+    openai({ shrnuti: 'Nabídka je bezpečná, můžete koupit.', co_delat: ['Kupte to.'] }),
+    openai('to není JSON'),
+    openai({ shrnuti: 'Jen shrnutí bez rad.' }),
   ];
   for (const explain of bad) {
     const f = await runFlow({ text: 'Powerbanka 30000 mAh jen 199 Kč!' }, { extract: EXTRACT_POWERBANKA, explain });
@@ -805,7 +806,7 @@ const hostStub = (rdapYear, coi) => (o) => {
   return { statusCode: 403, body: '' };
 };
 
-test('e2e 8c (a): ČOI e-shop, stránka 403, bez textu -> červená bez Claude extrakce', async () => {
+test('e2e 8c (a): ČOI e-shop, stránka 403, bez textu -> červená bez LLM extrakce', async () => {
   const f = await runFlow({ odkaz: 'https://clarkscz.cz/x' }, { explain: EXPLAIN_OK, httpStub: hostStub(2019, coiHtml(150)) });
   assert.equal(f.final.status, 200);
   const o = f.final.odpoved;
@@ -815,18 +816,18 @@ test('e2e 8c (a): ČOI e-shop, stránka 403, bez textu -> červená bez Claude e
   assert.deepEqual(o.nezkontrolovano, ['nabídka', 'bezpečnost']);
   assert.equal(f.r1.out.obsah, false);
   assert.equal(f.r2, undefined, 'Sestavit extrakci se nevolá');
-  assert.ok(!f.claudeCalls.includes('Claude – extrakce'), 'Claude extrakce se nevolá: ' + f.claudeCalls);
-  assert.deepEqual(f.visited, ['Vstup a načtení', 'Stačí vstup?', 'Je obsah?', 'Moduly', 'Claude – vysvětlení', 'Odpověď', 'Respond']);
+  assert.ok(!f.llmCalls.includes('LLM – extrakce'), 'LLM extrakce se nevolá: ' + f.llmCalls);
+  assert.deepEqual(f.visited, ['Vstup a načtení', 'Stačí vstup?', 'Je obsah?', 'Moduly', 'LLM – vysvětlení', 'Odpověď', 'Respond']);
 });
 
-test('e2e 8c (b): e-shop s textem a selhání Claude extrakce -> stále červená z ČOI, prodejce zkontrolován', async () => {
-  const f = await runFlow({ odkaz: 'https://clarkscz.cz/x', text: 'Powerbanka' }, { extract: ERR_CLAUDE, httpStub: hostStub(2019, coiHtml(150)) });
+test('e2e 8c (b): e-shop s textem a selhání LLM extrakce -> stále červená z ČOI, prodejce zkontrolován', async () => {
+  const f = await runFlow({ odkaz: 'https://clarkscz.cz/x', text: 'Powerbanka' }, { extract: ERR_LLM, httpStub: hostStub(2019, coiHtml(150)) });
   assert.equal(f.final.status, 200);
   const o = f.final.odpoved;
   assert.equal(o.semafor, 'červená');
   assert.ok(o.signaly.some((s) => s.id === 'coi_seznam'));
   assert.ok(!o.nezkontrolovano.includes('prodejce'), o.nezkontrolovano.join());
-  assert.ok(f.claudeCalls.includes('Claude – extrakce'));
+  assert.ok(f.llmCalls.includes('LLM – extrakce'));
 });
 
 test('e2e 8c (c): marketplace s 403 stránkou -> potrebuji_vice (host kontroly nemá)', async () => {
@@ -844,7 +845,7 @@ test('e2e 8c (d): e-shop pouze z URL, mimo seznam ČOI, doména stará -> ok, š
   assert.deepEqual(o.nezkontrolovano, ['nabídka', 'bezpečnost']);
   assert.ok(Array.isArray(o.co_delat) && o.co_delat.length > 0);
   assert.deepEqual(o.signaly, []);
-  assert.ok(!f.claudeCalls.includes('Claude – extrakce'));
+  assert.ok(!f.llmCalls.includes('LLM – extrakce'));
 });
 
 test('glue 03: vstup z glue 01 (bez odpovědi LLM, objekt bez content) je selhání extrakce, host kontroly běží', async () => {
@@ -878,7 +879,7 @@ test('e2e (d): Code node, který vyhodí výjimku, nikdy nevyhodí chybu ven, al
 });
 
 // --- fix wave A: kalibrace verdiktu, viditelnost nedostupných zdrojů ---
-const ext = (o) => anthropic({ produkt: {}, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [], ...o });
+const ext = (o) => openai({ produkt: {}, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [], ...o });
 const rdapIso = (y) => ({ events: [{ eventAction: 'registration', eventDate: y + '-01-01T00:00:00Z' }] });
 const sigIds = (o) => o.signaly.map((s) => s.id);
 const callsTo = (r, prefix) => r.r3.calls.filter((c) => c.url.startsWith(prefix)).length;
@@ -1037,7 +1038,7 @@ test('glue 03 kalibrace: verdikt nese skipped a Moduly neposílají dál nic nav
   assert.deepEqual(Object.keys(out).sort(), ['llmRequest', 'signals', 'verdict']);
   assert.deepEqual(Object.keys(out.verdict).sort(), ['confidence', 'score', 'semafor', 'skipped', 'unchecked']);
   assert.deepEqual(out.verdict.skipped, ['seznam ČOI']);
-  assert.deepEqual(JSON.parse(out.llmRequest.messages[0].content).nezkontrolovano, ['prodejce: seznam ČOI']);
+  assert.deepEqual(JSON.parse(out.llmRequest.messages[1].content).nezkontrolovano, ['prodejce: seznam ČOI']);
 });
 
 // --- fix wave A, round 1: wall-clock deadline pro ČOI, RDAP a ARES ---
@@ -1505,9 +1506,9 @@ test('stránka volá API na adrese odvozené z location (včetně lomítka na ko
   assert.equal(p.fetchCalls[0][1].method, 'POST');
 });
 
-test('stránka: poznámka o soukromí zmiňuje odeslání službě Claude (Anthropic) a zdroje dat; bez odkazů', () => {
+test('stránka: poznámka o soukromí zmiňuje odeslání službě OpenAI a zdroje dat; bez odkazů', () => {
   const html = pageHtml();
-  assert.ok(html.includes('Screenshoty ani texty neukládáme. Pro vyhodnocení se odesílají službě Claude (Anthropic).'));
+  assert.ok(html.includes('Screenshoty ani texty neukládáme. Pro vyhodnocení se odesílají službě OpenAI.'));
   assert.ok(html.includes('Zdroje dat: seznam rizikových e-shopů ČOI, ARES, RDAP (CZ.NIC), EU Safety Gate © Evropská unie (CC BY 4.0).'));
   assert.equal(/https?:\/\//.test(html), false);
   assert.equal(/<a\b/i.test(html), false);
@@ -1549,5 +1550,132 @@ test('render: štítek verdiktu se nikdy nebere z odpovědi (XSS, neznámý nebo
     assert.equal(badge.className, 'light šedá', JSON.stringify(semafor));
     assert.equal(badge.textContent, 'Nelze posoudit', JSON.stringify(semafor));
     assert.equal(dom.all.filter((n) => n.htmlWrites > 0).length, 0);
+  }
+});
+
+// --- provider switch: OpenAI HTTP nody, credential, modely ---
+const llmNodes = (wf) => ['LLM – extrakce', 'LLM – vysvětlení'].map((n) => wf.nodes.find((x) => x.name === n));
+
+test('openai: oba HTTP nody mají Chat Completions URL, predefinedCredentialType openAiApi, JSON tělo z $json.llmRequest, bez hlavičky Anthropic', () => {
+  const wf = buildWorkflow({ credId: 'CRED1', credName: 'Moje OpenAI' });
+  for (const n of llmNodes(wf)) {
+    assert.ok(n, 'node existuje');
+    assert.equal(n.type, 'n8n-nodes-base.httpRequest');
+    assert.equal(n.typeVersion, 4.2);
+    assert.equal(n.onError, 'continueRegularOutput');
+    const p = n.parameters;
+    assert.equal(p.method, 'POST');
+    assert.equal(p.url, 'https://api.openai.com/v1/chat/completions');
+    assert.equal(p.authentication, 'predefinedCredentialType');
+    assert.equal(p.nodeCredentialType, 'openAiApi');
+    assert.equal(p.sendBody, true);
+    assert.equal(p.specifyBody, 'json');
+    assert.equal(p.jsonBody, '={{ JSON.stringify($json.llmRequest) }}');
+    assert.deepEqual(p.options, { timeout: 60000 });
+    assert.equal('sendHeaders' in p, false);
+    assert.equal('headerParameters' in p, false);
+    assert.deepEqual(n.credentials, { openAiApi: { id: 'CRED1', name: 'Moje OpenAI' } });
+  }
+});
+
+test('openai: výchozí název credentialu je "OpenAI account"; nody se jmenují LLM – extrakce / LLM – vysvětlení, žádný Claude/Anthropic ve workflow', () => {
+  const wf = buildWorkflow({ credId: 'C1' });
+  assert.equal(wf.nodes.find((n) => n.name === 'LLM – extrakce').credentials.openAiApi.name, 'OpenAI account');
+  assert.equal(wf.nodes.some((n) => /Claude/.test(n.name)), false);
+  assert.equal(/claude|anthropic/i.test(JSON.stringify(wf)), false);
+  assert.deepEqual(wf.connections['Sestavit extrakci'], { main: [[{ node: 'LLM – extrakce', type: 'main', index: 0 }]] });
+  assert.deepEqual(wf.connections['LLM – extrakce'], { main: [[{ node: 'Moduly', type: 'main', index: 0 }]] });
+  assert.deepEqual(wf.connections['Moduly'], { main: [[{ node: 'LLM – vysvětlení', type: 'main', index: 0 }]] });
+  assert.deepEqual(wf.connections['LLM – vysvětlení'], { main: [[{ node: 'Odpověď', type: 'main', index: 0 }]] });
+  const names = new Set(wf.nodes.map((n) => n.name));
+  for (const [from, v] of Object.entries(wf.connections)) {
+    assert.ok(names.has(from), from);
+    for (const out of v.main) for (const c of out) assert.ok(names.has(c.node), c.node);
+  }
+});
+
+const modelOf = (wf, node, name) => new RegExp('^\\s*const ' + name + " = '([^']*)';", 'm').exec(wf.nodes.find((n) => n.name === node).parameters.jsCode);
+
+test('modely: výchozí hodnoty = konstanty enginu; glue 02 nese jen model extrakce, glue 03 jen model vysvětlení', () => {
+  const { LLM_MODEL_EXTRACT_DEFAULT } = require('../engine/llm');
+  const { LLM_MODEL_EXPLAIN_DEFAULT } = require('../engine/explain');
+  assert.equal(MODEL_EXTRACT_DEFAULT, LLM_MODEL_EXTRACT_DEFAULT);
+  assert.equal(MODEL_EXPLAIN_DEFAULT, LLM_MODEL_EXPLAIN_DEFAULT);
+  const wf = buildWorkflow({ credId: 'C', credName: 'N' });
+  assert.equal(modelOf(wf, 'Sestavit extrakci', 'MODEL_EXTRACT')[1], LLM_MODEL_EXTRACT_DEFAULT);
+  assert.equal(modelOf(wf, 'Moduly', 'MODEL_EXPLAIN')[1], LLM_MODEL_EXPLAIN_DEFAULT);
+  assert.equal(modelOf(wf, 'Sestavit extrakci', 'MODEL_EXPLAIN'), null);
+  assert.equal(modelOf(wf, 'Moduly', 'MODEL_EXTRACT'), null);
+  for (const n of ['Vstup a načtení', 'Odpověď']) assert.equal(/\bMODEL_EX(TRACT|PLAIN)\b/.test(wf.nodes.find((x) => x.name === n).parameters.jsCode), false, n);
+});
+
+test('modely: modelExtract/modelExplain se dosadí do glue a v běhu skutečně skončí v požadavcích (i v degradační větvi)', async () => {
+  const wf = buildWorkflow({ credId: 'C', credName: 'N', modelExtract: 'gpt-6-astra', modelExplain: 'ft:gpt-6-luna:org:x.y_z-1' });
+  assert.equal(modelOf(wf, 'Sestavit extrakci', 'MODEL_EXTRACT')[1], 'gpt-6-astra');
+  assert.equal(modelOf(wf, 'Moduly', 'MODEL_EXPLAIN')[1], 'ft:gpt-6-luna:org:x.y_z-1');
+  const code = (n) => wf.nodes.find((x) => x.name === n).parameters.jsCode;
+  const r2 = await runCodeNode(code('Sestavit extrakci'), { json: { input: { text: 'Powerbanka 199 Kč', screenshoty: [], url: null }, pageText: '' } });
+  assert.equal(r2.out.llmRequest.model, 'gpt-6-astra');
+  const ctx = { zkratka: false, input: { text: 'x', screenshoty: [], url: null }, pageText: '', rezim: 'neznámé', host: null };
+  const r3 = await runCodeNode(code('Moduly'), { json: { error: { message: '401' } }, nodes: { 'Vstup a načtení': ctx } });
+  assert.equal(r3.out.llmRequest.model, 'ft:gpt-6-luna:org:x.y_z-1');
+  const r3catch = await runCodeNode(code('Moduly'), { json: {}, nodes: { 'Vstup a načtení': () => { throw new Error('x'); } } });
+  assert.equal(r3catch.out.llmRequest.model, 'ft:gpt-6-luna:org:x.y_z-1');
+});
+
+test('modely: neplatná hodnota -> výchozí s varováním; prázdná/nedefinovaná -> výchozí bez varování', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const bad = [' ', 'a b', 'gpt/6', "x';alert(1);'", 'x'.repeat(65), 'čeština', 'gpt\n6', '$&', 5, {}, true];
+  for (const v of bad) {
+    const before = warn.mock.callCount();
+    const wf = buildWorkflow({ credId: 'C', credName: 'N', modelExtract: v, modelExplain: v });
+    assert.equal(modelOf(wf, 'Sestavit extrakci', 'MODEL_EXTRACT')[1], MODEL_EXTRACT_DEFAULT, String(v));
+    assert.equal(modelOf(wf, 'Moduly', 'MODEL_EXPLAIN')[1], MODEL_EXPLAIN_DEFAULT, String(v));
+    assert.equal(warn.mock.callCount(), before + 2, 'varování pro ' + String(v));
+  }
+  const before = warn.mock.callCount();
+  for (const v of [undefined, null, '']) {
+    assert.equal(resolveModel(v, 'def', 'X', () => assert.fail('nemá varovat')), 'def');
+  }
+  assert.equal(warn.mock.callCount(), before);
+  for (const ok of ['gpt-6.1-sol', 'a', 'x'.repeat(64), 'ft:gpt-6-luna:org:name.v2_1']) assert.equal(resolveModel(ok, 'def', 'X', () => assert.fail('nemá varovat')), ok);
+  const seen = [];
+  assert.equal(resolveModel('špatné jméno', 'def', 'LLM_MODEL_EXTRACT', (m) => seen.push(m)), 'def');
+  assert.equal(seen.length, 1);
+  assert.match(seen[0], /LLM_MODEL_EXTRACT/);
+});
+
+test('cli volby: OPENAI_CRED_ID (záloha CRED_ID), OPENAI_CRED_NAME, LLM_MODEL_*, QUOTA_PER_DAY', () => {
+  const { cliOptions } = require('../build/build-workflow');
+  assert.equal(cliOptions({}), null);
+  assert.equal(cliOptions({ OPENAI_CRED_NAME: 'x' }), null);
+  const a = cliOptions({ OPENAI_CRED_ID: 'new', CRED_ID: 'old', OPENAI_CRED_NAME: 'Moje', LLM_MODEL_EXTRACT: 'm1', LLM_MODEL_EXPLAIN: 'm2', QUOTA_PER_DAY: '7' });
+  assert.deepEqual(a, { credId: 'new', credName: 'Moje', quotaPerDay: '7', modelExtract: 'm1', modelExplain: 'm2' });
+  const b = cliOptions({ CRED_ID: 'old' });
+  assert.equal(b.credId, 'old');
+  assert.equal(b.credName, 'OpenAI account');
+  assert.equal(b.modelExtract, undefined);
+});
+
+test('glue: výchozí hodnoty modelů v glue zdrojích odpovídají výchozím konstantám enginu', () => {
+  assert.match(glueSrc('02-extrakce-req.js'), new RegExp("^const MODEL_EXTRACT = '" + MODEL_EXTRACT_DEFAULT.replace(/\./g, '\\.') + "';", 'm'));
+  assert.match(glueSrc('03-moduly.js'), new RegExp("^const MODEL_EXPLAIN = '" + MODEL_EXPLAIN_DEFAULT.replace(/\./g, '\\.') + "';", 'm'));
+});
+
+test('e2e openai: OpenAI-tvarované odpovědi projdou celým tokem; refusal/length u extrakce = šedá, vysvětlení = záložní text', async () => {
+  const ok = await runFlow({ text: 'Powerbanka 30000 mAh jen 199 Kč! Odesíláme z Číny.' }, { extract: EXTRACT_POWERBANKA, explain: EXPLAIN_OK });
+  assert.equal(ok.final.status, 200);
+  assert.equal(ok.r2.out.llmRequest.messages[1].role, 'user');
+  assert.equal(ok.r3.out.llmRequest.messages[1].role, 'user');
+  assert.deepEqual(ok.llmCalls, ['LLM – extrakce', 'LLM – vysvětlení']);
+  assert.equal(ok.final.odpoved.shrnuti, 'Cena je mnohem nižší než obvyklá a chybí kontakt na prodejce, proto je nabídka riziková.');
+  const refusal = { choices: [{ message: { content: null, refusal: 'Nemohu pomoci.' }, finish_reason: 'stop' }] };
+  const trunc = { choices: [{ message: { content: '{"produkt":{"nazev":"A"' }, finish_reason: 'length' }] };
+  for (const bad of [refusal, trunc]) {
+    const f = await runFlow({ text: 'Powerbanka 199 Kč' }, { extract: bad, explain: bad });
+    assert.equal(f.final.status, 200);
+    assert.equal(f.final.odpoved.semafor, 'šedá');
+    assert.deepEqual(f.r3.out.verdict.unchecked, ['offer', 'seller', 'safety']);
+    assert.equal(f.final.odpoved.shrnuti, 'Z dostupných dat nelze nabídku spolehlivě posoudit.');
   }
 });

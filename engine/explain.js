@@ -29,14 +29,24 @@ function explainUnchecked(verdict) {
   return mods.map((k) => MODULE_NAMES[k]).concat(skipped.map((x) => MODULE_NAMES.seller + ': ' + x));
 }
 
-function buildExplainRequest(verdict, signals) {
+// Výchozí model vysvětlení: dokumentace OpenAI, "GPT-6 Luna for cost-sensitive, high-volume workloads" (podporuje reasoning_effort 'none'). Build ho může přepsat (LLM_MODEL_EXPLAIN).
+const LLM_MODEL_EXPLAIN_DEFAULT = 'gpt-6-luna';
+const EXPLAIN_SCHEMA = { type: 'object', properties: { shrnuti: { type: 'string' }, co_delat: { type: 'array', items: { type: 'string' } } }, required: ['shrnuti', 'co_delat'], additionalProperties: false };
+
+function buildExplainRequest(verdict, signals, model) {
   const payload = {
     semafor: verdict.semafor, jistota: verdict.confidence,
     nezkontrolovano: explainUnchecked(verdict),
     signaly: signals.map((s) => ({ zavaznost: s.severity, titul: s.title, dukaz: s.evidence })),
   };
-  // Haiku 5.5 (výchozí effort medium) přijímá thinking:{type:'disabled'} (claude-api skill, 'Thinking & Effort'); max_tokens 1500 je rezerva.
-  return { model: 'claude-haiku-5-5', max_tokens: 1500, thinking: { type: 'disabled' }, system: SYSTEM_EXPLAIN, messages: [{ role: 'user', content: JSON.stringify(payload) }] };
+  // Luna s reasoning_effort 'none' nepřemýšlí, takže max_completion_tokens 1500 je jen rezerva na JSON; temperature se neposílá.
+  return {
+    model: model || LLM_MODEL_EXPLAIN_DEFAULT,
+    max_completion_tokens: 1500,
+    reasoning_effort: 'none',
+    response_format: { type: 'json_schema', json_schema: { name: 'vysvetleni_kontroly', strict: true, schema: EXPLAIN_SCHEMA } },
+    messages: [{ role: 'system', content: SYSTEM_EXPLAIN }, { role: 'user', content: JSON.stringify(payload) }],
+  };
 }
 
 // Lowercase, accent-free form used by the wording and consistency checks.
@@ -128,4 +138,4 @@ function needMoreInput(zprava) {
   return { stav: 'potrebuji_vice', zprava };
 }
 
-if (typeof module !== 'undefined') module.exports = { SYSTEM_EXPLAIN, buildExplainRequest, parseExplanation, fallbackAdvice, buildResponse, needMoreInput };
+if (typeof module !== 'undefined') module.exports = { SYSTEM_EXPLAIN, LLM_MODEL_EXPLAIN_DEFAULT, buildExplainRequest, parseExplanation, fallbackAdvice, buildResponse, needMoreInput };
