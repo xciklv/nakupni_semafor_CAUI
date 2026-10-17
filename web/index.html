@@ -22,7 +22,7 @@
   button:disabled { opacity:.6; cursor:wait; }
   button.sekundarni { background:transparent; color:var(--accent); border:2px solid var(--accent); margin-top:8px; }
   .nebo { margin:16px 0 0; text-align:center; color:var(--muted); }
-  .drop { margin-top:12px; padding:12px 16px 16px; border:2px dashed var(--line); border-radius:12px; }
+  .drop { margin-top:12px; padding:12px 16px 16px; border:2px dashed var(--muted); border-radius:12px; }
   .drop.dragging { border-color:var(--accent); }
   .drop.highlight { outline:3px solid var(--orange); outline-offset:2px; }
   .drop .nadpis { display:block; font-weight:600; }
@@ -95,8 +95,11 @@ const vybrat = document.getElementById('vybrat');
 const seznam = document.getElementById('seznam');
 const NAPOVEDA_PRAZDNY = 'Vlož odkaz nebo screenshot nabídky.';
 const NAPOVEDA_SCREENSHOT = 'Zkus přidat screenshot nabídky.';
+const NAPOVEDA_TYP = 'Tenhle typ souboru nelze použít, vlož PNG, JPEG nebo WebP.';
 // Vybrané screenshoty: { file, url } (url je blob URL jen pro náhled, uvolní se při odebrání a po kontrole).
 let vybrane = [];
+let zaneprazdneno = false; // kontrola běží: seznam se nesmí měnit
+let cisloScreenshotu = 0;  // čítač pro pojmenování vložených obrázků bez vlastního názvu
 
 function el(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
 function isObj(v) { return v !== null && typeof v === 'object'; }
@@ -148,7 +151,8 @@ function render(r) {
     card.append(el('p', str(r.zprava)), el('p', NAPOVEDA_SCREENSHOT));
     out.append(card);
     drop.classList.add('highlight');
-    vybrat.focus();
+    vybrat.focus({ preventScroll: true });
+    if (typeof out.scrollIntoView === 'function') out.scrollIntoView({ block: 'nearest' });
     return;
   }
   const semafor = povoleno(str(r.semafor), SEMAFORY, 'šedá');
@@ -179,10 +183,22 @@ function render(r) {
   out.append(wc);
 }
 
+// Povolené jsou jen PNG, JPEG a WebP (podle type; přípona jen když prohlížeč type nezná).
 function jeObrazek(f) {
   if (!isObj(f)) return false;
-  if (typeof f.type === 'string' && f.type !== '') return f.type.indexOf('image/') === 0;
+  if (typeof f.type === 'string' && f.type !== '') return /^image\/(png|jpe?g|webp)$/i.test(f.type);
   return /\.(png|jpe?g|webp)$/i.test(str(f.name));
+}
+
+// Obecný nebo prázdný název (typicky vložený obrázek) se nahradí číslovaným: screenshot-1.png, screenshot-2.png...
+function nazevSouboru(f) {
+  const nazev = str(f.name);
+  if (nazev !== '' && !/^image\.(png|jpe?g|webp)$/i.test(nazev)) return nazev;
+  const priponaZNazvu = /\.(png|jpe?g|webp)$/i.exec(nazev);
+  const priponaZTypu = /^image\/(png|jpe?g|webp)$/i.exec(str(f.type));
+  const pripona = priponaZNazvu ? priponaZNazvu[1] : priponaZTypu ? (priponaZTypu[1].toLowerCase() === 'jpeg' ? 'jpg' : priponaZTypu[1]) : 'png';
+  cisloScreenshotu += 1;
+  return 'screenshot-' + cisloScreenshotu + '.' + pripona.toLowerCase();
 }
 
 function uvolnitNahledy() { vybrane.forEach((v) => URL.revokeObjectURL(v.url)); vybrane = []; }
@@ -198,13 +214,21 @@ function vykreslitSeznam() {
     const x = el('button', '×', 'sekundarni');
     x.setAttribute('type', 'button');
     x.setAttribute('aria-label', 'Odebrat screenshot');
+    x.disabled = zaneprazdneno;
     x.addEventListener('click', () => odebrat(v));
-    li.append(img, el('span', str(v.file.name) || 'screenshot', 'nazev'), x);
+    li.append(img, el('span', v.nazev, 'nazev'), x);
     seznam.append(li);
   });
 }
 
+function nastavitZaneprazdneno(b) {
+  zaneprazdneno = b;
+  vybrat.disabled = b;
+  vykreslitSeznam();
+}
+
 function odebrat(v) {
+  if (zaneprazdneno) return;
   URL.revokeObjectURL(v.url);
   vybrane = vybrane.filter((x) => x !== v);
   limit.textContent = '';
@@ -212,31 +236,48 @@ function odebrat(v) {
   vybrat.focus();
 }
 
-// Přidá obrázky (výběr, přetažení i schránka): celkem nejvýš MAX_SNIMKU, ostatní se ignorují s upozorněním.
+// Přidá obrázky (výběr, přetažení i schránka): celkem nejvýš MAX_SNIMKU a jen povolené typy; ostatní se ignorují s upozorněním.
 function pridat(soubory) {
-  const nove = [...soubory].filter(jeObrazek);
-  if (!nove.length) return;
+  if (zaneprazdneno) return;
+  const vsechny = [...soubory];
+  if (!vsechny.length) return;
+  const nove = vsechny.filter(jeObrazek);
+  const zahozenoTyp = nove.length < vsechny.length;
   const celkem = vybrane.length + nove.length;
-  nove.slice(0, Math.max(0, MAX_SNIMKU - vybrane.length)).forEach((file) => vybrane.push({ file, url: URL.createObjectURL(file) }));
-  limit.textContent = celkem > MAX_SNIMKU ? 'Vybrali jste ' + celkem + ' souborů; zkontrolujeme jen prvních ' + MAX_SNIMKU + '.' : '';
-  drop.classList.remove('highlight');
+  nove.slice(0, Math.max(0, MAX_SNIMKU - vybrane.length))
+    .forEach((file) => vybrane.push({ file, url: URL.createObjectURL(file), nazev: nazevSouboru(file) }));
+  const zpravy = [];
+  if (zahozenoTyp) zpravy.push(NAPOVEDA_TYP);
+  if (celkem > MAX_SNIMKU) zpravy.push('Vybrali jste ' + celkem + ' souborů; zkontrolujeme jen prvních ' + MAX_SNIMKU + '.');
+  limit.textContent = zpravy.join(' ');
+  if (nove.length) drop.classList.remove('highlight');
   vykreslitSeznam();
 }
 
 vybrat.addEventListener('click', () => shots.click());
 shots.addEventListener('change', () => { const f = [...shots.files]; shots.value = ''; pridat(f); });
 
+// Zpracováváme jen tažení souborů; tažení textu nebo odkazu (do pole #odkaz) se nesmí rušit.
+function tahneSoubory(e) {
+  return !!e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') !== -1;
+}
+function prevzitDragover(e) {
+  if (!tahneSoubory(e)) return;
+  e.preventDefault();
+  drop.classList.add('dragging');
+}
 function prevzitDrop(e) {
+  if (!tahneSoubory(e)) return;
   e.preventDefault();
   if (e.stopPropagation) e.stopPropagation();
   drop.classList.remove('dragging');
-  if (e.dataTransfer && e.dataTransfer.files) pridat(e.dataTransfer.files);
+  if (e.dataTransfer.files) pridat(e.dataTransfer.files);
 }
-drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragging'); });
+drop.addEventListener('dragover', prevzitDragover);
 drop.addEventListener('dragleave', () => drop.classList.remove('dragging'));
 drop.addEventListener('drop', prevzitDrop);
 // Soubor pustený mimo oblast by jinak otevřel obrázek a stránka by o zadání přišla.
-document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('dragover', prevzitDragover);
 document.addEventListener('drop', prevzitDrop);
 
 // Vložení obrázku ze schránky kdekoli na stránce; textové vložení (odkaz do pole) se nechá být.
@@ -244,8 +285,9 @@ document.addEventListener('paste', (e) => {
   const t = e.target;
   if (t && t !== odkazEl && /^(input|textarea|select)$/i.test(str(t.tagName))) return;
   const polozky = e.clipboardData && e.clipboardData.items ? [...e.clipboardData.items] : [];
-  const soubory = polozky.filter((i) => i.kind === 'file' && typeof i.type === 'string' && i.type.indexOf('image/') === 0)
-    .map((i) => i.getAsFile()).filter(Boolean);
+  // V poli pro odkaz má text ve schránce přednost (kopie obrázku z webu nese i text).
+  if (t === odkazEl && polozky.some((i) => i.kind === 'string' && i.type === 'text/plain')) return;
+  const soubory = polozky.filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter(Boolean);
   if (!soubory.length) return;
   e.preventDefault();
   pridat(soubory);
@@ -253,8 +295,11 @@ document.addEventListener('paste', (e) => {
 
 document.getElementById('f').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (zaneprazdneno) return;
   const odkaz = odkazEl.value.trim();
   const files = vybrane.map((v) => v.file);
+  drop.classList.remove('highlight');
+  limit.textContent = '';
   if (!odkaz && !files.length) {
     out.replaceChildren();
     const card = el('div', null, 'card');
@@ -265,16 +310,21 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   }
   const go = document.getElementById('go');
   go.disabled = true; go.textContent = 'Kontroluji…';
+  nastavitZaneprazdneno(true);
+  let data;
   try {
     const screenshoty = await Promise.all(files.map(toJpegBase64));
     const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ odkaz, text: '', screenshoty }) });
-    const data = await res.json();
-    uvolnitNahledy(); vykreslitSeznam(); limit.textContent = '';
-    render(data);
+    data = await res.json();
   } catch (err) {
-    render({ stav: 'chyba', chyba: chybaObrazku(err) ? err.message : CHYBA_OBECNA });
-  } finally { go.disabled = false; go.textContent = 'Zkontrolovat'; }
+    data = { stav: 'chyba', chyba: chybaObrazku(err) ? err.message : CHYBA_OBECNA };
+  }
+  // Seznam se vyprázdní jen po úspěšné kontrole; po chybě nebo při žádosti o další podklady zůstává.
+  if (isObj(data) && data.stav === 'ok') uvolnitNahledy();
+  go.disabled = false; go.textContent = 'Zkontrolovat';
+  nastavitZaneprazdneno(false);
+  render(data);
 });
 </script>
 </body>

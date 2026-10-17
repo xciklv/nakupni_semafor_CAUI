@@ -1206,7 +1206,8 @@ function makeFakeDom(opts = {}) {
       all.push(this);
     }
     click() { this.clicks++; }
-    focus() { this.focusCount++; state.focused = this; }
+    focus(o) { this.focusCount++; this.focusOpts = o; state.focused = this; }
+    scrollIntoView(o) { this.scrolled = o; }
     append(...nodes) { this.children.push(...nodes); }
     replaceChildren(...nodes) { this.children = nodes; }
     addEventListener(type, fn) { this.listeners[type] = fn; }
@@ -1253,7 +1254,7 @@ function loadPage(opts = {}) {
   }
   const ctx = vm.createContext({
     document: dom.document, location: { href: opts.href || 'http://x/webhook/nakupni-kontrola-web' }, URL: FakeURL, Image: FakeImage, console,
-    fetch: async (...args) => { fetchCalls.push(args); if (opts.fetchFail) throw new Error('síť'); return { json: async () => ({}) }; },
+    fetch: async (...args) => { fetchCalls.push(args); if (opts.gate) await opts.gate; if (opts.fetchFail) throw new Error('síť'); return { json: async () => (opts.response || {}) }; },
   });
   vm.runInContext(m[1] + '\n;this.__render = render; this.__toJpegBase64 = toJpegBase64; this.__apiUrl = apiUrl; this.__API = API;', ctx);
   return { render: ctx.__render, toJpeg: ctx.__toJpegBase64, apiUrl: ctx.__apiUrl, API: ctx.__API, dom, log, fetchCalls };
@@ -1589,8 +1590,8 @@ function pasteEvent(items, target) {
 }
 const pasteImg = (name) => ({ kind: 'file', type: 'image/png', getAsFile: () => IMG(name) });
 const pasteTxt = (t) => ({ kind: 'string', type: 'text/plain', getAsFile: () => null, getAsString: (cb) => cb(t) });
-function dropEvent(files) {
-  const e = { prevented: false, dataTransfer: { files }, preventDefault() { e.prevented = true; }, stopPropagation() {} };
+function dropEvent(files, types = ['Files']) {
+  const e = { prevented: false, dataTransfer: { files, types }, preventDefault() { e.prevented = true; }, stopPropagation() {} };
   return e;
 }
 
@@ -1692,7 +1693,7 @@ test('drop souborů na oblast: obrázky se přidají, ostatní soubory ne, vých
   dom.byId.drop.listeners.drop(e);
   assert.equal(e.prevented, true);
   assert.deepEqual(seznamNazvu(dom), ['d1.png', 'd2.webp']);
-  const ov = { prevented: false, preventDefault() { this.prevented = true; } };
+  const ov = { prevented: false, dataTransfer: { types: ['Files'] }, preventDefault() { this.prevented = true; } };
   dom.byId.drop.listeners.dragover(ov);
   assert.equal(ov.prevented, true, 'dragover musí zrušit výchozí akci, jinak drop nepřijde');
 });
@@ -1708,7 +1709,7 @@ test('paste obrázku ze schránky: přidá se do seznamu a výchozí akce se zru
   const { dom } = loadPage();
   const e = pasteEvent([pasteTxt('x'), pasteImg('image.png')], dom.byId.f);
   dom.document.listeners.paste(e);
-  assert.deepEqual(seznamNazvu(dom), ['image.png']);
+  assert.deepEqual(seznamNazvu(dom), ['screenshot-1.png']);
   assert.equal(e.prevented, true);
 });
 
@@ -1743,13 +1744,18 @@ test('× odebere screenshot, uvolní jeho blob URL a vrátí fokus na Vybrat scr
   assert.equal(dom.state.focused, dom.byId.vybrat);
 });
 
-test('submit: po dokončení kontroly se náhledy uvolní a seznam vyprázdní; při chybě zůstanou', async () => {
-  const ok = await submitPage({ uniqueBlobs: true }, [IMG('a.png'), IMG('b.png')]);
+test('submit: seznam se uvolní a vyprázdní jen po stav ok; chyba, potrebuji_vice i výjimka ho nechají (blob URL nedotčené)', async () => {
+  const ok = await submitPage({ uniqueBlobs: true, response: { stav: 'ok', semafor: 'zelená', shrnuti: 'x', co_delat: [], signaly: [] } }, [IMG('a.png'), IMG('b.png')]);
   assert.ok(ok.log.includes('revoke:blob:test-1') && ok.log.includes('revoke:blob:test-2'), ok.log.join(','));
   assert.equal(ok.dom.byId.seznam.children.length, 0);
-  const chyba = await submitPage({ uniqueBlobs: true, fetchFail: true }, [IMG('a.png')]);
-  assert.equal(chyba.dom.byId.seznam.children.length, 1);
-  assert.equal(chyba.log.includes('revoke:blob:test-1'), false);
+  for (const response of [{ stav: 'chyba', chyba: 'E' }, { stav: 'potrebuji_vice', zprava: 'Z' }, {}]) {
+    const r = await submitPage({ uniqueBlobs: true, response }, [IMG('a.png')]);
+    assert.equal(r.dom.byId.seznam.children.length, 1, JSON.stringify(response));
+    assert.equal(r.log.some((l) => l.startsWith('revoke:blob:test-1')), false, JSON.stringify(response));
+  }
+  const vyjimka = await submitPage({ uniqueBlobs: true, fetchFail: true }, [IMG('a.png')]);
+  assert.equal(vyjimka.dom.byId.seznam.children.length, 1);
+  assert.equal(vyjimka.log.includes('revoke:blob:test-1'), false);
 });
 
 test('hostile názvy souborů se vykreslí jen jako textContent (žádné innerHTML ani on* atributy)', () => {
@@ -1789,6 +1795,15 @@ test('potrebuji_vice: zpráva serveru, řádek o screenshotu, zvýrazněná obla
   assert.ok(t.includes('Zkus přidat screenshot nabídky.'));
   assert.ok(dom.byId.drop.classList.contains('highlight'));
   assert.equal(dom.state.focused, dom.byId.vybrat);
+  assert.equal(dom.byId.vybrat.focusOpts.preventScroll, true);
+  assert.equal(dom.byId.out.scrolled.block, 'nearest');
+});
+
+test('potrebuji_vice: chybějící scrollIntoView nevadí', () => {
+  const { render, dom } = loadPage();
+  dom.byId.out.scrollIntoView = undefined;
+  assert.doesNotThrow(() => render({ stav: 'potrebuji_vice', zprava: 'Z' }));
+  assert.ok(dom.byId.drop.classList.contains('highlight'));
 });
 
 test('zvýraznění zmizí s dalším výsledkem i po přidání screenshotu; ostatní stavy ho nenastaví', () => {
@@ -1804,6 +1819,160 @@ test('zvýraznění zmizí s dalším výsledkem i po přidání screenshotu; os
   dom.byId.shots.files = [IMG('a.png')];
   dom.byId.shots.listeners.change();
   assert.equal(dom.byId.drop.classList.contains('highlight'), false);
+});
+
+// --- fix round 1: allowlist typů, drag jen pro soubory, zaneprázdněno, názvy, zvýraznění ---
+const TYP_NAPOVEDA = 'Tenhle typ souboru nelze použít, vlož PNG, JPEG nebo WebP.';
+
+test('filtr typů: gif, heic, svg a pdf se ignorují s upozorněním; png, jpeg a webp projdou', () => {
+  for (const bad of [IMG('a.gif', 'image/gif'), IMG('a.heic', 'image/heic'), IMG('a.svg', 'image/svg+xml'), { name: 'a.pdf', type: 'application/pdf' }]) {
+    const { dom } = loadPage();
+    dom.byId.shots.files = [bad];
+    dom.byId.shots.listeners.change();
+    assert.equal(dom.byId.seznam.children.length, 0, bad.type);
+    assert.equal(dom.byId.limit.textContent, TYP_NAPOVEDA, bad.type);
+  }
+  const { dom } = loadPage();
+  dom.byId.shots.files = [IMG('a.png', 'image/png'), IMG('b.jpg', 'image/jpeg'), IMG('c.webp', 'image/webp'), IMG('d.JPG', 'IMAGE/JPEG')];
+  dom.byId.shots.listeners.change();
+  assert.deepEqual(seznamNazvu(dom), ['a.png', 'b.jpg', 'c.webp', 'd.JPG']);
+  assert.equal(dom.byId.limit.textContent, '');
+});
+
+test('filtr typů: prázdný type s příponou .PNG/.jpeg projde, s jinou příponou ne; type má přednost před příponou', () => {
+  const { dom } = loadPage();
+  dom.byId.shots.files = [{ name: 'a.PNG', type: '' }, { name: 'b.jpeg' }, { name: 'c.gif', type: '' }, { name: 'd.png', type: 'image/gif' }];
+  dom.byId.shots.listeners.change();
+  assert.deepEqual(seznamNazvu(dom), ['a.PNG', 'b.jpeg']);
+  assert.equal(dom.byId.limit.textContent, TYP_NAPOVEDA);
+});
+
+test('filtr typů: směs platných a neplatných -> platné se přidají a upozornění zůstane; další akce ho smaže', () => {
+  const { dom } = loadPage();
+  dom.byId.drop.listeners.drop(dropEvent([IMG('a.png'), IMG('b.gif', 'image/gif')]));
+  assert.deepEqual(seznamNazvu(dom), ['a.png']);
+  assert.equal(dom.byId.limit.textContent, TYP_NAPOVEDA);
+  dom.byId.drop.listeners.drop(dropEvent([IMG('c.png')]));
+  assert.equal(dom.byId.limit.textContent, '');
+  dom.byId.drop.listeners.drop(dropEvent([IMG('d.gif', 'image/gif')]));
+  KRIZKY(dom)[0].listeners.click();
+  assert.equal(dom.byId.limit.textContent, '');
+});
+
+test('filtr typů: vložený soubor nepodporovaného typu ze schránky ukáže upozornění', () => {
+  const { dom } = loadPage();
+  const e = pasteEvent([{ kind: 'file', type: 'image/gif', getAsFile: () => IMG('a.gif', 'image/gif') }], null);
+  dom.document.listeners.paste(e);
+  assert.equal(dom.byId.seznam.children.length, 0);
+  assert.equal(dom.byId.limit.textContent, TYP_NAPOVEDA);
+});
+
+test('drag: textový/URL drag se nezruší (odkaz jde přetáhnout do #odkaz), souborový ano', () => {
+  const { dom } = loadPage();
+  for (const types of [['text/plain'], ['text/uri-list', 'text/plain'], []]) {
+    for (const [name, fn] of [['dragover', dom.document.listeners.dragover], ['dragover', dom.byId.drop.listeners.dragover], ['drop', dom.document.listeners.drop], ['drop', dom.byId.drop.listeners.drop]]) {
+      const e = dropEvent([], types);
+      fn(e);
+      assert.equal(e.prevented, false, name + ' ' + JSON.stringify(types));
+    }
+  }
+  assert.doesNotThrow(() => dom.document.listeners.dragover({ preventDefault() { throw new Error('ne'); } }));
+  assert.doesNotThrow(() => dom.document.listeners.drop({ preventDefault() { throw new Error('ne'); } }));
+  for (const fn of [dom.document.listeners.dragover, dom.byId.drop.listeners.dragover]) {
+    const e = dropEvent([], ['Files']);
+    fn(e);
+    assert.equal(e.prevented, true);
+  }
+});
+
+test('drag: soubor puštěný mimo oblast se zpracuje (přidá), neotevře se v prohlížeči', () => {
+  const { dom } = loadPage();
+  const e = dropEvent([IMG('mimo.png')], ['Files']);
+  dom.document.listeners.drop(e);
+  assert.equal(e.prevented, true);
+  assert.deepEqual(seznamNazvu(dom), ['mimo.png']);
+});
+
+test('paste: obrázek + text/plain při zaměřeném #odkaz -> obrázek se nebere, text se vloží normálně', () => {
+  const { dom } = loadPage();
+  const e = pasteEvent([pasteTxt('https://obchod.example/a'), pasteImg('x.png')], dom.byId.odkaz);
+  dom.document.listeners.paste(e);
+  assert.equal(dom.byId.seznam.children.length, 0);
+  assert.equal(e.prevented, false);
+  const mimo = pasteEvent([pasteTxt('x'), pasteImg('y.png')], dom.byId.f);
+  dom.document.listeners.paste(mimo);
+  assert.deepEqual(seznamNazvu(dom), ['y.png']);
+});
+
+test('názvy: obecné nebo prázdné názvy se přečíslují screenshot-1.png, screenshot-2.png... napříč seznamem', () => {
+  const { dom } = loadPage();
+  dom.document.listeners.paste(pasteEvent([pasteImg('image.png'), pasteImg('')], null));
+  dom.byId.drop.listeners.drop(dropEvent([IMG('image.jpeg', 'image/jpeg'), IMG('moje.png')]));
+  assert.deepEqual(seznamNazvu(dom), ['screenshot-1.png', 'screenshot-2.png', 'screenshot-3.jpeg', 'moje.png']);
+  KRIZKY(dom)[0].listeners.click();
+  dom.document.listeners.paste(pasteEvent([pasteImg('image.png')], null));
+  assert.deepEqual(seznamNazvu(dom).slice(-1), ['screenshot-4.png'], 'čítač se po odebrání nevrací');
+});
+
+test('názvy: prázdný název s typem image/webp dostane příponu podle typu', () => {
+  const { dom } = loadPage();
+  dom.byId.drop.listeners.drop(dropEvent([{ name: '', type: 'image/webp' }]));
+  assert.deepEqual(seznamNazvu(dom), ['screenshot-1.webp']);
+});
+
+test('zaneprázdněno: při běžící kontrole je Vybrat i × zakázané a paste/drop/× se ignorují; po dokončení vše zpět', async () => {
+  let pust;
+  const gate = new Promise((r) => { pust = r; });
+  const p = loadPage({ gate, response: { stav: 'chyba', chyba: 'E' } });
+  const dom = p.dom;
+  dom.byId.odkaz.value = 'https://obchod.example/a';
+  dom.byId.shots.files = [IMG('a.png'), IMG('b.png')];
+  dom.byId.shots.listeners.change();
+  const hotovo = dom.byId.f.listeners.submit({ preventDefault() {} });
+  assert.equal(dom.byId.vybrat.disabled, true);
+  assert.ok(KRIZKY(dom).length === 2 && KRIZKY(dom).every((k) => k.disabled === true));
+  dom.document.listeners.paste(pasteEvent([pasteImg('c.png')], null));
+  dom.byId.drop.listeners.drop(dropEvent([IMG('d.png')]));
+  dom.byId.shots.files = [IMG('e.png')];
+  dom.byId.shots.listeners.change();
+  KRIZKY(dom)[0].listeners.click();
+  assert.deepEqual(seznamNazvu(dom), ['a.png', 'b.png']);
+  pust();
+  await settle(hotovo);
+  assert.equal(p.fetchCalls.length, 1);
+  assert.equal(JSON.parse(p.fetchCalls[0][1].body).screenshoty.length, 2);
+  assert.equal(dom.byId.vybrat.disabled, false);
+  assert.ok(KRIZKY(dom).length === 2 && KRIZKY(dom).every((k) => k.disabled === false));
+  KRIZKY(dom)[0].listeners.click();
+  assert.deepEqual(seznamNazvu(dom), ['b.png']);
+});
+
+test('zaneprázdněno: po chybě zpracování obrázku se tlačítka také odblokují', async () => {
+  const p = await submitPage({ noCtx: true }, [IMG('a.png')]);
+  assert.equal(p.dom.byId.vybrat.disabled, false);
+  assert.ok(KRIZKY(p.dom).every((k) => k.disabled === false));
+});
+
+test('zvýraznění: odstraní se na začátku každého submitu i při prázdném submitu', async () => {
+  let pust;
+  const gate = new Promise((r) => { pust = r; });
+  const p = loadPage({ gate });
+  p.dom.byId.odkaz.value = 'https://obchod.example/a';
+  p.render({ stav: 'potrebuji_vice', zprava: 'Z' });
+  assert.ok(p.dom.byId.drop.classList.contains('highlight'));
+  const hotovo = p.dom.byId.f.listeners.submit({ preventDefault() {} });
+  assert.equal(p.dom.byId.drop.classList.contains('highlight'), false, 'za běhu kontroly už nesvítí');
+  pust();
+  await settle(hotovo);
+  const q = loadPage();
+  q.render({ stav: 'potrebuji_vice', zprava: 'Z' });
+  q.dom.byId.odkaz.value = '';
+  await settle(q.dom.byId.f.listeners.submit({ preventDefault() {} }));
+  assert.equal(q.dom.byId.drop.classList.contains('highlight'), false);
+});
+
+test('CSS: čárkovaný okraj .drop používá token --muted', () => {
+  assert.match(cssOf(), /\.drop\s*\{[^}]*border:\s*2px dashed var\(--muted\)/);
 });
 
 // --- provider switch: OpenAI HTTP nody, credential, modely ---
