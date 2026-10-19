@@ -97,12 +97,6 @@ function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, mode
       parameters: { respondWith: 'json', responseBody: '={{ JSON.stringify($json.odpoved) }}', options: { responseCode: '={{ $json.status }}' } } },
     { id: 'Respond – více vstupu', name: 'Respond – více vstupu', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [660, 160],
       parameters: { respondWith: 'json', responseBody: '={{ JSON.stringify($json.odpoved) }}', options: { responseCode: '={{ $json.status }}' } } },
-    // Webová stránka: GET webhook vrací web/index.html. responseBody je text bez výrazu (nezačíná '=', nemá '{{').
-    { id: 'Webhook – stránka', name: 'Webhook – stránka', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [0, 300], webhookId: '6f1c3a52-9b7e-4d2a-8c41-3e5b7a9d0f26',
-      parameters: { httpMethod: 'GET', path: 'nakupni-kontrola-web', responseMode: 'responseNode', options: {} } },
-    { id: 'Respond – stránka', name: 'Respond – stránka', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [220, 300],
-      parameters: { respondWith: 'text', responseBody: fs.readFileSync(path.join(root, 'web', 'index.html'), 'utf8'),
-        options: { responseHeaders: { entries: [{ name: 'Content-Type', value: 'text/html; charset=utf-8' }] } } } },
   ];
   const link = (a, b, out = 0) => ({ [a]: { main: [...Array(out).fill([]), [{ node: b, type: 'main', index: 0 }]] } });
   const connections = {
@@ -115,13 +109,29 @@ function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, mode
     ...link('Moduly', 'LLM – vysvětlení'),
     ...link('LLM – vysvětlení', 'Odpověď'),
     ...link('Odpověď', 'Respond'),
-    ...link('Webhook – stránka', 'Respond – stránka'),
   };
   return { name: 'Nákupní kontrola', nodes, connections, settings: {
     executionOrder: 'v1',
     // Ukládání exekucí řídí SAVE_EXECUTIONS: 'all' (výchozí, ladění; rozhodnutí 2026-10-17) ukládá nabídky, screenshoty i výsledky lokálně v n8n,
     // 'none' nic neukládá (soukromí). Průběh se neukládá ani v jednom režimu.
     saveDataSuccessExecution: save, saveDataErrorExecution: save, saveManualExecutions: save === 'all', saveExecutionProgress: false,
+  } };
+}
+
+// Webová stránka je samostatný workflow (jeden webhook = jeden workflow): GET webhook vrací web/index.html a nic jiného. Nezávisí na API ani na credentialech,
+// importuje se a aktivuje zvlášť. Stránka si adresu API odvodí ze své adresy (nakupni-kontrola-web -> nakupni-kontrola), takže cesty obou webhooků musí zůstat.
+// Úspěšné načtení stránky se neukládá (nezaplevelí seznam exekucí API), chyby ano. responseBody je text bez výrazu (nezačíná '=', nemá '{{').
+function buildWebWorkflow() {
+  const nodes = [
+    { id: 'Webhook – stránka', name: 'Webhook – stránka', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [0, 0], webhookId: '6f1c3a52-9b7e-4d2a-8c41-3e5b7a9d0f26',
+      parameters: { httpMethod: 'GET', path: 'nakupni-kontrola-web', responseMode: 'responseNode', options: {} } },
+    { id: 'Respond – stránka', name: 'Respond – stránka', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [220, 0],
+      parameters: { respondWith: 'text', responseBody: fs.readFileSync(path.join(root, 'web', 'index.html'), 'utf8'),
+        options: { responseHeaders: { entries: [{ name: 'Content-Type', value: 'text/html; charset=utf-8' }] } } } },
+  ];
+  const connections = { 'Webhook – stránka': { main: [[{ node: 'Respond – stránka', type: 'main', index: 0 }]] } };
+  return { name: 'Nákupní kontrola – web', nodes, connections, settings: {
+    executionOrder: 'v1', saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all', saveManualExecutions: false, saveExecutionProgress: false,
   } };
 }
 
@@ -137,7 +147,10 @@ if (require.main === module) {
   if (!opts) { console.error('Nastav ANTHROPIC_CRED_ID (id credentialu typu anthropicApi z n8n; záloha: CRED_ID).'); process.exit(1); }
   const wf = buildWorkflow(opts);
   fs.writeFileSync(path.join(root, 'workflow.json'), JSON.stringify(wf, null, 2));
-  console.log('workflow.json zapsán, nodů:', wf.nodes.length);
+  console.log('workflow.json (API) zapsán, nodů:', wf.nodes.length);
+  const web = buildWebWorkflow();
+  fs.writeFileSync(path.join(root, 'workflow-web.json'), JSON.stringify(web, null, 2));
+  console.log('workflow-web.json (stránka) zapsán, nodů:', web.nodes.length);
 }
 
-module.exports = { buildBundle, buildWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, cliOptions, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT };
+module.exports = { buildBundle, buildWorkflow, buildWebWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, cliOptions, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT };

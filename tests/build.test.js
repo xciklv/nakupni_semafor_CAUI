@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { buildBundle, buildWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT } = require('../build/build-workflow');
+const { buildBundle, buildWorkflow, buildWebWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT } = require('../build/build-workflow');
 const { runInRealisticSandbox, runCodeNode } = require('./sandbox');
 
 const root = path.join(__dirname, '..');
@@ -1156,8 +1156,8 @@ const PAGE_PATH = path.join(root, 'web', 'index.html');
 const pageHtml = () => fs.readFileSync(PAGE_PATH, 'utf8');
 const CHYBA_OBECNA = 'Kontrola se nepodařila. Zkuste to prosím znovu.';
 
-test('workflow servíruje webovou stránku na GET webhooku', () => {
-  const wf = buildWorkflow({ credId: 'C', credName: 'A' });
+test('web workflow servíruje webovou stránku na GET webhooku', () => {
+  const wf = buildWebWorkflow();
   const get = wf.nodes.find((n) => n.name === 'Webhook – stránka');
   assert.equal(get.parameters.httpMethod, 'GET');
   assert.equal(get.parameters.path, 'nakupni-kontrola-web');
@@ -1166,10 +1166,10 @@ test('workflow servíruje webovou stránku na GET webhooku', () => {
   assert.ok(wf.connections['Webhook – stránka']);
 });
 
-test('workflow: GET webhook stránky má vlastní UUID a odpověď je text/html propojená na Respond', () => {
-  const wf = buildWorkflow({ credId: 'C', credName: 'A' });
+test('web workflow: GET webhook stránky má vlastní UUID a odpověď je text/html propojená na Respond', () => {
+  const wf = buildWebWorkflow();
   const get = wf.nodes.find((n) => n.name === 'Webhook – stránka');
-  const post = wf.nodes.find((n) => n.name === 'Webhook');
+  const post = buildWorkflow({ credId: 'C', credName: 'A' }).nodes.find((n) => n.name === 'Webhook');
   assert.match(get.webhookId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.notEqual(get.webhookId, post.webhookId);
   const resp = wf.nodes.find((n) => n.name === 'Respond – stránka');
@@ -1179,11 +1179,45 @@ test('workflow: GET webhook stránky má vlastní UUID a odpověď je text/html 
 });
 
 test('responseBody stránky není n8n výraz: nezačíná "=" a neobsahuje "{{"', () => {
-  const wf = buildWorkflow({ credId: 'C', credName: 'A' });
-  const body = wf.nodes.find((n) => n.name === 'Respond – stránka').parameters.responseBody;
+  const body = buildWebWorkflow().nodes.find((n) => n.name === 'Respond – stránka').parameters.responseBody;
   assert.equal(body, pageHtml());
   assert.equal(body.startsWith('='), false);
   assert.equal(body.includes('{{'), false);
+});
+
+// --- jeden webhook = jeden workflow ---
+const triggers = (wf) => wf.nodes.filter((n) => n.type === 'n8n-nodes-base.webhook');
+
+test('rozdělení: API workflow má jediný webhook (POST) a žádné nody stránky', () => {
+  const api = buildWorkflow({ credId: 'C', credName: 'N' });
+  assert.equal(api.name, 'Nákupní kontrola');
+  assert.deepEqual(triggers(api).map((n) => [n.name, n.parameters.httpMethod, n.parameters.path]), [['Webhook', 'POST', 'nakupni-kontrola']]);
+  assert.equal(api.nodes.some((n) => /stránk/.test(n.name)), false);
+  assert.equal(JSON.stringify(api).includes('<!doctype html>'), false);
+  assert.equal(JSON.stringify(api).includes('nakupni-kontrola-web'), false);
+  assert.equal(api.nodes.some((n) => n.type === 'n8n-nodes-base.respondToWebhook' && n.parameters.respondWith === 'text'), false);
+});
+
+test('rozdělení: web workflow má jediný webhook a jen Respond, žádné LLM, kód ani credentials', () => {
+  const web = buildWebWorkflow();
+  assert.equal(web.name, 'Nákupní kontrola – web');
+  assert.deepEqual(web.nodes.map((n) => n.type).sort(), ['n8n-nodes-base.respondToWebhook', 'n8n-nodes-base.webhook']);
+  assert.equal(triggers(web).length, 1);
+  assert.equal(web.nodes.some((n) => 'credentials' in n), false);
+  assert.equal(web.nodes.some((n) => n.type === 'n8n-nodes-base.httpRequest' || n.type === 'n8n-nodes-base.code'), false);
+});
+
+test('rozdělení: cesta webu = cesta API + "-web" (stránka si API odvozuje ze své adresy); webhooky se nekryjí', () => {
+  const api = triggers(buildWorkflow({ credId: 'C', credName: 'N' }))[0];
+  const web = triggers(buildWebWorkflow())[0];
+  assert.equal(web.parameters.path, api.parameters.path + '-web');
+  assert.notEqual(web.webhookId, api.webhookId);
+  assert.notEqual(web.parameters.httpMethod + web.parameters.path, api.parameters.httpMethod + api.parameters.path);
+});
+
+test('web workflow: úspěšná načtení se neukládají, chyby ano; průběh ne; executionOrder v1', () => {
+  const s = buildWebWorkflow().settings;
+  assert.deepEqual(s, { executionOrder: 'v1', saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all', saveManualExecutions: false, saveExecutionProgress: false });
 });
 
 test('stránka nepoužívá innerHTML a volá relativní API', () => {

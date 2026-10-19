@@ -1,5 +1,6 @@
 node_modules/
 workflow.json
+workflow-web.json
 eval/screens/
 eval/vysledky.json
 eval/vysledky.md
