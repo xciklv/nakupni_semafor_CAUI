@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "test": "node --test \"tests/*.test.js\"",
-    "build": "node build/build-workflow.js"
+    "build": "node build/build-workflow.js",
+    "reader": "node tools/page-reader/server.js"
   }
 }

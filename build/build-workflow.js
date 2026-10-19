@@ -7,6 +7,8 @@ const root = path.join(__dirname, '..');
 const MODEL_EXTRACT_DEFAULT = require('../engine/llm').LLM_MODEL_EXTRACT_DEFAULT;
 const MODEL_EXPLAIN_DEFAULT = require('../engine/explain').LLM_MODEL_EXPLAIN_DEFAULT;
 const CRED_NAME_DEFAULT = 'Anthropic account';
+// Čtečka stránek (tools/page-reader): lokální služba, kterou krok "Vstup a načtení" volá pro marketplace. Smí mířit jen na 127.0.0.1.
+const PAGE_READER_URL_DEFAULT = 'http://127.0.0.1:5687/read';
 
 // Spojí moduly enginu do jednoho scope; jednořádkové require/module.exports guardy odstraní.
 function buildBundle() {
@@ -38,10 +40,20 @@ function resolveModel(v, def, envName, warn = console.warn) {
   return def;
 }
 
+// Adresa čtečky stránek (PAGE_READER_URL): jen http://127.0.0.1:PORT/read; '' nebo 'off' = vypnuto; nedefinovaná = výchozí; jiná hodnota -> výchozí s varováním.
+function resolvePageReaderUrl(v, warn = console.warn) {
+  if (v === undefined || v === null) return PAGE_READER_URL_DEFAULT;
+  if (v === '' || v === 'off') return '';
+  if (typeof v === 'string' && /^http:\/\/127\.0\.0\.1:[0-9]{2,5}\/read$/.test(v)) return v;
+  warn('PAGE_READER_URL="' + String(v).slice(0, 80) + '" není http://127.0.0.1:PORT/read ani off, použije se ' + PAGE_READER_URL_DEFAULT + '.');
+  return PAGE_READER_URL_DEFAULT;
+}
+
 // Hodnota limitu a ids modelů se dosazují do zdroje glue při sestavení (v běhu Code nodu žádný přístup k env není).
 // Modely jsou ověřené regulárním výrazem (bez uvozovek a zpětných lomítek), replacer-funkce chrání před speciálními vzory v náhradě.
 const glue = (f, o = {}) => fs.readFileSync(path.join(__dirname, 'glue', f), 'utf8')
   .replace(/^(\s*const MAX_DENNE = )\d+;/m, (m, p) => p + (o.quota === undefined ? QUOTA_DEFAULT : o.quota) + ';')
+  .replace(/^(\s*const PAGE_READER_URL = )'[^']*';/m, (m, p) => p + "'" + (o.pageReaderUrl === undefined ? PAGE_READER_URL_DEFAULT : o.pageReaderUrl) + "';")
   .replace(/^(\s*const MODEL_EXTRACT = )'[^']*';/m, (m, p) => p + "'" + (o.modelExtract || MODEL_EXTRACT_DEFAULT) + "';")
   .replace(/^(\s*const MODEL_EXPLAIN = )'[^']*';/m, (m, p) => p + "'" + (o.modelExplain || MODEL_EXPLAIN_DEFAULT) + "';");
 // Code nody nesdílejí scope, proto KAŽDÝ nese celý bundle enginu.
@@ -70,8 +82,9 @@ function resolveSaveExecutions(v, warn = console.warn) {
   return SAVE_EXECUTIONS_DEFAULT;
 }
 
-function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, modelExtract, modelExplain, saveExecutions }) {
+function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, modelExtract, modelExplain, saveExecutions, pageReaderUrl }) {
   const quota = resolveQuota(quotaPerDay);
+  const reader = resolvePageReaderUrl(pageReaderUrl);
   const save = resolveSaveExecutions(saveExecutions);
   const mExtract = resolveModel(modelExtract, MODEL_EXTRACT_DEFAULT, 'LLM_MODEL_EXTRACT');
   const mExplain = resolveModel(modelExplain, MODEL_EXPLAIN_DEFAULT, 'LLM_MODEL_EXPLAIN');
@@ -80,7 +93,7 @@ function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, mode
     // takže jeho origin je 'null' a fetch na tento webhook je cross-origin.
     { id: 'Webhook', name: 'Webhook', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [80, 0], webhookId: '2477b1ff-1caf-474d-9db3-1104c8e3ca48',
       parameters: { httpMethod: 'POST', path: 'nakupni-kontrola', responseMode: 'responseNode', options: { allowedOrigins: '*' } } },
-    code('Vstup a načtení', '01-vstup.js', [224, 0], { quota }),
+    code('Vstup a načtení', '01-vstup.js', [224, 0], { quota, pageReaderUrl: reader }),
     { id: 'Stačí vstup?', name: 'Stačí vstup?', type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [368, 0],
       parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
         conditions: [{ id: 'c1', leftValue: '={{ $json.zkratka }}', rightValue: false, operator: { type: 'boolean', operation: 'false', singleValue: true } }], combinator: 'and' } } },
@@ -139,7 +152,7 @@ function buildWebWorkflow() {
 function cliOptions(env) {
   const credId = env.ANTHROPIC_CRED_ID || env.CRED_ID;
   if (!credId) return null;
-  return { credId, credName: env.ANTHROPIC_CRED_NAME || CRED_NAME_DEFAULT, quotaPerDay: env.QUOTA_PER_DAY, modelExtract: env.LLM_MODEL_EXTRACT, modelExplain: env.LLM_MODEL_EXPLAIN, saveExecutions: env.SAVE_EXECUTIONS };
+  return { credId, credName: env.ANTHROPIC_CRED_NAME || CRED_NAME_DEFAULT, quotaPerDay: env.QUOTA_PER_DAY, modelExtract: env.LLM_MODEL_EXTRACT, modelExplain: env.LLM_MODEL_EXPLAIN, saveExecutions: env.SAVE_EXECUTIONS, pageReaderUrl: env.PAGE_READER_URL };
 }
 
 if (require.main === module) {
@@ -153,4 +166,4 @@ if (require.main === module) {
   console.log('workflow-web.json (stránka) zapsán, nodů:', web.nodes.length);
 }
 
-module.exports = { buildBundle, buildWorkflow, buildWebWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, cliOptions, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT };
+module.exports = { buildBundle, buildWorkflow, buildWebWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, resolvePageReaderUrl, cliOptions, PAGE_READER_URL_DEFAULT, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT };
