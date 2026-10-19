@@ -29,8 +29,8 @@ function explainUnchecked(verdict) {
   return mods.map((k) => MODULE_NAMES[k]).concat(skipped.map((x) => MODULE_NAMES.seller + ': ' + x));
 }
 
-// Výchozí model vysvětlení: dokumentace OpenAI, "GPT-6 Luna for cost-sensitive, high-volume workloads" (podporuje reasoning_effort 'none'). Build ho může přepsat (LLM_MODEL_EXPLAIN).
-const LLM_MODEL_EXPLAIN_DEFAULT = 'gpt-6-luna';
+// Výchozí model vysvětlení: Claude Haiku 5.5 (krátký český text z hotového verdiktu). Build ho může přepsat (LLM_MODEL_EXPLAIN).
+const LLM_MODEL_EXPLAIN_DEFAULT = 'claude-haiku-5-5';
 const EXPLAIN_SCHEMA = { type: 'object', properties: { shrnuti: { type: 'string' }, co_delat: { type: 'array', items: { type: 'string' } } }, required: ['shrnuti', 'co_delat'], additionalProperties: false };
 
 function buildExplainRequest(verdict, signals, model) {
@@ -39,13 +39,14 @@ function buildExplainRequest(verdict, signals, model) {
     nezkontrolovano: explainUnchecked(verdict),
     signaly: signals.map((s) => ({ zavaznost: s.severity, titul: s.title, dukaz: s.evidence })),
   };
-  // Luna s reasoning_effort 'none' nepřemýšlí, takže max_completion_tokens 1500 je jen rezerva na JSON; temperature se neposílá.
+  // Bez 'thinking' (Sonnet i Opus 5.5 ho nejdou vypnout, takže stejný požadavek projde na každém modelu řady 5.5); effort 'low' drží myšlení krátké.
+  // max_tokens 4000 počítá i tokeny myšlení; temperature se neposílá (nestandardní hodnota = 400).
   return {
     model: model || LLM_MODEL_EXPLAIN_DEFAULT,
-    max_completion_tokens: 1500,
-    reasoning_effort: 'none',
-    response_format: { type: 'json_schema', json_schema: { name: 'vysvetleni_kontroly', strict: true, schema: EXPLAIN_SCHEMA } },
-    messages: [{ role: 'system', content: SYSTEM_EXPLAIN }, { role: 'user', content: JSON.stringify(payload) }],
+    max_tokens: 4000,
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: EXPLAIN_SCHEMA } },
+    system: SYSTEM_EXPLAIN,
+    messages: [{ role: 'user', content: JSON.stringify(payload) }],
   };
 }
 

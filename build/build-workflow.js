@@ -6,7 +6,7 @@ const root = path.join(__dirname, '..');
 // Výchozí modely mají jediný zdroj pravdy v enginu (testované konstanty).
 const MODEL_EXTRACT_DEFAULT = require('../engine/llm').LLM_MODEL_EXTRACT_DEFAULT;
 const MODEL_EXPLAIN_DEFAULT = require('../engine/explain').LLM_MODEL_EXPLAIN_DEFAULT;
-const CRED_NAME_DEFAULT = 'OpenAI account';
+const CRED_NAME_DEFAULT = 'Anthropic account';
 
 // Spojí moduly enginu do jednoho scope; jednořádkové require/module.exports guardy odstraní.
 function buildBundle() {
@@ -31,7 +31,7 @@ function resolveQuota(v, warn = console.warn) {
 function resolveModel(v, def, envName, warn = console.warn) {
   if (v === undefined || v === null || v === '') return def;
   if (typeof v === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(v)) {
-    if (!v.startsWith('gpt-6')) warn(envName + ': ' + v + ' is not a GPT-6 model; the request always sends reasoning_effort (low for extraction, none for explanation) and may be rejected with HTTP 400 — override only with GPT-6 models that accept these values.');
+    if (!v.startsWith('claude-')) warn(envName + ': ' + v + ' is not a Claude model; the request always sends output_config (effort low, json_schema format) and may be rejected with HTTP 400 — override only with Claude 5.5 models (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5).');
     return v;
   }
   warn(envName + '="' + String(v).slice(0, 80) + '" není platné id modelu (A-Z a-z 0-9 . _ : -, 1..64 znaků), použije se ' + def + '.');
@@ -52,16 +52,27 @@ const code = (name, file, pos, o) => ({
 const llm = (name, pos, credId, credName) => ({
   id: name, name, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: pos, onError: 'continueRegularOutput',
   parameters: {
-    method: 'POST', url: 'https://api.openai.com/v1/chat/completions',
-    authentication: 'predefinedCredentialType', nodeCredentialType: 'openAiApi',
+    method: 'POST', url: 'https://api.anthropic.com/v1/messages',
+    authentication: 'predefinedCredentialType', nodeCredentialType: 'anthropicApi',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'anthropic-version', value: '2023-06-01' }] },
     sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.llmRequest) }}',
     options: { timeout: 60000 },
   },
-  credentials: { openAiApi: { id: credId, name: credName } },
+  credentials: { anthropicApi: { id: credId, name: credName } },
 });
 
-function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, modelExtract, modelExplain }) {
+// Ukládání exekucí (volba SAVE_EXECUTIONS): 'all' = ukládá se vše (ladění, výchozí), 'none' = nic se po doběhu neukládá (soukromí).
+const SAVE_EXECUTIONS_DEFAULT = 'all';
+function resolveSaveExecutions(v, warn = console.warn) {
+  if (v === undefined || v === null || v === '') return SAVE_EXECUTIONS_DEFAULT;
+  if (v === 'all' || v === 'none') return v;
+  warn('SAVE_EXECUTIONS="' + String(v).slice(0, 40) + '" není all ani none, použije se ' + SAVE_EXECUTIONS_DEFAULT + '.');
+  return SAVE_EXECUTIONS_DEFAULT;
+}
+
+function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, modelExtract, modelExplain, saveExecutions }) {
   const quota = resolveQuota(quotaPerDay);
+  const save = resolveSaveExecutions(saveExecutions);
   const mExtract = resolveModel(modelExtract, MODEL_EXTRACT_DEFAULT, 'LLM_MODEL_EXTRACT');
   const mExplain = resolveModel(modelExplain, MODEL_EXPLAIN_DEFAULT, 'LLM_MODEL_EXPLAIN');
   const nodes = [
@@ -108,24 +119,25 @@ function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, mode
   };
   return { name: 'Nákupní kontrola', nodes, connections, settings: {
     executionOrder: 'v1',
-    // Soukromí: nabídky, screenshoty a výsledky se v n8n po doběhu neukládají.
-    saveDataSuccessExecution: 'none', saveDataErrorExecution: 'none', saveManualExecutions: false, saveExecutionProgress: false,
+    // Ukládání exekucí řídí SAVE_EXECUTIONS: 'all' (výchozí, ladění; rozhodnutí 2026-10-17) ukládá nabídky, screenshoty i výsledky lokálně v n8n,
+    // 'none' nic neukládá (soukromí). Průběh se neukládá ani v jednom režimu.
+    saveDataSuccessExecution: save, saveDataErrorExecution: save, saveManualExecutions: save === 'all', saveExecutionProgress: false,
   } };
 }
 
-// Volby sestavení z prostředí. Bez id credentialu (OPENAI_CRED_ID, záloha CRED_ID) vrací null.
+// Volby sestavení z prostředí. Bez id credentialu (ANTHROPIC_CRED_ID, záloha CRED_ID) vrací null.
 function cliOptions(env) {
-  const credId = env.OPENAI_CRED_ID || env.CRED_ID;
+  const credId = env.ANTHROPIC_CRED_ID || env.CRED_ID;
   if (!credId) return null;
-  return { credId, credName: env.OPENAI_CRED_NAME || CRED_NAME_DEFAULT, quotaPerDay: env.QUOTA_PER_DAY, modelExtract: env.LLM_MODEL_EXTRACT, modelExplain: env.LLM_MODEL_EXPLAIN };
+  return { credId, credName: env.ANTHROPIC_CRED_NAME || CRED_NAME_DEFAULT, quotaPerDay: env.QUOTA_PER_DAY, modelExtract: env.LLM_MODEL_EXTRACT, modelExplain: env.LLM_MODEL_EXPLAIN, saveExecutions: env.SAVE_EXECUTIONS };
 }
 
 if (require.main === module) {
   const opts = cliOptions(process.env);
-  if (!opts) { console.error('Nastav OPENAI_CRED_ID (id OpenAI credentialu typu openAiApi z n8n; záloha: CRED_ID).'); process.exit(1); }
+  if (!opts) { console.error('Nastav ANTHROPIC_CRED_ID (id credentialu typu anthropicApi z n8n; záloha: CRED_ID).'); process.exit(1); }
   const wf = buildWorkflow(opts);
   fs.writeFileSync(path.join(root, 'workflow.json'), JSON.stringify(wf, null, 2));
   console.log('workflow.json zapsán, nodů:', wf.nodes.length);
 }
 
-module.exports = { buildBundle, buildWorkflow, resolveQuota, resolveModel, cliOptions, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT };
+module.exports = { buildBundle, buildWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, cliOptions, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT };

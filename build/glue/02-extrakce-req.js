@@ -1,5 +1,5 @@
 // Id modelu se dosazuje při sestavení (LLM_MODEL_EXTRACT); výchozí hodnota = LLM_MODEL_EXTRACT_DEFAULT v engine/llm.js.
-const MODEL_EXTRACT = 'gpt-6.1-sol';
+const MODEL_EXTRACT = 'claude-haiku-5-5';
 try {
   const c = $input.first().json;
   return [{ json: { llmRequest: buildExtractRequest(c.input, c.pageText, MODEL_EXTRACT) } }];

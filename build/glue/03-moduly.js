@@ -1,5 +1,5 @@
 // Id modelu vysvětlení se dosazuje při sestavení (LLM_MODEL_EXPLAIN); výchozí hodnota = LLM_MODEL_EXPLAIN_DEFAULT v engine/explain.js.
-const MODEL_EXPLAIN = 'gpt-6-luna';
+const MODEL_EXPLAIN = 'claude-haiku-5-5';
 // Safety Gate je volitelné obohacení: jakákoli chyba/timeout/divná odpověď = žádný signál. Deadline je celkový (wall-clock), request má vlastní timeout 8 s.
 const SAFETY_GATE_DEADLINE_MS = 9000;
 // Wall-clock deadline zdrojů prodejce (n8n timeout je jen idle/socket timeout; pomalý server by kontrolu držel déle). Deadline = selhání zdroje.
