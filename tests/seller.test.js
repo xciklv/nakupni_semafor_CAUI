@@ -362,3 +362,140 @@ test('s externím zdrojem (ČOI) stačí modul prodejce i bez údajů z nabídky
   assert.equal(r.external, true);
   assert.equal(r.status, 'ok');
 });
+
+// --- VIES (ověření DIČ) a datum vzniku firmy z ARES ---
+// Pole dic dodává extrakce až v Tasku 4, proto se tady dosazuje ručně.
+const XD = (prodejce) => { const x = X(prodejce); x.prodejce.dic = prodejce.dic; return x; };
+const viesOk = async () => ({ isValid: true, userError: 'VALID', name: 'ČEZ, a. s.', address: 'Duhová 1444/2\nPRAHA 4' });
+const runVies = (prodejce, o = {}) => sellerSignals({
+  x: XD(prodejce), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, coiList: null,
+  fetchers: { vies: viesOk }, ...o,
+});
+
+test('VIES: platné DIČ a shodné jméno → žádný nález, external a status ok; volá se (cc, číslo)', async () => {
+  const calls = [];
+  const r = await runVies({ nazev: 'ČEZ Prodej s.r.o.', dic: 'CZ45274649' }, { fetchers: { vies: async (cc, cislo) => { calls.push([cc, cislo]); return { isValid: true, name: 'ČEZ, a. s.' }; } } });
+  assert.deepEqual(calls, [['CZ', '45274649']]);
+  assert.deepEqual(ids(r), []);
+  assert.equal(r.external, true);
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(r.skipped, []);
+});
+
+test('VIES: DIČ s mezerami a malými písmeny se před dotazem upraví', async () => {
+  const calls = [];
+  await runVies({ dic: ' cz 4527 4649 ' }, { fetchers: { vies: async (cc, cislo) => { calls.push([cc, cislo]); return { isValid: true }; } } });
+  assert.deepEqual(calls, [['CZ', '45274649']]);
+});
+
+test('VIES: isValid:false → dic_neplatne (medium), ale zdroj se počítá jako externí kontrola', async () => {
+  const r = await runVies({ nazev: 'Firma', dic: 'CZ12345678' }, { fetchers: { vies: async () => ({ isValid: false, userError: 'INVALID' }) } });
+  const s = r.signals.find((x) => x.id === 'dic_neplatne');
+  assert.ok(s);
+  assert.equal(s.severity, 'medium');
+  assert.equal(s.source, 'VIES');
+  assert.match(s.evidence, /CZ12345678/);
+  assert.equal(r.external, true);
+  assert.equal(r.status, 'ok');
+});
+
+test('VIES: platné DIČ, ale jméno nesdílí žádné slovo delší než 3 znaky → dic_jmeno_nesedi (low, rozpor)', async () => {
+  const r = await runVies({ nazev: 'Super Shop Praha', dic: 'CZ45274649' }, { fetchers: { vies: async () => ({ isValid: true, name: 'Alfa Beta s.r.o.' }) } });
+  const s = r.signals.find((x) => x.id === 'dic_jmeno_nesedi');
+  assert.ok(s);
+  assert.equal(s.severity, 'low');
+  assert.equal(s.druh, 'rozpor');
+  assert.equal(s.citace, 'Super Shop Praha');
+  assert.ok(s.vysvetleni && s.otazka);
+  assert.ok(!ids(r).includes('dic_neplatne'));
+});
+
+test('VIES: jméno se porovnává bez diakritiky a velikosti písmen; slova do 3 znaků (a., s., ČEZ) nerozhodují', async () => {
+  const same = await runVies({ nazev: 'CEZ DISTRIBUCE', dic: 'CZ12345678' }, { fetchers: { vies: async () => ({ isValid: true, name: 'ČEZ Distribuce, a. s.' }) } });
+  assert.deepEqual(ids(same), []);
+  const onlyShort = await runVies({ nazev: 'ČEZ s.r.o.', dic: 'CZ45274649' }, { fetchers: { vies: async () => ({ isValid: true, name: 'ČEZ, a. s.' }) } });
+  assert.deepEqual(ids(onlyShort), [], 'bez slova delšího než 3 znaky nelze porovnat, takže bez nálezu');
+});
+
+test('VIES: jméno z VIES chybí, je "---" nebo prodejce.nazev chybí → bez nálezu o jménu', async () => {
+  for (const [nazev, name] of [['Super Shop', undefined], ['Super Shop', '---'], ['Super Shop', ''], [null, 'ČEZ, a. s.']]) {
+    const r = await runVies({ nazev, dic: 'CZ45274649' }, { fetchers: { vies: async () => ({ isValid: true, name }) } });
+    assert.deepEqual(ids(r), [], String(name));
+    assert.equal(r.external, true);
+  }
+});
+
+test('VIES: selhání (vyhodí, nepoužitelná odpověď, userError členského státu) → skipped VIES, žádný nález', async () => {
+  const boom = async () => { throw new Error('VIES 503'); };
+  const a = await runVies({ hodnoceni: 4.8, dic: 'CZ45274649' }, { fetchers: { vies: boom } });
+  assert.deepEqual(a.skipped, ['VIES']);
+  assert.deepEqual(ids(a), []);
+  assert.equal(a.external, false);
+  assert.equal(a.status, 'unchecked', 'jediný údaj o prodejci bez externí kontroly');
+  for (const body of [null, 'oops', 5, [], {}, { isValid: 'yes' }, { isValid: false, userError: 'MS_UNAVAILABLE' }, { isValid: false, userError: 'TIMEOUT' }]) {
+    const r = await runVies({ nazev: 'X Shop', dic: 'CZ45274649' }, { fetchers: { vies: async () => body } });
+    assert.deepEqual(r.skipped, ['VIES'], JSON.stringify(body));
+    assert.deepEqual(ids(r), [], JSON.stringify(body));
+    assert.equal(r.external, false);
+  }
+  const noFn = await runVies({ dic: 'CZ45274649' }, { fetchers: {} });
+  assert.deepEqual(noFn.skipped, ['VIES'], 'chybějící fetchers.vies je nedostupný zdroj, ne výjimka');
+  const ok = await runVies({ hodnoceni: 4.8, dic: 'CZ45274649' }, { fetchers: { rdap: OLD, vies: boom }, rezim: 'eshop', host: 'x.cz', coiList: {} });
+  assert.deepEqual(ok.skipped, ['VIES']);
+  assert.equal(ok.status, 'ok', 'ČOI stačí');
+});
+
+test('VIES: bez dic nebo s DIČ jiného tvaru se vies nevolá a nic se nezapíše do skipped', async () => {
+  let called = 0;
+  const f = { vies: async () => { called++; return { isValid: true }; } };
+  for (const dic of [undefined, null, '', 'CZ', 'C1234', '12345678', 'CZ12345678901234', 'CZ 12-34']) {
+    const r = await runVies({ hodnoceni: 4.8, dic }, { fetchers: f });
+    assert.deepEqual(r.skipped, [], String(dic));
+  }
+  assert.equal(called, 0);
+});
+
+test('VIES: běží souběžně s RDAP a ARES', async () => {
+  const started = [];
+  let release;
+  const gate = new Promise((res) => { release = res; });
+  const p = sellerSignals({
+    x: XD({ ico: '27082440', dic: 'CZ27082440' }), rezim: 'eshop', host: 'x.cz', nowMs: NOW, coiList: {},
+    fetchers: {
+      rdap: () => { started.push('rdap'); return gate.then(() => rdap('2000-01-01T00:00:00+00:00')); },
+      ares: () => { started.push('ares'); return gate.then(() => ({})); },
+      vies: () => { started.push('vies'); return gate.then(() => ({ isValid: true })); },
+    },
+  });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(started.slice().sort(), ['ares', 'rdap', 'vies']);
+  release();
+  assert.deepEqual((await p).skipped, []);
+});
+
+test('ARES: datumVzniku před 30 dny → firma_nova (medium); od 180 dní výš ne', async () => {
+  const day = (n) => new Date(NOW - n * 86400000).toISOString().slice(0, 10);
+  const run1 = (datumVzniku) => run({ ico: '27082440' }, { fetchers: { rdap: OLD, ares: async () => ({ obchodniJmeno: 'Nová s.r.o.', datumVzniku }) } });
+  const s = (await run1(day(30))).signals.find((x) => x.id === 'firma_nova');
+  assert.ok(s);
+  assert.equal(s.severity, 'medium');
+  assert.equal(s.source, 'ARES');
+  assert.match(s.evidence, /30 dn/);
+  assert.ok(ids(await run1(day(179))).includes('firma_nova'));
+  assert.ok(!ids(await run1(day(180))).includes('firma_nova'));
+  assert.ok(!ids(await run1('1992-05-06')).includes('firma_nova'));
+});
+
+test('ARES: nepoužitelné nebo budoucí datumVzniku se ignoruje', async () => {
+  for (const datumVzniku of [undefined, null, 'ne datum', 20260101, '2027-01-01']) {
+    const r = await run({ ico: '27082440' }, { fetchers: { rdap: OLD, ares: async () => ({ datumVzniku }) } });
+    assert.ok(!ids(r).includes('firma_nova'), String(datumVzniku));
+    assert.deepEqual(r.skipped, []);
+  }
+});
+
+test('ARES: zaniklá firma dává subjekt_zanikl, ne firma_nova', async () => {
+  const r = await run({ ico: '27082440' }, { fetchers: { rdap: OLD, ares: async () => ({ obchodniJmeno: 'X', datumVzniku: '2026-10-01', datumZaniku: '2026-10-10' }) } });
+  assert.ok(ids(r).includes('subjekt_zanikl'));
+  assert.ok(!ids(r).includes('firma_nova'));
+});

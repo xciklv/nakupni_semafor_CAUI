@@ -101,8 +101,33 @@ const sellerAgo = (n) => (n === 0 ? 'dnes' : 'před ' + n + (n === 1 ? ' dnem' :
 const sellerDays = (n) => n + (n === 1 ? ' den' : Number.isInteger(n) && n >= 2 && n <= 4 ? ' dny' : ' dní');
 const sellerDec = (n) => String(n).replace('.', ',');
 
-// Vrací { status, signals, external, skipped }: external = uspěl aspoň jeden externí zdroj (RDAP, ČOI, ARES),
+// DIČ ve tvaru VIES (dvoupísmenný kód státu + 2 až 12 znaků): { cc, cislo } nebo null. Mezery a malá písmena se tolerují.
+function sellerVatParts(dic) {
+  const v = typeof dic === 'string' ? dic.replace(/\s+/g, '').toUpperCase() : '';
+  return /^[A-Z]{2}[0-9A-Z]{2,12}$/.test(v) ? { cc: v.slice(0, 2), cislo: v.slice(2) } : null;
+}
+
+// Slova delší než 3 znaky, malými písmeny a bez diakritiky (kratší jako "a.", "s.", "spol" nerozhodují).
+function sellerWords(name) {
+  return String(name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3);
+}
+
+// Odpověď VIES je použitelná, má-li boolean isValid a nehlásí chybu členského státu (userError jiné než VALID/INVALID, např. MS_UNAVAILABLE).
+function sellerViesUsable(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v) || typeof v.isValid !== 'boolean') return false;
+  return v.userError === undefined || v.userError === 'VALID' || v.userError === 'INVALID';
+}
+
+// Stáří firmy ve dnech z ARES datumVzniku (YYYY-MM-DD); budoucí nebo nečitelné datum = null.
+function sellerCompanyAgeDays(datumVzniku, nowMs) {
+  const t = typeof datumVzniku === 'string' && /^\d{4}-\d{2}-\d{2}/.test(datumVzniku) ? Date.parse(datumVzniku) : NaN;
+  const age = Number.isFinite(t) ? Math.floor((nowMs - t) / 86400000) : null;
+  return age !== null && age >= 0 ? age : null;
+}
+
+// Vrací { status, signals, external, skipped }: external = uspěl aspoň jeden externí zdroj (RDAP, ČOI, ARES, VIES),
 // skipped = zdroje, které se zkusily, ale nebyly dostupné. coiList smí být i promise (seznam ČOI se stahuje souběžně).
+// fetchers.vies(cc, cislo) vrací { isValid, name?, address? } (DIČ z x.prodejce.dic).
 async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
   const out = [];
   const skipped = [];
@@ -114,11 +139,14 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
   const rdapOn = eshopHost && registrable(host).indexOf('.') !== -1;
   const icoValid = !!s.ico && isValidIco(s.ico);
 
-  // RDAP, seznam ČOI a ARES se čekají souběžně; každá větev si chybu ošetří sama.
-  const [rdapRes, coiRes, aresRes] = await Promise.all([
+  const vat = sellerVatParts(s.dic);
+
+  // RDAP, seznam ČOI, ARES a VIES se čekají souběžně; každá větev si chybu ošetří sama.
+  const [rdapRes, coiRes, aresRes, viesRes] = await Promise.all([
     rdapOn ? sellerTry(() => fetchers.rdap(host)) : null,
     sellerTry(() => coiList),
     icoValid ? sellerTry(() => fetchers.ares(s.ico)) : null,
+    vat ? sellerTry(() => fetchers.vies(vat.cc, vat.cislo)) : null,
   ]);
 
   if (rdapOn) {
@@ -150,8 +178,35 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
         external = true;
         if (body === null) add('ico_neexistuje', 'low', 'IČO nenalezeno v českém registru ARES', 'IČO nebylo nalezeno v českém registru ARES; u zahraničních (např. slovenských) firem je to běžné.', 'ARES');
         else if (typeof body.datumZaniku === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.datumZaniku)) add('subjekt_zanikl', 'high', 'Uvedený subjekt zanikl', (body.obchodniJmeno || s.ico) + ' zanikl dne ' + body.datumZaniku + '.', 'ARES');
+        else {
+          const age = sellerCompanyAgeDays(body.datumVzniku, nowMs);
+          if (age !== null && age < 180) add('firma_nova', 'medium', 'Firma vznikla nedávno', (body.obchodniJmeno || s.ico) + ' vznikla dne ' + body.datumVzniku.slice(0, 10) + ' (' + sellerAgo(age) + ').', 'ARES');
+        }
       } else skipped.push('ARES');
     }
+  }
+
+  if (vat) {
+    const v = viesRes.ok ? viesRes.value : null;
+    if (sellerViesUsable(v)) {
+      checks++;
+      external = true;
+      const shown = vat.cc + vat.cislo;
+      if (!v.isValid) add('dic_neplatne', 'medium', 'DIČ není platné', 'DIČ ' + shown + ' není ve VIES vedeno jako platné.', 'VIES');
+      else {
+        const seen = sellerWords(v.name);
+        const own = sellerWords(s.nazev);
+        if (seen.length && own.length && !seen.some((w) => own.includes(w))) {
+          out.push(signal({
+            id: 'dic_jmeno_nesedi', module: 'seller', severity: 'low', title: 'Jméno u DIČ nesedí s prodejcem',
+            evidence: 'DIČ ' + shown + ' patří podle VIES firmě ' + v.name + ', prodejce se jmenuje ' + s.nazev + '.', source: 'VIES',
+            druh: 'rozpor', citace: s.nazev,
+            vysvetleni: 'Jméno firmy u uvedeného DIČ se liší od jména prodejce. Může jít o jinou obchodní značku téže firmy, ale také o cizí DIČ.',
+            otazka: 'Pod jakou firmou prodáváte a jaké je její DIČ?',
+          }));
+        }
+      }
+    } else skipped.push('VIES');
   }
 
   const known = (v) => v !== null && v !== undefined;
