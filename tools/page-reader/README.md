@@ -29,6 +29,8 @@ nebo `PLAYWRIGHT_PATH=<cesta k modulu playwright>` (jinak se zkusí `playwright`
 | Požadavek | Odpověď |
 |---|---|
 | `POST /read` s hlavičkou `X-Nakupni-Kontrola: 1` a tělem `{"url":"https://…"}` | `{ok:true, text, title, finalUrl, status, ms}` nebo `{ok:false, duvod}` |
+| `POST /collect`, tělo `{"url":"https://…"}` (stejná hlavička) | `{ok:true, dossier}` (tvar `nakupni-kontrola/dossier@0-spike` ze sběrače `tools/page-collector`, přijme ho `normalizeDossier`) nebo `{ok:false, duvod, blokace?:{druh, dodavatel}}`; `blokace` je vyplněna, když stránka vyžaduje ověření (CAPTCHA) nebo přihlášení |
+| `POST /images`, tělo `{"urls":["https://…", …]}` (1 až 8 adres, jen `https:`) | `{ok:true, obrazky:[{url, mime:'image/jpeg', data /* base64, delší strana nejvýše 768 px */, dhash /* 16 hex */}], vynechano?:[{url, duvod}]}`; nestažitelný obrázek se vynechá a vypíše do `vynechano` |
 | `GET /health` | `{ok:true}` |
 
 ## Bezpečnost
@@ -38,6 +40,7 @@ nebo `PLAYWRIGHT_PATH=<cesta k modulu playwright>` (jinak se zkusí `playwright`
   http(s); jména se překládají a odmítne se vše, co míří na interní, loopback, link-local nebo jinak neveřejnou adresu
   (včetně IPv6 a wildcard-DNS služeb typu nip.io).
 - Obrázky, média a písma se nenačítají (zrychlení; text nabídky je v HTML).
+- Obrázky (`/images`): každá adresa i každý krok přesměrování se kontroluje (SSRF), přesměrování se nenásledují automaticky, jen `https:`, jen typy `image/*` (bez SVG), originál nejvýše 12 MB, 10 s na stažení. Zmenšení a dHash dělá Chromium bez sítě (`about:blank`).
 - Jeden požadavek najednou, nejvýše dva čekají, pak `429`. Tvrdý limit 40 s na stránku, text max. 15 000 znaků.
 - **Žádné obcházení ochrany proti robotům.** Pokud stránka vyžaduje ověření (CAPTCHA, „unusual traffic“), čtečka to jen
   nahlásí (`ok:false`) a workflow se vrátí k obyčejnému stažení / výzvě ke screenshotu.

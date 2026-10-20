@@ -5,8 +5,11 @@ const FETCH_DEADLINE_MS = 10000;
 const FETCH_HEAD_DEADLINE_MS = 5000;
 // Čtečka stránek (tools/page-reader): lokální služba se skutečným prohlížečem. Marketplace se kreslí JavaScriptem, obyčejné stažení z nich
 // dostane jen kostru bez ceny, prodejce a recenzí. Adresa se dosazuje při sestavení (PAGE_READER_URL); prázdný řetězec = vypnuto.
+// Marketplace jde nejdřív přes /collect (dossier důkazů: cena, varianty, specifikace, recenze, prodejce); adresa se odvodí z PAGE_READER_URL.
+// Když /collect vrátí blokaci (CAPTCHA, přihlášení), jede obyčejné stažení a blokace se předá dál; když služba odpoví bez dossieru, zkusí se ještě /read.
 // Běží-li služba hůř nebo vůbec, pokračuje se obyčejným stažením jako dřív.
 const PAGE_READER_URL = 'http://127.0.0.1:5687/read';
+const PAGE_COLLECT_URL = PAGE_READER_URL.replace(/\/read$/, '/collect');
 const PAGE_READER_DEADLINE_MS = 45000;
 const PAGE_READER_MAX_CHARS = 15000;
 const PAGE_READER_MIN_CHARS = 300;
@@ -25,6 +28,8 @@ try {
   const input = v.input;
   let pageText = '';
   let pageStatus = 'bez_odkazu';
+  let dossier = null;
+  let blokace = null;
   if (input.url) {
     // Deadline: abortSignal (zastaví stahování, pokud ho runtime předá) + Promise.race (omezí čekání v každém případě).
     const abortSignal = (ms) => (typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined);
@@ -36,16 +41,34 @@ try {
       try { return await Promise.race([req, deadline]); } finally { clearTimeout(timer); }
     };
     // Marketplace nejdřív přes čtečku (skutečný prohlížeč). Adresa už prošla normalizeUrl; čtečka ji kontroluje znovu (SSRF) i u každého podpožadavku.
+    const readerCall = async (url) => {
+      const r = await call({ method: 'POST', url, headers: { 'X-Nakupni-Kontrola': '1' }, body: { url: input.url.url }, json: true,
+        timeout: PAGE_READER_DEADLINE_MS, abortSignal: abortSignal(PAGE_READER_DEADLINE_MS), ignoreHttpStatusErrors: true, returnFullResponse: true }, PAGE_READER_DEADLINE_MS);
+      const b = r && r.statusCode === 200 ? r.body : null;
+      return b && typeof b === 'object' && !Array.isArray(b) ? b : null;
+    };
     if (PAGE_READER_URL && input.url.rezim === 'marketplace') {
+      let sluzbaOdpovedela = false;
       try {
-        const r = await call({ method: 'POST', url: PAGE_READER_URL, headers: { 'X-Nakupni-Kontrola': '1' }, body: { url: input.url.url }, json: true,
-          timeout: PAGE_READER_DEADLINE_MS, abortSignal: abortSignal(PAGE_READER_DEADLINE_MS), ignoreHttpStatusErrors: true, returnFullResponse: true }, PAGE_READER_DEADLINE_MS);
-        const b = r && r.statusCode === 200 ? r.body : null;
-        if (b && b.ok === true && typeof b.text === 'string' && b.text.length >= PAGE_READER_MIN_CHARS) {
-          pageText = b.text.slice(0, PAGE_READER_MAX_CHARS);
+        const b = await readerCall(PAGE_COLLECT_URL);
+        if (b && b.ok === true && b.dossier && typeof b.dossier === 'object' && !Array.isArray(b.dossier)) {
+          dossier = b.dossier;
           pageStatus = 'nacteno';
+        } else if (b && b.blokace && typeof b.blokace === 'object' && !Array.isArray(b.blokace)) {
+          blokace = { druh: String(b.blokace.druh || 'neznámá').slice(0, 40), dodavatel: b.blokace.dodavatel ? String(b.blokace.dodavatel).slice(0, 60) : null };
+        } else if (b) {
+          sluzbaOdpovedela = true;
         }
       } catch (e) { /* služba neběží nebo vypršel čas: pokračuje se obyčejným stažením */ }
+      if (sluzbaOdpovedela) {
+        try {
+          const b = await readerCall(PAGE_READER_URL);
+          if (b && b.ok === true && typeof b.text === 'string' && b.text.length >= PAGE_READER_MIN_CHARS) {
+            pageText = b.text.slice(0, PAGE_READER_MAX_CHARS);
+            pageStatus = 'nacteno';
+          }
+        } catch (e) { /* vypršel čas: pokračuje se obyčejným stažením */ }
+      }
     }
     if (pageStatus !== 'nacteno') {
       try {
@@ -85,10 +108,12 @@ try {
   const hasContent = input.text || input.screenshoty.length || pageStatus === 'nacteno';
   const hostCheckable = input.url && input.url.rezim === 'eshop';
   if (!hasContent && !hostCheckable) {
-    const zprava = 'Stránku se nepodařilo načíst (marketplace často blokují automatické čtení). Vložte prosím screenshot nabídky nebo zkopírovaný text.';
+    const zprava = blokace
+      ? 'Stránka vyžaduje ověření nebo přihlášení, takže ji nelze načíst automaticky. Vložte prosím screenshot nabídky nebo zkopírovaný text.'
+      : 'Stránku se nepodařilo načíst (marketplace často blokují automatické čtení). Vložte prosím screenshot nabídky nebo zkopírovaný text.';
     return [{ json: { zkratka: true, status: 200, odpoved: needMoreInput(zprava) } }];
   }
-  return [{ json: { zkratka: false, input, pageText, rezim: input.url ? input.url.rezim : 'neznámé', host: input.url ? input.url.host : null, obsah: !!hasContent } }];
+  return [{ json: { zkratka: false, input, pageText, rezim: input.url ? input.url.rezim : 'neznámé', host: input.url ? input.url.host : null, obsah: !!hasContent, dossier, blokace } }];
 } catch (e) {
   // Žádné detaily chyby ven: obecná hláška, aby webhook nikdy neodpověděl prázdným 200.
   return [{ json: { zkratka: true, status: 500, odpoved: { stav: 'chyba', chyba: 'Kontrola se nepodařila. Zkuste to prosím znovu.' } } }];
