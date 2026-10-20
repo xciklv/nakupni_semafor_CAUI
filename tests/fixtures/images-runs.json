@@ -1,0 +1,436 @@
+{
+ "popis": "Tři běhy Claude Haiku 5.5 (prompt v2, obrázky 768 px) nad nabídkou AliExpress s cyklosvítilnou (dossier-cyklosvitilna.json), uložené při spiku 2026-10-20. Jen odpovědi modelu, žádná data obrázků.",
+ "model": "claude-haiku-5-5",
+ "behy": [
+  {
+   "obrazky": [
+    {
+     "n": 1,
+     "co_je_videt": "Černé cyklistické světlo s řadou bílých LED a malým displejem namontované na řídítkách kola, s pozadím v tmavých tónech.",
+     "precteny_text": [
+      "VASTFIRE",
+      "10000 mAh",
+      "MAX 12000 LM",
+      "0:30"
+     ],
+     "typ_snimku": "katalogovy_snimek_nebo_render",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 2,
+     "co_je_videt": "Světlo v podélné i svislé poloze s osmi LED, nahoře seznam čtyř režimů svícení s ikonami a dole časy výdrže na jednotlivých režimech.",
+     "precteny_text": [
+      "4 lighting modes",
+      "Floodlight",
+      "Spotlight",
+      "High Light",
+      "Flash",
+      "7.5H",
+      "7H",
+      "4.5-5H",
+      "9H"
+     ],
+     "typ_snimku": "infografika",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 3,
+     "co_je_videt": "Detail těla světla s digitálním displejem a zeleným tlačítkem napájení, nad ním grafika s údaji o době provozu a stavu baterie.",
+     "precteny_text": [
+      "Digital Display",
+      "Display1: Use Time",
+      "Display2: Power %",
+      "07:00",
+      "100",
+      "Recharge (%) : 0-100",
+      "Floodlight about 7.5h",
+      "Spotlight about 7h",
+      "High Light about 4.5-5h",
+      "Flash about 9h"
+     ],
+     "typ_snimku": "infografika",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 4,
+     "co_je_videt": "Černé světlo ležící na šestiúhelníkové podložce vedle smartphonu s nabíjecí obrazovkou a notebooku, s modrým USB kabelem.",
+     "precteny_text": [
+      "TYPE-C Reverse Charging",
+      "Power Bank",
+      "10000 mAh, it is re-opened for TYPE-C, and supports reverse charging at the same time, which can supply power to avarietyofdevices",
+      "75% Charged"
+     ],
+     "typ_snimku": "infografika",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 5,
+     "co_je_videt": "Ruka drží černé podlouhlé světlo se zeleným tlačítkem a displejem, vpravo detailní záběr na matný povrch.",
+     "precteny_text": [
+      "Fits The Hand Shape Comfortable To Hold",
+      "Easy To Hold",
+      "Tiny frosted particles",
+      "VASTFIRE",
+      "0:30"
+     ],
+     "typ_snimku": "realna_fotka",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 6,
+     "co_je_videt": "Čtyřdílný návod ukazující montáž základny a svítilny na řídítka kola.",
+     "precteny_text": [
+      "Step1: Put the base over the handlebar (place spacers as needed)",
+      "Step2: Adjust the position and tighten the basescrews",
+      "Step3: Install the first twobracketsin thesameway",
+      "Step4: Push thelamp into place on thebase Tighten the screws to fixation"
+     ],
+     "typ_snimku": "navod_nebo_detail",
+     "zobrazuje_prodavany_produkt": "jen_jako_soucast_celku",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    }
+   ],
+   "rozpory": [
+    {
+     "obrazek": 1,
+     "tvrzeni_nabidky": "Lumen: 2000-3000 Lumen; nadpis 25500 Lumen",
+     "co_je_na_obrazku": "Text MAX 12000 LM",
+     "jistota": "vysoka"
+    },
+    {
+     "obrazek": 1,
+     "tvrzeni_nabidky": "Battery Capacity: ›8000 mAh; nadpis 10000mAh",
+     "co_je_na_obrazku": "Text 10000 mAh (v rozsahu nabídky)",
+     "jistota": "nizka"
+    }
+   ],
+   "loga_a_vodoznaky": [
+    {
+     "obrazek": 1,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 2,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 3,
+     "text_nebo_logo": "",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 4,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 5,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    }
+   ],
+   "celkem": {
+    "vsechny_obrazky_jeden_produkt": "ano",
+    "shrnuti": "Všechny obrázky ukazují stejné černé cyklistické světlo VASTFIRE s baterií 10000 mAh. Obrázek 1 uvádí maximum 12000 LM, zatímco nabídka uvádí 2000–3000 lumenů a v nadpisu 25500 lumenů."
+   }
+  },
+  {
+   "obrazky": [
+    {
+     "n": 1,
+     "co_je_videt": "Černé cyklistické světlo připevněné na řídítka kola, s digitálním displejem a zeleným tlačítkem, osvětlené prostředí v pozadí.",
+     "precteny_text": [
+      "VASTFIRE",
+      "10000 mAh",
+      "MAX 12000 LM",
+      "BIKE",
+      "0:30"
+     ],
+     "typ_snimku": "katalogovy_snimek_nebo_render",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 2,
+     "co_je_videt": "Svítilna ve dvou pohledech (vertikálně a na řídítkách), s ikonami čtyř režimů svícení a údaji o výdrži.",
+     "precteny_text": [
+      "4 lighting modes",
+      "Floodlight",
+      "Spotlight",
+      "High Light",
+      "Flash",
+      "7.5H",
+      "7H",
+      "4.5-5H",
+      "9H"
+     ],
+     "typ_snimku": "infografika",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 3,
+     "co_je_videt": "Detail svítilny na tmavém vlnitém pozadí s displejem a zeleným tlačítkem zapnutí.",
+     "precteny_text": [
+      "Digital Display",
+      "Display1: Use Time",
+      "Display2: Power %",
+      "Floodlight about 7.5h",
+      "Spotlight about 7h",
+      "High Light about 4.5-5h",
+      "Flash about 9h"
+     ],
+     "typ_snimku": "infografika",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 4,
+     "co_je_videt": "Svítilna jako power banka připojená kabelem k telefonu s ukazatelem nabití 75 %, vedle notebooku.",
+     "precteny_text": [
+      "TYPE-C Reverse Charging",
+      "Power Bank",
+      "10000 mAh, it is re-opened for TYPE-C, and supports reverse charging at the same time, which can supply power to avarietyofdevices",
+      "75% Charged"
+     ],
+     "typ_snimku": "infografika",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 5,
+     "co_je_videt": "Ruka drží černou svítilnu v úzkém tvaru, zobrazen detail povrchu s drobnými texturami.",
+     "precteny_text": [
+      "Fits The Hand Shape Comfortable To Hold",
+      "Easy To Hold",
+      "Tiny frosted particles",
+      "VASTFIRE"
+     ],
+     "typ_snimku": "realna_fotka",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 6,
+     "co_je_videt": "Čtyři kroky montáže svítilny na řídítka pomocí dvou objímek a šroubů.",
+     "precteny_text": [
+      "Step1: Put the base over the handlebar (place spacers as needed)",
+      "Step2: Adjust the position and tighten the base screws",
+      "Step3: Install the first two brackets in the same way",
+      "Step4: Push the lamp into place on the base Tighten the screws to fixation"
+     ],
+     "typ_snimku": "navod_nebo_detail",
+     "zobrazuje_prodavany_produkt": "jen_jako_soucast_celku",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    }
+   ],
+   "rozpory": [
+    {
+     "obrazek": 1,
+     "tvrzeni_nabidky": "Lumen: 2000-3000 Lumen; nadpis 25500 Lumen",
+     "co_je_na_obrazku": "Text MAX 12000 LM",
+     "jistota": "vysoka"
+    },
+    {
+     "obrazek": 1,
+     "tvrzeni_nabidky": "Battery Capacity: ›8000 mAh",
+     "co_je_na_obrazku": "Text 10000 mAh (nerozporuje rozsah, není rozpor)",
+     "jistota": "nizka"
+    }
+   ],
+   "loga_a_vodoznaky": [
+    {
+     "obrazek": 1,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 2,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 3,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 4,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 5,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    }
+   ],
+   "celkem": {
+    "vsechny_obrazky_jeden_produkt": "ano",
+    "shrnuti": "Všechny obrázky ukazují stejnou svítilnu VASTFIRE s displejem a 10000 mAh baterií. Obrázek 1 uvádí 12000 LM, zatímco nabídka uvádí 2000-3000 a 25500 lumenů."
+   }
+  },
+  {
+   "obrazky": [
+    {
+     "n": 1,
+     "co_je_videt": "Černé cyklistické světlo namontované na řídítkách, s displejem ukazujícím čas 04:30 a zeleným tlačítkem napájení; na pozadí černé pozadí.",
+     "precteny_text": [
+      "VASTFIRE",
+      "10000 mAh",
+      "MAX 12000 LM",
+      "BIKE",
+      "04:30"
+     ],
+     "typ_snimku": "katalogovy_snimek_nebo_render",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 2,
+     "co_je_videt": "Svislá tyčová lampa s displejem a zeleným tlačítkem, nad ní pruh světel v režimech; dole čtyři režimy svícení s časy.",
+     "precteny_text": [
+      "4 lighting modes",
+      "Floodlight",
+      "Spotlight",
+      "High Light",
+      "Flash",
+      "7.5H",
+      "7H",
+      "4.5-5H",
+      "9H"
+     ],
+     "typ_snimku": "infografika",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 3,
+     "co_je_videt": "Detail černé lampy s displejem a zeleným tlačítkem na tmavém vlnitém pozadí, s textem o režimech a dobách svícení.",
+     "precteny_text": [
+      "Digital Display",
+      "Display1: Use Time",
+      "Display2: Power %",
+      "Floodlight about 7.5h",
+      "Spotlight about 7h",
+      "High Light about 4.5-5h",
+      "Flash about 9h"
+     ],
+     "typ_snimku": "infografika",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 4,
+     "co_je_videt": "Lampa typu power bank s displejem a zeleným tlačítkem vedle telefonu s nabíjením a notebooku, s modrým kabelem.",
+     "precteny_text": [
+      "TYPE-C Reverse Charging",
+      "Power Bank",
+      "10000 mAh, it is re-opened for TYPE-C, and supports reverse charging at the same time, which can supply power to avarietyofdevices",
+      "75% Charged"
+     ],
+     "typ_snimku": "infografika",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 5,
+     "co_je_videt": "Ruka drží černou lampu s displejem a zeleným tlačítkem; vpravo detail povrchu s malými matnými body.",
+     "precteny_text": [
+      "Fits The Hand Shape Comfortable To Hold",
+      "Easy To Hold",
+      "Tiny frosted particles",
+      "VASTFIRE",
+      "04:30"
+     ],
+     "typ_snimku": "realna_fotka",
+     "zobrazuje_prodavany_produkt": "ano",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    },
+    {
+     "n": 6,
+     "co_je_videt": "Čtyři kroky montáže lampy na řídítka pomocí objímek a šroubů; poslední krok ukazuje nasazenou lampu.",
+     "precteny_text": [
+      "Step1: Put the base over the handlebar (place spacers as needed)",
+      "Step2: Adjust the position and tighten the base screws",
+      "Step3: Install the first two brackets in the same way",
+      "Step4: Push the lamp into place on the base Tighten the screws to fixation"
+     ],
+     "typ_snimku": "navod_nebo_detail",
+     "zobrazuje_prodavany_produkt": "jen_jako_soucast_celku",
+     "generovani_ai": "nelze_urcit",
+     "generovani_ai_doklad": ""
+    }
+   ],
+   "rozpory": [
+    {
+     "obrazek": 1,
+     "tvrzeni_nabidky": "Battery Capacity(mAh): ›8000 Mah; Lumen: 2000-3000 Lumen",
+     "co_je_na_obrazku": "Obrázek uvádí 10000 mAh a MAX 12000 LM, což je v rozporu s lumeny 2000-3000 v nabídce.",
+     "jistota": "vysoka"
+    },
+    {
+     "obrazek": 1,
+     "tvrzeni_nabidky": "Ultra-bright 25500 Lumen front and taillight combo",
+     "co_je_na_obrazku": "Obrázek uvádí MAX 12000 LM, nabídka 25500 lumenů.",
+     "jistota": "vysoka"
+    }
+   ],
+   "loga_a_vodoznaky": [
+    {
+     "obrazek": 1,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 2,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 3,
+     "text_nebo_logo": "",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 4,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    },
+    {
+     "obrazek": 5,
+     "text_nebo_logo": "VASTFIRE",
+     "je_znacka_produktu": "nejasne"
+    }
+   ],
+   "celkem": {
+    "vsechny_obrazky_jeden_produkt": "ano",
+    "shrnuti": "Všechny obrázky ukazují stejné černé cyklistické světlo s powerbankou značky VASTFIRE. Obrázek 1 uvádí 12000 LM a 10000 mAh, zatímco nabídka uvádí 25500 lumenů a 2000-3000 lumenů."
+   }
+  }
+ ]
+}
