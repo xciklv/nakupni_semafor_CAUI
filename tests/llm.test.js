@@ -267,11 +267,11 @@ test('schéma extrakce je validní pro Structured Outputs a odpovídá tvaru z p
   const schema = buildExtractRequest(input({ text: 'x' }), '').output_config.format.schema;
   assert.equal(schema.type, 'object');
   checkStrict(schema, '$');
-  assert.deepEqual(Object.keys(schema.properties).sort(), ['nerealne_parametry', 'nesoulady', 'obrazky', 'prodejce', 'produkt', 'recenze']);
+  assert.deepEqual(Object.keys(schema.properties).sort(), ['gpsr', 'nerealne_parametry', 'nesoulady', 'obrazky', 'prodejce', 'produkt', 'recenze']);
   assert.deepEqual(Object.keys(schema.properties.produkt.properties).sort(),
-    ['cena', 'kategorie', 'mena', 'model', 'nazev', 'referencni_cena_odhad', 'tvrzene_parametry', 'tvrzeni_certifikace', 'znacka']);
+    ['cena', 'ean', 'kategorie', 'kod_vyrobce', 'mena', 'model', 'nazev', 'referencni_cena_odhad', 'tvrzene_parametry', 'tvrzeni_certifikace', 'znacka']);
   assert.deepEqual(Object.keys(schema.properties.prodejce.properties).sort(),
-    ['hodnoceni', 'ico', 'kontakt_uveden', 'nazev', 'pocet_prodeju', 'podminky_uvedeny', 'provozovatel_uveden', 'stari_obchodu_dny', 'zeme_odeslani']);
+    ['dic', 'hodnoceni', 'ico', 'kontakt_uveden', 'nazev', 'pocet_prodeju', 'podminky_uvedeny', 'provozovatel_uveden', 'stari_obchodu_dny', 'zeme_odeslani']);
   assert.deepEqual(Object.keys(schema.properties.recenze.properties).sort(), ['genericke', 'pocet', 'podobne_texty', 'prumer', 'vsechny_5_hvezd']);
   assert.deepEqual(Object.keys(schema.properties.obrazky.properties).sort(), ['nesoulad_s_popisem', 'vypada_ai_nebo_katalog']);
   assert.deepEqual(schema.properties.produkt.properties.cena, { anyOf: [{ type: 'number' }, { type: 'null' }] });
@@ -405,4 +405,57 @@ test('nesoulady: filtr shody se týká jen nesouladů, ne nerealných parametrů
   assert.equal(x.produkt.nazev, 'Cena odpovídá');
   assert.equal(x.nerealne_parametry.length, 1);
   assert.deepEqual(x.nesoulady, []);
+});
+
+// --- identita produktu a GPSR v extrakci ---
+test('schéma extrakce má ean, kod_vyrobce, dic a gpsr; nová pole jsou string/enum a unionů zůstává 15', () => {
+  const schema = buildExtractRequest(input({ text: 'x' }), '').output_config.format.schema;
+  const p = schema.properties;
+  assert.deepEqual(p.produkt.properties.ean, { type: 'string' });
+  assert.deepEqual(p.produkt.properties.kod_vyrobce, { type: 'string' });
+  assert.deepEqual(p.prodejce.properties.dic, { type: 'string' });
+  const gpsr = p.gpsr;
+  assert.equal(gpsr.additionalProperties, false);
+  assert.deepEqual(gpsr.required, ['vyrobce_uveden', 'adresa_vyrobce', 'odpovedna_osoba_eu']);
+  for (const k of gpsr.required) assert.deepEqual(gpsr.properties[k], { type: 'string', enum: ['ano', 'ne', 'neuvedeno'] }, 'gpsr.' + k);
+  assert.ok(p.produkt.required.includes('ean') && p.produkt.required.includes('kod_vyrobce') && p.prodejce.required.includes('dic'));
+  assert.ok(schema.required.includes('gpsr'));
+  assert.equal(countUnions(schema), 15);
+});
+
+test('SYSTEM_EXTRACT popisuje nová pole: ean jen výslovně označený, dic, gpsr', () => {
+  assert.match(SYSTEM_EXTRACT, /"ean":/);
+  assert.match(SYSTEM_EXTRACT, /"gpsr":/);
+  assert.match(SYSTEM_EXTRACT, /EAN\/GTIN\/čárový kód/);
+  assert.match(SYSTEM_EXTRACT, /kod_vyrobce/);
+  assert.match(SYSTEM_EXTRACT, /dic/);
+});
+
+test('normalizeExtraction: ean a kod_vyrobce, prázdné řetězce jsou null', () => {
+  const x = normalizeExtraction({ produkt: { ean: '', kod_vyrobce: '' }, gpsr: { vyrobce_uveden: 'ne' } });
+  assert.equal(x.produkt.ean, null);
+  assert.equal(x.produkt.kod_vyrobce, null);
+  const y = normalizeExtraction({ produkt: { ean: ' 8710103997122 ', kod_vyrobce: 'QP410/50' } });
+  assert.equal(y.produkt.ean, '8710103997122');
+  assert.equal(y.produkt.kod_vyrobce, 'QP410/50');
+  assert.equal(normalizeExtraction({ produkt: { ean: 8710103997122 } }).produkt.ean, null);
+  assert.equal(normalizeExtraction({ produkt: { ean: 'x'.repeat(80) } }).produkt.ean, null);
+});
+
+test('normalizeExtraction: dic jen ve tvaru země + znaky, mezery a malá písmena se srovnají', () => {
+  const dic = (v) => normalizeExtraction({ prodejce: { dic: v } }).prodejce.dic;
+  assert.equal(dic('CZ45274649'), 'CZ45274649');
+  assert.equal(dic(' cz 4527 4649 '), 'CZ45274649');
+  assert.equal(dic('PL1234567890'), 'PL1234567890');
+  assert.equal(dic('DE123456789'), 'DE123456789');
+  for (const bad of ['', '45274649', 'CZ', 'C1234567', 'CZ-4527-4649', 'CZ1234567890123', 5, null, undefined]) assert.equal(dic(bad), null, String(bad));
+});
+
+test('normalizeExtraction: gpsr.* je ano, ne nebo null; chybějící objekt dá samé null', () => {
+  const g = (o) => normalizeExtraction({ gpsr: o }).gpsr;
+  assert.deepEqual(g({ vyrobce_uveden: 'ano', adresa_vyrobce: 'ne', odpovedna_osoba_eu: 'neuvedeno' }), { vyrobce_uveden: 'ano', adresa_vyrobce: 'ne', odpovedna_osoba_eu: null });
+  assert.deepEqual(g({ vyrobce_uveden: true, adresa_vyrobce: 'ANO', odpovedna_osoba_eu: 'nevim' }), { vyrobce_uveden: null, adresa_vyrobce: null, odpovedna_osoba_eu: null });
+  const none = { vyrobce_uveden: null, adresa_vyrobce: null, odpovedna_osoba_eu: null };
+  assert.deepEqual(normalizeExtraction({}).gpsr, none);
+  assert.deepEqual(normalizeExtraction({ gpsr: 'ne' }).gpsr, none);
 });

@@ -19,6 +19,8 @@ function safetyApplies(hay) {
   return SAFETY_BATERIE_RE.test(hay) && !SAFETY_BATERIE_NEG_RE.test(hay);
 }
 
+const SAFETY_GPSR_FIELDS = ['vyrobce_uveden', 'adresa_vyrobce', 'odpovedna_osoba_eu'];
+
 function safetySignals(x) {
   const p = x.produkt;
   if (!p.kategorie && !p.nazev) return { status: 'unchecked', signals: [] };
@@ -33,6 +35,15 @@ function safetySignals(x) {
       evidence: toy
         ? 'U hraček je označení CE povinné, nabídka o něm mlčí.'
         : 'U této kategorie zboží je obvykle povinné označení CE, nabídka o něm mlčí.',
+      source: 'analýza nabídky',
+    }));
+  }
+  const g = x.gpsr && typeof x.gpsr === 'object' ? x.gpsr : {};
+  if (SAFETY_GPSR_FIELDS.some((k) => g[k] === 'ne')) {
+    signals.push(signal({
+      id: 'gpsr_chybi', module: 'safety', severity: 'low', druh: 'riziko',
+      title: 'Nabídka neuvádí údaje o výrobci požadované nařízením GPSR',
+      evidence: 'Nařízení EU o bezpečnosti výrobků (GPSR) vyžaduje u zboží uvést výrobce, jeho adresu a odpovědnou osobu v EU; nabídka některý z těchto údajů neuvádí.',
       source: 'analýza nabídky',
     }));
   }

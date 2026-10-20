@@ -325,3 +325,37 @@ test('"&" se v dotazu i při porovnání chová stejně (mezera)', () => {
   assert.equal(safetyGateSignals([ALERT('Black & Decker')], XB('Black&Decker', null)).length, 1);
   assert.equal(safetyGateSignals([ALERT('Black&Decker')], XB('Black & Decker', null)).length, 1);
 });
+
+// --- GPSR (výrobce, adresa, odpovědná osoba v EU) ---
+const XG = (gpsr, produkt = { nazev: 'Bavlněné triko' }) => normalizeExtraction({ produkt, gpsr });
+
+test('gpsr_chybi: jednou, i když chybí všechna tři pole; low riziko', () => {
+  const r = safetySignals(XG({ vyrobce_uveden: 'ne', adresa_vyrobce: 'ne', odpovedna_osoba_eu: 'ne' }));
+  const g = r.signals.filter((s) => s.id === 'gpsr_chybi');
+  assert.equal(g.length, 1);
+  assert.equal(g[0].severity, 'low');
+  assert.equal(g[0].druh, 'riziko');
+  assert.equal(g[0].module, 'safety');
+  assert.match(g[0].title, /GPSR/);
+});
+
+test('gpsr_chybi: stačí jedno pole "ne"', () => {
+  assert.equal(safetySignals(XG({ vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ne' })).signals.filter((s) => s.id === 'gpsr_chybi').length, 1);
+});
+
+test('gpsr: ano a neuvedeno (nelze posoudit) nález nevyvolají', () => {
+  assert.deepEqual(safetySignals(XG({ vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' })).signals, []);
+  assert.deepEqual(safetySignals(XG({ vyrobce_uveden: 'neuvedeno', adresa_vyrobce: 'neuvedeno', odpovedna_osoba_eu: 'neuvedeno' })).signals, []);
+  assert.deepEqual(safetySignals(normalizeExtraction({ produkt: { nazev: 'Bavlněné triko' } })).signals, []);
+});
+
+test('gpsr_chybi se přidá vedle ce_chybi', () => {
+  const r = safetySignals(XG({ vyrobce_uveden: 'ne' }, { nazev: 'Nabíječka USB' }));
+  assert.deepEqual(r.signals.map((s) => s.id), ['ce_chybi', 'gpsr_chybi']);
+});
+
+test('safetySignals bez pole gpsr (ruční objekt) funguje', () => {
+  const x = X({ nazev: 'Nabíječka USB' });
+  delete x.gpsr;
+  assert.deepEqual(safetySignals(x).signals.map((s) => s.id), ['ce_chybi']);
+});
