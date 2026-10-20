@@ -173,3 +173,10 @@ test('title delší než 120 znaků se zkrátí na 120 včetně „…“', () =
   assert.equal(sig.title.length, 120);
   assert.ok(sig.title.endsWith('…'));
 });
+
+test('nález typu nesmysl (medium) sám dá oranžovou, s rizikem prodejce (medium) červenou', () => {
+  const nesmysl = signal({ id: 'n', module: 'plausibility', severity: 'medium', title: 't', evidence: 'e', druh: 'nesmysl' });
+  assert.equal(computeVerdict([nesmysl], ALL_OK).semafor, 'oranžová');
+  const seller = signal({ id: 's', module: 'seller', severity: 'medium', title: 't', evidence: 'e' });
+  assert.equal(computeVerdict([nesmysl, seller], ALL_OK).semafor, 'červená');
+});

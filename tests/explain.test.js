@@ -322,3 +322,81 @@ test('parseExplanation: stop_reason refusal a max_tokens a chyba API = ok:false'
   assert.equal(parseExplanation({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }).ok, false);
   assert.equal(parseExplanation({ error: 'The service refused the connection' }).ok, false);
 });
+
+// --- nález jako rozšířený signál (Task 1 plánu „kontrola na důkazech“) ---
+const nz = (id, severity, extra = {}) => signal({ id, module: 'plausibility', severity, title: 'T ' + id, evidence: 'E ' + id, ...extra });
+
+test('signal: výchozí hodnoty nových polí a zpětná kompatibilita', () => {
+  const s = sg('a', 'low');
+  assert.equal(s.druh, 'riziko');
+  assert.equal(s.citace, null);
+  assert.equal(s.vysvetleni, null);
+  assert.equal(s.otazka, null);
+  assert.equal(s.vypocet, null);
+  assert.equal(s.jistota, null);
+  assert.deepEqual(s.odkazy, []);
+  assert.equal(s.hard, false);
+});
+
+test('signal: délkové stropy nových polí', () => {
+  const s = nz('a', 'medium', { druh: 'nesmysl', citace: 'x'.repeat(400), vysvetleni: 'v'.repeat(500), otazka: 'o'.repeat(300), vypocet: 'p'.repeat(400) });
+  assert.ok(s.citace.length <= 300);
+  assert.ok(s.vysvetleni.length <= 400);
+  assert.ok(s.otazka.length <= 200);
+  assert.ok(s.vypocet.length <= 300);
+  assert.equal(s.druh, 'nesmysl');
+});
+
+test('signal: neplatný druh nebo jistota vyhodí chybu', () => {
+  assert.throws(() => nz('a', 'low', { druh: 'blbost' }), /druh/);
+  assert.throws(() => nz('a', 'low', { jistota: 'jista' }), /jistota/);
+  for (const j of [null, 'vysoka', 'stredni', 'nizka']) assert.doesNotThrow(() => nz('a', 'low', { jistota: j }));
+  for (const d of ['nesmysl', 'rozpor', 'riziko', 'nelze_overit']) assert.doesNotThrow(() => nz('a', 'info', { druh: d }));
+});
+
+test('signal: odkazy jen https, nejvýše 3, s textem a url', () => {
+  const s = nz('a', 'low', { odkazy: [
+    { text: 'bad', url: 'http://x.cz' }, { text: 'js', url: 'javascript:alert(1)' }, null, { text: 'bez url' },
+    { text: 'ok1', url: 'https://a.cz/1' }, { text: 'ok2', url: 'https://a.cz/2' }, { text: 'ok3', url: 'https://a.cz/3' }, { text: 'ok4', url: 'https://a.cz/4' },
+  ] });
+  assert.deepEqual(s.odkazy.map((o) => o.url), ['https://a.cz/1', 'https://a.cz/2', 'https://a.cz/3']);
+  assert.deepEqual(nz('a', 'low', { odkazy: [{ text: 'x', url: 'http://x.cz' }] }).odkazy, []);
+});
+
+test('buildResponse: nalezy seřazené podle váhy, signaly beze změny tvaru', () => {
+  const sigs = [sg('low1', 'low'), nz('nes', 'medium', { druh: 'nesmysl', citace: 'c', vysvetleni: 'v', otazka: 'q', vypocet: 'p', jistota: 'vysoka', odkazy: [{ text: 't', url: 'https://a.cz' }] }), sg('info1', 'info')];
+  const v = computeVerdict(sigs, OK3);
+  const r = buildResponse({ verdict: v, signals: sigs, explanation: null });
+  assert.equal(r.nalezy[0].druh, 'nesmysl');
+  assert.deepEqual(r.nalezy.map((n) => n.id), ['nes', 'low1', 'info1']);
+  assert.deepEqual(Object.keys(r.nalezy[0]).sort(), ['citace', 'druh', 'dukaz', 'id', 'jistota', 'modul', 'odkazy', 'otazka', 'titul', 'vypocet', 'vysvetleni', 'zavaznost', 'zdroj']);
+  assert.equal(r.nalezy[0].modul, 'věrohodnost');
+  assert.equal(r.nalezy[0].zavaznost, 'medium');
+  assert.equal(r.nalezy[0].citace, 'c');
+  assert.deepEqual(r.nalezy[0].odkazy, [{ text: 't', url: 'https://a.cz' }]);
+  assert.deepEqual(r.signaly.map((s) => Object.keys(s).sort()), r.signaly.map(() => ['dukaz', 'id', 'modul', 'titul', 'zavaznost', 'zdroj']));
+  assert.deepEqual(r.signaly.map((s) => s.id), ['nes', 'low1', 'info1']);
+});
+
+test('buildResponse: nalezy je prázdné pole bez signálů a MODULE_NAMES zná nové moduly', () => {
+  const r = buildResponse({ verdict: computeVerdict([], OK3), signals: [], explanation: null });
+  assert.deepEqual(r.nalezy, []);
+  const sigs = ['identity', 'plausibility', 'images', 'reviews'].map((m, i) => signal({ id: 'm' + i, module: m, severity: 'low', title: 't', evidence: 'e' }));
+  const out = buildResponse({ verdict: computeVerdict(sigs, OK3), signals: sigs });
+  assert.deepEqual(out.nalezy.map((n) => n.modul), ['identita produktu', 'věrohodnost', 'obrázky', 'recenze']);
+});
+
+test('buildExplainRequest: ctx.prodejceDuveryhodny jde do payloadu jako prodejce_duveryhodny', () => {
+  const v = computeVerdict([], OK3);
+  assert.equal(JSON.parse(buildExplainRequest(v, [], undefined, { prodejceDuveryhodny: true }).messages[0].content).prodejce_duveryhodny, true);
+  assert.equal(JSON.parse(buildExplainRequest(v, [], undefined, { prodejceDuveryhodny: false }).messages[0].content).prodejce_duveryhodny, false);
+  assert.equal(JSON.parse(buildExplainRequest(v, []).messages[0].content).prodejce_duveryhodny, false);
+});
+
+test('buildExplainRequest: payload nese druh nálezu a SYSTEM_EXPLAIN pravidlo o věrohodném prodejci', () => {
+  const v = computeVerdict([], OK3);
+  const p = JSON.parse(buildExplainRequest(v, [nz('a', 'medium', { druh: 'nesmysl' })]).messages[0].content);
+  assert.equal(p.signaly[0].druh, 'nesmysl');
+  assert.match(SYSTEM_EXPLAIN, /prodejce_duveryhodny/);
+  assert.match(SYSTEM_EXPLAIN, /prodejce působí věrohodně/);
+});
