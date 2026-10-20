@@ -1,0 +1,6 @@
+claude-haiku-5-5 P0: 42 volání, dosud utraceno 0.0465 USD (strop 0.58)
+  10/42  celkem 0.0507 USD
+  20/42  celkem 0.0551 USD
+  30/42  celkem 0.0582 USD
+  40/42  celkem 0.0623 USD
+hotovo: ok 42, chyb 0, celkem utraceno 0.0630 USD

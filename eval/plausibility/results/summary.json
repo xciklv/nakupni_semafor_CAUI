@@ -1,0 +1,190 @@
+{
+  "claude-haiku-5-5-P0": {
+    "volani": 42,
+    "chyby": 0,
+    "presnost_verdiktu": "88 %",
+    "rozliseni_problem_vs_ok": "95 %",
+    "falesny_poplach": "13 % (2/15)",
+    "prehlednuto": "0 % (0/27)",
+    "nesmysl_jen_jako_nepravdepodobne": "0 %",
+    "confusion": {
+      "nesmysl→nesmysl": 20,
+      "v_poradku→v_poradku": 13,
+      "nepravdepodobne→nepravdepodobne": 4,
+      "v_poradku→nesmysl": 1,
+      "v_poradku→nepravdepodobne": 1,
+      "nepravdepodobne→nesmysl": 3
+    },
+    "konzistence": "–",
+    "nestabilni_pripady": [],
+    "vzdy_spatne": [
+      "kabel-60w-3a-ok (čekáno v_poradku, dostal nesmysl)",
+      "nabijecka-65w-ok (čekáno v_poradku, dostal nepravdepodobne)",
+      "solar-200w-05m2 (čekáno nepravdepodobne, dostal nesmysl)",
+      "ebike-250km (čekáno nepravdepodobne, dostal nesmysl)",
+      "hodinky-30-dni-amoled (čekáno nepravdepodobne, dostal nesmysl)"
+    ],
+    "naklady_usd": 0.0165,
+    "cena_na_kontrolu_usd": 0.00039,
+    "vstup_tok_prumer": 1843,
+    "vystup_tok_prumer": 720,
+    "latence_median_s": 4.4,
+    "latence_max_s": 9.8,
+    "cache_cteni_tok": 71053
+  },
+  "claude-haiku-5-5-P1": {
+    "volani": 126,
+    "chyby": 0,
+    "presnost_verdiktu": "90 %",
+    "rozliseni_problem_vs_ok": "96 %",
+    "falesny_poplach": "9 % (4/45)",
+    "prehlednuto": "1 % (1/81)",
+    "nesmysl_jen_jako_nepravdepodobne": "2 %",
+    "confusion": {
+      "nesmysl→nesmysl": 59,
+      "v_poradku→v_poradku": 41,
+      "nepravdepodobne→nepravdepodobne": 13,
+      "nepravdepodobne→nesmysl": 7,
+      "v_poradku→nepravdepodobne": 4,
+      "nepravdepodobne→v_poradku": 1,
+      "nesmysl→nepravdepodobne": 1
+    },
+    "konzistence": "76 % (32/42 případů, verdikt shodný ve všech během)",
+    "nestabilni_pripady": [
+      "celovka-1000-ok: v_poradku/nepravdepodobne/v_poradku",
+      "pb-30000-199: nepravdepodobne/v_poradku/nepravdepodobne",
+      "nabijecka-65w-ok: v_poradku/v_poradku/nepravdepodobne",
+      "karta-microsd-2tb-299: nesmysl/nepravdepodobne/nepravdepodobne",
+      "repro-pmpo-20000w: nesmysl/nepravdepodobne/nesmysl",
+      "repro-30w-rms-ok: v_poradku/v_poradku/nepravdepodobne",
+      "solar-200w-05m2: nesmysl/nesmysl/nepravdepodobne",
+      "ebike-250km: nesmysl/nepravdepodobne/nesmysl",
+      "hodinky-30-dni-amoled: nepravdepodobne/nesmysl/nesmysl",
+      "hodinky-14-dni-ok: v_poradku/v_poradku/nepravdepodobne"
+    ],
+    "vzdy_spatne": [],
+    "naklady_usd": 0.0449,
+    "cena_na_kontrolu_usd": 0.00036,
+    "vstup_tok_prumer": 2474,
+    "vystup_tok_prumer": 638,
+    "latence_median_s": 4,
+    "latence_max_s": 13.1,
+    "cache_cteni_tok": 295500
+  },
+  "claude-haiku-5-5-P1 [jen běh 1]": {
+    "volani": 42,
+    "chyby": 0,
+    "presnost_verdiktu": "93 %",
+    "rozliseni_problem_vs_ok": "100 %",
+    "falesny_poplach": "0 % (0/15)",
+    "prehlednuto": "0 % (0/27)",
+    "nesmysl_jen_jako_nepravdepodobne": "0 %",
+    "confusion": {
+      "nesmysl→nesmysl": 20,
+      "v_poradku→v_poradku": 15,
+      "nepravdepodobne→nepravdepodobne": 4,
+      "nepravdepodobne→nesmysl": 3
+    },
+    "konzistence": "–",
+    "nestabilni_pripady": [],
+    "vzdy_spatne": [
+      "karta-microsd-2tb-299 (čekáno nepravdepodobne, dostal nesmysl)",
+      "solar-200w-05m2 (čekáno nepravdepodobne, dostal nesmysl)",
+      "ebike-250km (čekáno nepravdepodobne, dostal nesmysl)"
+    ],
+    "naklady_usd": 0.015,
+    "cena_na_kontrolu_usd": 0.00036,
+    "vstup_tok_prumer": 2474,
+    "vystup_tok_prumer": 634,
+    "latence_median_s": 4.1,
+    "latence_max_s": 8.4,
+    "cache_cteni_tok": 96924
+  },
+  "claude-opus-5-5-P1": {
+    "volani": 4,
+    "chyby": 0,
+    "presnost_verdiktu": "25 %",
+    "rozliseni_problem_vs_ok": "100 %",
+    "falesny_poplach": "0 % (0/1)",
+    "prehlednuto": "0 % (0/3)",
+    "nesmysl_jen_jako_nepravdepodobne": "–",
+    "confusion": {
+      "v_poradku→v_poradku": 1,
+      "nepravdepodobne→nesmysl": 3
+    },
+    "konzistence": "–",
+    "nestabilni_pripady": [],
+    "vzdy_spatne": [
+      "ebike-250km (čekáno nepravdepodobne, dostal nesmysl)",
+      "pb-30000-199 (čekáno nepravdepodobne, dostal nesmysl)",
+      "karta-microsd-2tb-299 (čekáno nepravdepodobne, dostal nesmysl)"
+    ],
+    "naklady_usd": 0.0713,
+    "cena_na_kontrolu_usd": 0.01784,
+    "vstup_tok_prumer": 2473,
+    "vystup_tok_prumer": 687,
+    "latence_median_s": 8.7,
+    "latence_max_s": 8.7,
+    "cache_cteni_tok": 7092
+  },
+  "claude-sonnet-5-5-P1": {
+    "volani": 58,
+    "chyby": 0,
+    "presnost_verdiktu": "83 %",
+    "rozliseni_problem_vs_ok": "100 %",
+    "falesny_poplach": "0 % (0/23)",
+    "prehlednuto": "0 % (0/35)",
+    "nesmysl_jen_jako_nepravdepodobne": "0 %",
+    "confusion": {
+      "nesmysl→nesmysl": 20,
+      "v_poradku→v_poradku": 23,
+      "nepravdepodobne→nesmysl": 10,
+      "nepravdepodobne→nepravdepodobne": 5
+    },
+    "konzistence": "100 % (8/8 případů, verdikt shodný ve všech během)",
+    "nestabilni_pripady": [],
+    "vzdy_spatne": [
+      "pb-30000-199 (čekáno nepravdepodobne, dostal nesmysl/nesmysl/nesmysl)",
+      "karta-microsd-2tb-299 (čekáno nepravdepodobne, dostal nesmysl/nesmysl/nesmysl)",
+      "solar-200w-05m2 (čekáno nepravdepodobne, dostal nesmysl)",
+      "ebike-250km (čekáno nepravdepodobne, dostal nesmysl/nesmysl/nesmysl)"
+    ],
+    "naklady_usd": 0.446,
+    "cena_na_kontrolu_usd": 0.00769,
+    "vstup_tok_prumer": 2477,
+    "vystup_tok_prumer": 690,
+    "latence_median_s": 7.2,
+    "latence_max_s": 11.3,
+    "cache_cteni_tok": 134748
+  },
+  "claude-sonnet-5-5-P1 [jen běh 1]": {
+    "volani": 42,
+    "chyby": 0,
+    "presnost_verdiktu": "90 %",
+    "rozliseni_problem_vs_ok": "100 %",
+    "falesny_poplach": "0 % (0/15)",
+    "prehlednuto": "0 % (0/27)",
+    "nesmysl_jen_jako_nepravdepodobne": "0 %",
+    "confusion": {
+      "nesmysl→nesmysl": 20,
+      "v_poradku→v_poradku": 15,
+      "nepravdepodobne→nesmysl": 4,
+      "nepravdepodobne→nepravdepodobne": 3
+    },
+    "konzistence": "–",
+    "nestabilni_pripady": [],
+    "vzdy_spatne": [
+      "pb-30000-199 (čekáno nepravdepodobne, dostal nesmysl)",
+      "karta-microsd-2tb-299 (čekáno nepravdepodobne, dostal nesmysl)",
+      "solar-200w-05m2 (čekáno nepravdepodobne, dostal nesmysl)",
+      "ebike-250km (čekáno nepravdepodobne, dostal nesmysl)"
+    ],
+    "naklady_usd": 0.3207,
+    "cena_na_kontrolu_usd": 0.00763,
+    "vstup_tok_prumer": 2474,
+    "vystup_tok_prumer": 681,
+    "latence_median_s": 6.9,
+    "latence_max_s": 11.3,
+    "cache_cteni_tok": 96924
+  }
+}
