@@ -153,4 +153,4 @@ function normalizeExtraction(d) {
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { SYSTEM_EXTRACT, LLM_MODEL_EXTRACT_DEFAULT, LLM_SCHEMA, buildExtractRequest, parseLlmJson, llmReadText, normalizeExtraction };
+if (typeof module !== 'undefined') module.exports = { SYSTEM_EXTRACT, LLM_MODEL_EXTRACT_DEFAULT, LLM_SCHEMA, buildExtractRequest, parseLlmJson, llmReadText, llmAccuses, normalizeExtraction };
