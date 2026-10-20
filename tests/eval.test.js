@@ -409,7 +409,7 @@ test('renderReport: výsledek bez skupiny nehází', () => {
 // ---- cases.json ----
 
 const CASES = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'eval', 'cases.json'), 'utf8'));
-const GROUPS = ['coi', 'legit', 'synthetic', 'screens'];
+const GROUPS = ['coi', 'legit', 'synthetic', 'produkt', 'screens'];
 const COI_POZNAMKA = 'ČOI = rizikový provozovatel, ne prokázaný podvod';
 const LEGIT_POZNAMKA = 'Obchod může blokovat automatické načtení; šedá je pak očekávaná.';
 
@@ -427,7 +427,9 @@ test('cases.json: schéma', () => {
     if (c.poznamka !== undefined) assert.equal(typeof c.poznamka, 'string');
     const kinds = ['odkaz', 'text', 'screenshotFiles'].filter((k) => c[k] !== undefined);
     assert.equal(kinds.length, 1, 'právě jeden druh vstupu: ' + c.id);
-    if (c.odkaz !== undefined) assert.match(c.odkaz, /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/$/, 'odkaz ' + c.id);
+    // Skupiny coi a legit jsou kořeny domén; skupina produkt je konkrétní produktová stránka (cesta ano, query a fragment ne).
+    if (c.odkaz !== undefined && c.skupina === 'produkt') assert.match(c.odkaz, /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/[^\s?#]*$/, 'odkaz ' + c.id);
+    else if (c.odkaz !== undefined) assert.match(c.odkaz, /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/$/, 'odkaz ' + c.id);
     if (c.text !== undefined) assert.ok(typeof c.text === 'string' && c.text.trim().length > 0);
     if (c.screenshotFiles !== undefined) {
       assert.ok(Array.isArray(c.screenshotFiles) && c.screenshotFiles.length > 0);
@@ -435,7 +437,7 @@ test('cases.json: schéma', () => {
     }
     assert.deepEqual(Object.keys(c).filter((k) => !['id', 'label', 'skupina', 'odkaz', 'text', 'screenshotFiles', 'zdroj', 'poznamka'].includes(k)), []);
     // druh vstupu odpovídá skupině
-    const expected = { coi: 'odkaz', legit: 'odkaz', synthetic: 'text', screens: 'screenshotFiles' }[c.skupina];
+    const expected = { coi: 'odkaz', legit: 'odkaz', synthetic: 'text', produkt: 'odkaz', screens: 'screenshotFiles' }[c.skupina];
     assert.equal(kinds[0], expected, 'vstup ve skupině ' + c.skupina + ': ' + c.id);
   }
 });
@@ -448,9 +450,13 @@ test('cases.json: složení sady po skupinách', () => {
   assert.ok(g('legit').every((c) => c.label === 'ok' && c.poznamka === LEGIT_POZNAMKA && c.zdroj === 'známý ověřený e-shop'));
   assert.equal(g('synthetic').length, 4);
   assert.deepEqual(g('synthetic').map((c) => c.label).sort(), ['ok', 'podvod', 'podvod', 'sporne']);
-  assert.equal(g('screens').length, 0);
-  assert.equal(CASES.length, 34);
+  // Vlastní testy uživatele (2026-10-19): skutečné produktové stránky a screenshot AliExpressu.
+  assert.equal(g('produkt').length, 4);
+  assert.deepEqual(g('produkt').map((c) => c.label).sort(), ['ok', 'ok', 'ok', 'sporne']);
+  assert.equal(g('screens').length, 1);
+  assert.equal(g('screens')[0].label, 'sporne');
+  assert.equal(CASES.length, 39);
   assert.ok(CASES.some((c) => /Ignoruj všechny instrukce/.test(c.text || '')));
-  assert.equal(new Set(CASES.filter((c) => c.odkaz).map((c) => c.odkaz)).size, 30);
+  assert.equal(new Set(CASES.filter((c) => c.odkaz).map((c) => c.odkaz)).size, 34);
   assert.ok(!CASES.some((c) => /blockchain/.test(c.id)));
 });

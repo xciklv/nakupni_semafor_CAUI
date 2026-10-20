@@ -361,3 +361,48 @@ test('filtr obvinění: podvodní (= podvodní, pod vodou) zůstává, podvodná
   assert.deepEqual(x.nesoulady, keep);
   assert.deepEqual(x.nerealne_parametry, keep);
 });
+
+// --- šum v 'nesoulady': věty, které shodu jen potvrzují, se zahazují; skutečné rozpory zůstávají ---
+test('prompt: nesoulady jsou jen skutečné rozpory s oběma hodnotami; co nezapisovat; limit a prázdné pole', () => {
+  assert.match(SYSTEM_EXTRACT, /SKUTEČNÉ rozpory/);
+  assert.match(SYSTEM_EXTRACT, /obě protichůdné hodnoty/);
+  assert.match(SYSTEM_EXTRACT, /NEZAPISUJ/);
+  assert.match(SYSTEM_EXTRACT, /sedí nebo si odpovídají/);
+  assert.match(SYSTEM_EXTRACT, /chybějící údaje/);
+  assert.match(SYSTEM_EXTRACT, /skladové množství vs\. počet prodejů/);
+  assert.match(SYSTEM_EXTRACT, /Pokud žádný skutečný rozpor není, vrať \[\]/);
+});
+
+test('nesoulady: věty potvrzující shodu (reálné případy z ostrého testu) se zahodí', () => {
+  const x = normalizeExtraction({ nesoulady: [
+    'Název uvádí délku 4 m, specifikace uvádí délku kabelu 400 cm, což je konzistentní, ale cena 79,90 Kč za 4 m odpovídá 19,98 Kč/m uvedeným v nabídce.',
+    'Cena 99,90 Kč za 550 g odpovídá uvedené jednotkové ceně 181,64 Kč/kg',
+    'Údaje o hmotnosti sedí s popisem',
+    'Název a specifikace jsou v souladu',
+    'Cena i parametry si odpovídají, bez rozporu',
+  ] });
+  assert.deepEqual(x.nesoulady, []);
+});
+
+test('nesoulady: skutečné rozpory a věty s negací zůstávají', () => {
+  const keep = [
+    'Název uvádí 64 GB, zatímco specifikace uvádí 32 GB',
+    'Cena neodpovídá popisu',
+    'Fotka neodpovídá popisu produktu',
+    'Hmotnost 2 kg v tabulce nesedí s 5 kg v popisu',
+    'Titulek tvrdí nový, popis použitý',
+    'Údaje nejsou konzistentní: 3 ks v názvu, 5 ks v popisu',
+    'Barva v nabídce je nekonzistentní s fotkou',
+    'Doba dodání 3 dny, však v podmínkách 14 dnů',
+    'Titulek uvádí barvu RED, ale varianta je Unpainted',
+    'Název uvádí 38 ks, ale produkt má 550 g',
+  ];
+  assert.deepEqual(normalizeExtraction({ nesoulady: keep }).nesoulady, keep);
+});
+
+test('nesoulady: filtr shody se týká jen nesouladů, ne nerealných parametrů ani jiných polí', () => {
+  const x = normalizeExtraction({ produkt: { nazev: 'Cena odpovídá' }, nerealne_parametry: ['Kapacita odpovídá jen 3000 mAh, ne 30000'], nesoulady: ['Cena odpovídá jednotkové ceně'] });
+  assert.equal(x.produkt.nazev, 'Cena odpovídá');
+  assert.equal(x.nerealne_parametry.length, 1);
+  assert.deepEqual(x.nesoulady, []);
+});

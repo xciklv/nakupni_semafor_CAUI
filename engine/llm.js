@@ -11,8 +11,10 @@ const SYSTEM_EXTRACT = [
   'Hodnocení (prodejce.hodnoceni, recenze.prumer) je na škále 0-5. Pokud zdroj používá jinou škálu (např. 0-10 nebo procenta), převeď ji na 0-5; pokud převod nelze, vrať null.',
   'ico: 8místné číslo bez mezer, pokud ho nabídka neuvádí, vrať null.',
   'znacka a model: značka a název/číslo modelu výrobku, opsané pouze z nabídky; pokud nabídka značku nebo model neuvádí, vrať null. Nikdy je neodhaduj.',
-  'nerealne_parametry: tvrzení, která fyzikálně nebo cenově nedávají smysl (uveď tvrzení a stručný důvod).',
-  'nesoulady: rozpory mezi popisem, cenou a fotkami. Piš česky, stručně.',
+  'nerealne_parametry: tvrzení, která fyzikálně nebo cenově nedávají smysl (uveď tvrzení a stručný důvod). Nejvýše 2 položky, jinak [].',
+  'nesoulady: pouze SKUTEČNÉ rozpory, kdy dvě údaje přímo v nabídce si navzájem odporují (např. název uvádí 64 GB a specifikace 32 GB, titulek říká nový a popis použitý). U každého uveď obě protichůdné hodnoty. Piš česky, stručně.',
+  'Do nesoulady NEZAPISUJ: věci, které sedí nebo si odpovídají (ani s poznámkou, že jsou v pořádku); chybějící údaje (ty patří jako null); vlastní domněnky o ceně, pravosti nebo tržní hodnotě; běžné jevy marketplace (odeslání z Číny, dlouhé dodání, více variant barvy, skladové množství vs. počet prodejů); překlepy a nepřesnosti překladu.',
+  'Nejvýše 3 položky nesoulady. Pokud žádný skutečný rozpor není, vrať [].',
 ].join('\n');
 
 // Výchozí model extrakce (vision + structured outputs): Claude Haiku 5.5, nejlevnější z řady 5.5; o případném přechodu na Sonnet 5.5 rozhodne eval. Build ho může přepsat (LLM_MODEL_EXTRACT).
@@ -111,6 +113,15 @@ const llmIco = (v) => {
 const LLM_ACCUSATION_RE = /podvod(?!ni)|\bfraud\b|\bscam|podvodnik|podvodnic|podvodn[ey]|je podvod|zlodej|\blump\b|\blump(i|ove|ovi|u|a)\b|nelegalni|trestn/;
 const llmAccuses = (t) => LLM_ACCUSATION_RE.test(String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
 const llmClean = (v) => llmArr(v).filter((t) => !llmAccuses(t));
+// Model občas zapíše do `nesoulady` i shodu ("cena odpovídá jednotkové ceně", "což je konzistentní"). Věta, která shodu jen potvrzuje
+// a žádný rozpor neuvádí (žádná z negací/rozporových slov), se zahodí. "neodpovídá", "není konzistentní", "zatímco ..." zůstávají.
+const LLM_CONSISTENT_RE = /konzistentn|odpovídá|odpovídají|souhlasí|sedí|v souladu|shoduje se|shodují se|bez rozporu/;
+const LLM_CONTRADICTION_RE = /není|nejsou|ne(odpovíd|sed|souhlas|konzist|soulad|shoduj)|rozpor|odporuj|liší|zatímco|však|jiný|jiná|jiné|chyb/;
+const llmClaimsConsistency = (t) => {
+  const s = String(t).toLowerCase();
+  return LLM_CONSISTENT_RE.test(s) && !LLM_CONTRADICTION_RE.test(s.replace(/bez rozpor\w*/g, ' '));
+};
+const llmMismatches = (v) => llmClean(v).filter((t) => !llmClaimsConsistency(t));
 const LLM_BRAND_MAX = 60;
 const llmShortStr = (v) => { const t = llmStr(v); return t && t.length <= LLM_BRAND_MAX ? t : null; };
 const llmCountry = (v) => { const t = llmStr(v); return t && /^[A-Za-z]{2}$/.test(t) ? t.toUpperCase() : null; };
@@ -138,7 +149,7 @@ function normalizeExtraction(d) {
     recenze: { pocet: llmNonNeg(r.pocet), prumer: llmRating(r.prumer), podobne_texty: llmBool(r.podobne_texty), vsechny_5_hvezd: llmBool(r.vsechny_5_hvezd), genericke: llmBool(r.genericke) },
     obrazky: { vypada_ai_nebo_katalog: llmBool(o.vypada_ai_nebo_katalog), nesoulad_s_popisem: llmBool(o.nesoulad_s_popisem) },
     nerealne_parametry: llmClean(x.nerealne_parametry),
-    nesoulady: llmClean(x.nesoulady),
+    nesoulady: llmMismatches(x.nesoulady),
   };
 }
 

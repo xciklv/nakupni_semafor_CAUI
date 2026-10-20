@@ -267,5 +267,47 @@
     "skupina": "synthetic",
     "text": "asdf",
     "zdroj": "syntetický případ: nesmyslný vstup, očekáváno neurčeno"
+  },
+  {
+    "id": "produkt-action-haribo",
+    "label": "ok",
+    "skupina": "produkt",
+    "odkaz": "https://www.action.com/cs-cz/p/3006744/baleni-plne-malych-sacku-haribo-halloween/",
+    "zdroj": "vlastní test uživatele 2026-10-19 (exekuce 12373)",
+    "poznamka": "Skutečná produktová stránka řetězce Action. Dřív: zelená, ale model do rozporů zapsal shodu ceny s jednotkovou cenou."
+  },
+  {
+    "id": "produkt-action-osvetleni",
+    "label": "ok",
+    "skupina": "produkt",
+    "odkaz": "https://www.action.com/cs-cz/p/3201480/vanocni-osvetleni/",
+    "zdroj": "vlastní test uživatele 2026-10-19 (exekuce 12377)",
+    "poznamka": "Skutečná produktová stránka řetězce Action. Dřív: zelená, ale model do rozporů zapsal větu \"což je konzistentní\"."
+  },
+  {
+    "id": "produkt-megaknihy-parfem",
+    "label": "ok",
+    "skupina": "produkt",
+    "odkaz": "https://www.megaknihy.cz/hugo-boss/4676876-cisty-parfem-alive-od-znacky-hugo-boss-byla-vytvorena-vyhradne-pro-zeny-toto-baleni-obsahuje-30-ml-vami-vybrane-vune.html",
+    "zdroj": "vlastní test uživatele 2026-10-19 (exekuce 12379)",
+    "poznamka": "Label ok je odhad: skutečný český e-shop, ale stránka je zvláštní (kniha vs. parfém). Dřív falešná červená (střední hodnocení + 3 spekulativní rozpory). Pokud nesouhlasíš s labelem, přepiš na sporne."
+  },
+  {
+    "id": "produkt-aliexpress-diffuser-odkaz",
+    "label": "sporne",
+    "skupina": "produkt",
+    "odkaz": "https://www.aliexpress.com/item/1005009269957628.html",
+    "zdroj": "vlastní test uživatele 2026-10-19 (exekuce 12374), AliExpress, přední difuzor Toyota Corolla",
+    "poznamka": "Ne podvod, ale slabá nabídka (1 prodej, jediná recenze \"it never arrived\", 822 Kč, dodání z Číny). Čeká se oranžová až červená. Potřebuje běžící čtečku stránek (npm run reader), jinak vyjde šedá."
+  },
+  {
+    "id": "produkt-aliexpress-diffuser-screenshot",
+    "label": "sporne",
+    "skupina": "screens",
+    "screenshotFiles": [
+      "aliexpress-diffuser.jpg"
+    ],
+    "zdroj": "vlastní screenshot uživatele 2026-10-19 (exekuce 12375)",
+    "poznamka": "Stejná nabídka jako produkt-aliexpress-diffuser-odkaz, ze screenshotu (bez recenze). Soubor je v eval/screens/ (mimo git); originál leží v screenshots/aliexpress.jpg."
   }
 ]

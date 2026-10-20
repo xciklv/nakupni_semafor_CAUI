@@ -86,9 +86,9 @@ test('pět hvězd bez dostatku recenzí není signál', () => {
   assert.deepEqual(r.signals, []);
 });
 
-test('počet signálů z nesouladů je omezen na 3', () => {
+test('počet signálů z nesouladů je omezen na 2 (volný text modelu je nejméně spolehlivý signál)', () => {
   const r = offerSignals(X({ produkt: { nazev: 'A' }, nesoulady: ['1', '2', '3', '4', '5'] }));
-  assert.equal(r.signals.filter((s) => s.id === 'nesoulad').length, 3);
+  assert.equal(r.signals.filter((s) => s.id === 'nesoulad').length, 2);
 });
 
 test('cena přesně 0,25× a 0,5× reference: 0,25× je cena_nizka, 0,5× nemá signál', () => {
@@ -114,10 +114,10 @@ test('recenze_same_petky: 20 recenzí ano, 19 ne', () => {
   assert.deepEqual(ids(at19), []);
 });
 
-test('nerealne parametry jsou omezeny na 3 signály', () => {
+test('nerealne parametry jsou omezeny na 2 signály', () => {
   const r = offerSignals(X({ produkt: { nazev: 'A' }, nerealne_parametry: ['1', '2', '3', '4', '5'] }));
-  assert.equal(r.signals.filter((s) => s.id === 'nerealny_parametr').length, 3);
-  assert.equal(r.signals.length, 3);
+  assert.equal(r.signals.filter((s) => s.id === 'nerealny_parametr').length, 2);
+  assert.equal(r.signals.length, 2);
 });
 
 test('duplicitní nerealne parametry (bez ohledu na velikost písmen a mezery) dají jeden signál', () => {
@@ -126,9 +126,18 @@ test('duplicitní nerealne parametry (bez ohledu na velikost písmen a mezery) d
   assert.equal(r.signals[0].id, 'nerealny_parametr');
 });
 
-test('společný limit 3 pro nerealne parametry a nesoulady: nejdřív nerealne', () => {
-  const r = offerSignals(X({ produkt: { nazev: 'A' }, nerealne_parametry: ['a', 'b'], nesoulady: ['c', 'd', 'e'] }));
-  assert.equal(r.signals.length, 3);
-  assert.equal(r.signals.filter((s) => s.id === 'nerealny_parametr').length, 2);
+test('společný limit 2 pro nerealne parametry a nesoulady: nejdřív nerealne', () => {
+  const r = offerSignals(X({ produkt: { nazev: 'A' }, nerealne_parametry: ['a'], nesoulady: ['c', 'd', 'e'] }));
+  assert.equal(r.signals.length, 2);
+  assert.equal(r.signals.filter((s) => s.id === 'nerealny_parametr').length, 1);
   assert.equal(r.signals.filter((s) => s.id === 'nesoulad').length, 1);
+  const only = offerSignals(X({ produkt: { nazev: 'A' }, nerealne_parametry: ['a', 'b'], nesoulady: ['c'] }));
+  assert.equal(only.signals.filter((s) => s.id === 'nerealny_parametr').length, 2);
+  assert.equal(only.signals.filter((s) => s.id === 'nesoulad').length, 0);
+});
+
+test('volný text modelu (nerealne + nesoulady) nikdy nepřidá víc než 2 body: samotný šum nedá oranžovou ani červenou', () => {
+  const r = offerSignals(X({ produkt: { nazev: 'A' }, nerealne_parametry: ['a', 'b', 'c'], nesoulady: ['d', 'e', 'f', 'g'] }));
+  const points = r.signals.reduce((sum, sg) => sum + (sg.severity === 'low' ? 1 : 0), 0);
+  assert.equal(points, 2);
 });

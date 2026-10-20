@@ -1,5 +1,7 @@
 if (typeof require !== 'undefined' && typeof signal === 'undefined') { var { signal } = require('./signals'); }
 
+const OFFER_FREE_TEXT_MAX = 2;
+
 function offerSignals(x) {
   const p = x.produkt, r = x.recenze, o = x.obrazky;
   if (!p.nazev && !(p.cena > 0)) return { status: 'unchecked', signals: [] };
@@ -20,10 +22,11 @@ function offerSignals(x) {
     if (p.cena < ref.min * 0.25) add('cena_extremne_nizka', 'low', 'Cena je extrémně nízká', 'Cena ' + p.cena + ' ' + p.mena + ' je pod čtvrtinou odhadované typické ceny (' + rozsah + ').', 'odhad modelu');
     else if (p.cena < ref.min * 0.5) add('cena_nizka', 'info', 'Cena je výrazně pod typickou', 'Cena ' + p.cena + ' ' + p.mena + ' je pod polovinou odhadované typické ceny (' + rozsah + ').', 'odhad modelu');
   }
+  // Volný text psaný modelem je nejméně spolehlivý signál: společně nejvýše OFFER_FREE_TEXT_MAX nízkých signálů, ať šum nepřebije tvrdá data.
   [
     ...uniq(x.nerealne_parametry).map((t) => ['nerealny_parametr', 'Nereálný parametr', t]),
     ...uniq(x.nesoulady).map((t) => ['nesoulad', 'Rozpor v nabídce', t]),
-  ].slice(0, 3).forEach(([id, title, t]) => add(id, 'low', title, t));
+  ].slice(0, OFFER_FREE_TEXT_MAX).forEach(([id, title, t]) => add(id, 'low', title, t));
   if (o.nesoulad_s_popisem === true) add('nesoulad_obrazku', 'low', 'Fotky neodpovídají popisu', 'Obrázky v nabídce neodpovídají popsanému produktu.');
   if (o.vypada_ai_nebo_katalog === true) add('obrazky_ai_katalog', 'info', 'Fotky vypadají jako AI nebo katalogové', 'Jde o odhad a nemusí být pravdivý.', 'odhad modelu');
   if (r.podobne_texty === true) add('recenze_podobne', 'low', 'Recenze si jsou podezřele podobné', 'Několik recenzí má téměř stejný text.');

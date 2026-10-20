@@ -105,8 +105,8 @@ const sigText = (r) => (Array.isArray(r.signaly) && r.signaly.length ? r.signaly
 const frac = (x, y) => (y > 0 ? x + '/' + y + ' (' + Math.round((x / y) * 100) + ' %)' : 'n/a');
 
 const COI_NOTE = 'Skupina ČOI je kruhová: verdikt vychází ze stejného seznamu, proto jde jen o kontrolu funkčnosti řetězce, ne o měřítko detekce. Zařazení na seznam ČOI znamená rizikového provozovatele, ne prokázaný podvod.';
-const GROUP_ORDER = ['coi', 'legit', 'synthetic', 'screens'];
-const GROUP_TITLE = { coi: 'ČOI (coi)' };
+const GROUP_ORDER = ['coi', 'legit', 'synthetic', 'produkt', 'screens'];
+const GROUP_TITLE = { coi: 'ČOI (coi)', produkt: 'Konkrétní produktové stránky (produkt)' };
 
 // Řádky s metrikami jedné množiny případů. Počítá se jen z vyhodnocených případů (bez chyb požadavků),
 // chyby jsou uvedeny zvlášť: ev = metriky vyhodnocených, all = metriky včetně chyb.
