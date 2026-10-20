@@ -226,9 +226,9 @@ test('readNumberEnv: neplatné hodnoty padají na výchozí', () => {
 // ---- report: CLI helpers ----
 
 test('parseArgs a selectCases', () => {
-  assert.deepEqual(parseArgs([]), { only: null, ids: null });
-  assert.deepEqual(parseArgs(['--only', 'podvod']), { only: 'podvod', ids: null });
-  assert.deepEqual(parseArgs(['--ids', 'a,b, c']), { only: null, ids: ['a', 'b', 'c'] });
+  assert.deepEqual(parseArgs([]), { only: null, ids: null, repeat: 1 });
+  assert.deepEqual(parseArgs(['--only', 'podvod']), { only: 'podvod', ids: null, repeat: 1 });
+  assert.deepEqual(parseArgs(['--ids', 'a,b, c']), { only: null, ids: ['a', 'b', 'c'], repeat: 1 });
   assert.throws(() => parseArgs(['--only']), /--only/);
   assert.throws(() => parseArgs(['--only', 'nesmysl']), /nesmysl/);
   assert.throws(() => parseArgs(['--foo']), /--foo/);
@@ -459,4 +459,50 @@ test('cases.json: složení sady po skupinách', () => {
   assert.ok(CASES.some((c) => /Ignoruj všechny instrukce/.test(c.text || '')));
   assert.equal(new Set(CASES.filter((c) => c.odkaz).map((c) => c.odkaz)).size, 34);
   assert.ok(!CASES.some((c) => /blockchain/.test(c.id)));
+});
+
+// --- opakování a stabilita ---
+const { stabilitySummary, stabilityLines } = require('../eval/report');
+const run = (id, label, semafor, extra = {}) => ({ id, label, skupina: 'produkt', stav: 'ok', semafor, skore: 0, signaly: [], ...extra });
+
+test('parseArgs: --repeat N (1 až 10), výchozí 1, špatné hodnoty selžou', () => {
+  assert.equal(parseArgs(['--repeat', '5']).repeat, 5);
+  assert.equal(parseArgs(['--repeat', '1']).repeat, 1);
+  assert.equal(parseArgs(['--repeat', '10']).repeat, 10);
+  assert.deepEqual(parseArgs(['--ids', 'a', '--repeat', '3']), { only: null, ids: ['a'], repeat: 3 });
+  for (const bad of [['--repeat'], ['--repeat', '0'], ['--repeat', '11'], ['--repeat', '-2'], ['--repeat', '2.5'], ['--repeat', 'pět'], ['--repeat', '']]) {
+    assert.throws(() => parseArgs(bad), /--repeat/, JSON.stringify(bad));
+  }
+});
+
+test('stabilitySummary: rozdělení výsledků po případech, příznak stabilní, chyby a potrebuji_vice jako vlastní výsledek', () => {
+  const rows = stabilitySummary([
+    run('a', 'ok', 'zelená'), run('b', 'ok', 'zelená'), run('a', 'ok', 'zelená'), run('b', 'ok', 'oranžová'), run('b', 'ok', 'zelená'),
+    { id: 'c', label: 'podvod', skupina: 'produkt', stav: 'potrebuji_vice' }, { id: 'c', label: 'podvod', skupina: 'produkt', stav: 'chyba', chyba: 'x' },
+  ]);
+  assert.deepEqual(rows.map((r) => r.id), ['a', 'b', 'c']);
+  assert.deepEqual(rows[0], { id: 'a', label: 'ok', runs: 2, counts: { 'zelená': 2 }, stable: true });
+  assert.deepEqual(rows[1].counts, { 'zelená': 2, 'oranžová': 1 });
+  assert.equal(rows[1].stable, false);
+  assert.deepEqual(rows[2].counts, { potrebuji_vice: 1, chyba: 1 });
+  assert.equal(stabilitySummary(undefined).length, 0);
+  assert.equal(stabilitySummary([null, {}]).length, 0);
+});
+
+test('stabilityLines: souhrn a nestabilní případy s četnostmi (nejčastější první)', () => {
+  const lines = stabilityLines([run('a', 'ok', 'zelená'), run('a', 'ok', 'zelená'), run('b', 'ok', 'oranžová'), run('b', 'ok', 'zelená'), run('b', 'ok', 'zelená')]);
+  assert.equal(lines[0], '2 případů, 1 z nich mění výsledek mezi opakováními.');
+  assert.equal(lines[1], '⚠ b (ok): zelená×2, oranžová×1');
+  assert.equal(lines.length, 2);
+});
+
+test('renderReport: sekce stability jen při opakování a poznámka o počítání běhů', () => {
+  const results = [run('a', 'ok', 'zelená'), run('a', 'ok', 'oranžová'), run('b', 'podvod', 'červená'), run('b', 'podvod', 'červená')];
+  const once = renderReport(results, { datum: 'd', api: 'x' });
+  assert.equal(once.includes('Stabilita opakování'), false);
+  const rep = renderReport(results, { datum: 'd', api: 'x', repeat: 2 });
+  assert.match(rep, /## Stabilita opakování \(2× na případ\)/);
+  assert.match(rep, /Každý případ proběhl 2×/);
+  assert.match(rep, /\| a \| ok \| ⚠ (zelená×1, oranžová×1|oranžová×1, zelená×1) \|/);
+  assert.match(rep, /\| b \| podvod \| červená×2 \|/);
 });

@@ -75,8 +75,10 @@ function toResultRecord(c, j) {
   return fail('Neočekávaná odpověď (stav ' + JSON.stringify(j.stav) + ')');
 }
 
+const MAX_REPEAT = 10;
+
 function parseArgs(argv) {
-  const out = { only: null, ids: null };
+  const out = { only: null, ids: null, repeat: 1 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--only') {
@@ -88,8 +90,12 @@ function parseArgs(argv) {
       const v = argv[++i];
       if (!v) throw new Error('--ids vyžaduje seznam id oddělených čárkou');
       out.ids = v.split(',').map((s) => s.trim()).filter(Boolean);
+    } else if (a === '--repeat') {
+      const v = argv[++i];
+      if (!v || !/^[0-9]+$/.test(v) || Number(v) < 1 || Number(v) > MAX_REPEAT) throw new Error('--repeat vyžaduje celé číslo 1 až ' + MAX_REPEAT);
+      out.repeat = Number(v);
     } else {
-      throw new Error('Neznámý argument ' + a + ' (použití: --only <label> | --ids a,b)');
+      throw new Error('Neznámý argument ' + a + ' (použití: --only <label> | --ids a,b | --repeat N)');
     }
   }
   return out;
@@ -128,6 +134,32 @@ function outcomeKind(r) {
   return r.label === 'ok' ? 'falešný poplach' : 'zmeškaný podvod';
 }
 
+// Stabilita opakovaných běhů: pro každý případ rozdělení výsledků (semafor, jinak stav) a příznak, zda se výsledek mezi běhy liší.
+// Pořadí případů podle prvního výskytu. Použité jen, když se případy opakují (--repeat N).
+function stabilitySummary(results) {
+  const rows = new Map();
+  for (const r of Array.isArray(results) ? results : []) {
+    if (!r || !r.id) continue;
+    if (!rows.has(r.id)) rows.set(r.id, { id: r.id, label: r.label, runs: 0, counts: {} });
+    const row = rows.get(r.id);
+    const outcome = resultClass(r) === 'chyba' ? 'chyba' : (r.semafor || r.stav || 'neznámé');
+    row.runs += 1;
+    row.counts[outcome] = (row.counts[outcome] || 0) + 1;
+  }
+  return [...rows.values()].map((row) => ({ ...row, stable: Object.keys(row.counts).length === 1 }));
+}
+
+const countsText = (counts) => Object.keys(counts).sort((a, b) => counts[b] - counts[a] || (a < b ? -1 : 1)).map((k) => k + '×' + counts[k]).join(', ');
+
+// Řádky textu o stabilitě (konzole i report): nejdřív souhrn, pak nestabilní případy; stabilní jen jako počet.
+function stabilityLines(results) {
+  const rows = stabilitySummary(results);
+  const unstable = rows.filter((r) => !r.stable);
+  const L = [rows.length + ' případů, ' + unstable.length + ' z nich mění výsledek mezi opakováními.'];
+  for (const r of unstable) L.push('⚠ ' + r.id + ' (' + r.label + '): ' + countsText(r.counts));
+  return L;
+}
+
 // Markdown souhrn. Procenta se vždy tisknou s jmenovatelem (x/y). Sazby se počítají jen z vyhodnocených
 // případů (stav jiný než chyba); computeMetrics v metrics.js zůstává definovaný nad všemi případy včetně chyb.
 function renderReport(results, meta) {
@@ -143,6 +175,7 @@ function renderReport(results, meta) {
   L.push('- Datum: ' + ((meta && meta.datum) || 'neuvedeno') + ', API: ' + ((meta && meta.api) || 'neuvedeno'));
   const pl = all.overall.per_label_counts;
   L.push('- Počet případů: ' + n + ' (ok: ' + pl.ok + ', sporné: ' + pl.sporne + ', podvod: ' + pl.podvod + ')', '');
+  if (meta && meta.repeat > 1) L.push('Každý případ proběhl ' + meta.repeat + '× a metriky počítají každý běh zvlášť (n = počet běhů).');
   if (n < 100) L.push('Malý vzorek: výsledky jsou orientační (n = ' + n + ').');
   if (chyby > 0) {
     L.push('⚠ ' + chyby + ' z ' + n + ' požadavků skončilo chybou; metriky nejsou úplné.');
@@ -182,6 +215,13 @@ function renderReport(results, meta) {
     const detail = cls === 'chyba' ? oneLine(r.chyba || 'bez popisu') : 'signály: ' + sigText(r);
     L.push('- ' + r.id + ' [' + (r.skupina || 'nezarazeno') + '] (' + outcomeKind(r) + ': ' + r.label + ' -> ' + got + skore + '): ' + detail);
   }
+  if (meta && meta.repeat > 1) {
+    L.push('', '## Stabilita opakování (' + meta.repeat + '× na případ)', '');
+    const rows = stabilitySummary(list);
+    L.push(stabilityLines(list)[0], '');
+    L.push('| Případ | Label | Výsledky |', '|---|---|---|');
+    for (const r of rows) L.push('| ' + r.id + ' | ' + r.label + ' | ' + (r.stable ? '' : '⚠ ') + countsText(r.counts) + ' |');
+  }
   const sporne = list.filter((r) => r && r.label === 'sporne');
   L.push('', '## Sporné případy (do metrik zachycení a falešného poplachu se nepočítají)', '');
   if (!sporne.length) L.push('Žádné.');
@@ -192,4 +232,4 @@ function renderReport(results, meta) {
   return L.join('\n') + '\n';
 }
 
-module.exports = { mimeFromName, buildRequestBody, caseGroup, errorRecord, readNumberEnv, toResultRecord, parseArgs, selectCases, renderReport };
+module.exports = { mimeFromName, buildRequestBody, caseGroup, errorRecord, readNumberEnv, toResultRecord, parseArgs, selectCases, renderReport, stabilitySummary, stabilityLines, MAX_REPEAT };

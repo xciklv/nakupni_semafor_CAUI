@@ -2,6 +2,9 @@ if (typeof require !== 'undefined' && typeof signal === 'undefined') { var { sig
 
 const SELLER_EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'];
 
+// Nejméně údajů o prodejci, aby se bez externí kontroly (marketplace, screenshot, text) modul prodejce bral jako zkontrolovaný.
+const SELLER_MIN_CHECKS = 2;
+
 // Časté dvouúrovňové veřejné přípony: registrovatelná doména má pak tři části.
 const SELLER_SLD = ['co.uk', 'org.uk', 'com.pl', 'com.au', 'co.jp', 'ne.jp', 'com.br', 'co.nz', 'co.za', 'com.tr'];
 
@@ -159,13 +162,21 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
   if (known(s.kontakt_uveden)) { checks++; if (s.kontakt_uveden === false && !outsideEu) add('kontakt_chybi', 'medium', 'Chybí kontakt', 'Prodejce neuvádí kontaktní údaje.', 'analýza nabídky'); }
   if (known(s.podminky_uvedeny)) { checks++; if (s.podminky_uvedeny === false) add('podminky_chybi', 'low', 'Chybí obchodní podmínky', 'Nejsou dostupné obchodní podmínky.', 'analýza nabídky'); }
   // hodnocení 0 = bez hodnocení (ne špatné hodnocení): nevyhodnocuje se
-  if (known(s.hodnoceni) && s.hodnoceni > 0) { checks++; if (s.hodnoceni < 4.0) add('hodnoceni_nizke', 'medium', 'Nízké hodnocení prodejce', 'Hodnocení prodejce je ' + sellerDec(s.hodnoceni) + '.', 'analýza nabídky'); }
+  // Stupně: pod 3,5 je střední signál (samo o sobě stačí na oranžovou), 3,5 až 4,0 jen nízký (průměrné hodnocení není důvod k varování).
+  if (known(s.hodnoceni) && s.hodnoceni > 0) {
+    checks++;
+    if (s.hodnoceni < 3.5) add('hodnoceni_nizke', 'medium', 'Nízké hodnocení prodejce', 'Hodnocení prodejce je ' + sellerDec(s.hodnoceni) + '.', 'analýza nabídky');
+    else if (s.hodnoceni < 4.0) add('hodnoceni_prumerne', 'low', 'Podprůměrné hodnocení prodejce', 'Hodnocení prodejce je ' + sellerDec(s.hodnoceni) + '.', 'analýza nabídky');
+  }
   if (known(s.pocet_prodeju)) { checks++; if (s.pocet_prodeju < 50) add('malo_prodeju', 'low', 'Prodejce má málo prodejů', 'Počet prodejů: ' + s.pocet_prodeju + '.', 'analýza nabídky'); }
   if (known(s.stari_obchodu_dny)) { checks++; if (s.stari_obchodu_dny < 90) add('obchod_novy', 'medium', 'Obchod je nový', 'Obchod je starý ' + sellerDays(s.stari_obchodu_dny) + '.', 'analýza nabídky'); }
   if (outsideEu) {
     add('mimo_eu_bez_kontaktu', 'medium', 'Odeslání mimo EU bez kontaktu', 'Zboží se odesílá ze země ' + s.zeme_odeslani + ' a chybí kontakt nebo provozovatel.', 'analýza nabídky');
   }
-  return { status: checks > 0 ? 'ok' : 'unchecked', signals: out, external, skipped };
+  // Bez externí kontroly (RDAP, ČOI, ARES) stojí verdikt jen na tom, co model vyčetl z nabídky. Marketplace a screenshoty externí zdroj nemají,
+  // proto modul prodejce platí za zkontrolovaný (a verdikt smí být zelený) až při aspoň SELLER_MIN_CHECKS údajích o prodejci; s jedním údajem je nezkontrolovaný.
+  const enough = external || checks >= SELLER_MIN_CHECKS;
+  return { status: checks > 0 && enough ? 'ok' : 'unchecked', signals: out, external, skipped };
 }
 
 if (typeof module !== 'undefined') module.exports = { SELLER_EU, SELLER_SLD, registrable, parseCoi, rdapAgeDays, isValidIco, rdapUrl, sellerSignals };

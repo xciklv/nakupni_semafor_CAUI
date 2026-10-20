@@ -146,7 +146,7 @@ test('marketplace nevolá RDAP ani ČOI', async () => {
 test('kontakt_uveden:false v EU → kontakt_chybi, bez mimo_eu_bez_kontaktu', async () => {
   const r = await sellerSignals({ x: X({ kontakt_uveden: false, zeme_odeslani: 'DE' }), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, fetchers: {}, coiList: null });
   assert.deepEqual(ids(r), ['kontakt_chybi']);
-  assert.equal(r.status, 'ok');
+  assert.equal(r.status, 'unchecked'); // jediný údaj o prodejci bez externí kontroly nestačí (SELLER_MIN_CHECKS)
 });
 
 test('kontakt_uveden:false bez země → kontakt_chybi', async () => {
@@ -157,7 +157,7 @@ test('kontakt_uveden:false bez země → kontakt_chybi', async () => {
 test('provozovatel_uveden:false a odeslání z CN → jen mimo_eu_bez_kontaktu', async () => {
   const r = await sellerSignals({ x: X({ provozovatel_uveden: false, zeme_odeslani: 'CN' }), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, fetchers: {}, coiList: null });
   assert.deepEqual(ids(r), ['mimo_eu_bez_kontaktu']);
-  assert.equal(r.status, 'ok');
+  assert.equal(r.status, 'unchecked'); // provozovatel_uveden je jediný zjištěný údaj
 });
 
 test('dědičné klíče objektů nejsou zásah v seznamu ČOI', async () => {
@@ -314,10 +314,51 @@ test('čeština: před 1 dnem / 2 dny / 5 dny', async () => {
 test('čeština: počet prodejů, hodnocení s desetinnou čárkou, stáří obchodu', async () => {
   const sig = async (p, id) => (await sellerSignals({ x: X(p), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, fetchers: {}, coiList: null })).signals.find((s) => s.id === id);
   assert.equal((await sig({ pocet_prodeju: 10 }, 'malo_prodeju')).evidence, 'Počet prodejů: 10.');
-  assert.equal((await sig({ hodnoceni: 3.5 }, 'hodnoceni_nizke')).evidence, 'Hodnocení prodejce je 3,5.');
+  assert.equal((await sig({ hodnoceni: 3.5 }, 'hodnoceni_prumerne')).evidence, 'Hodnocení prodejce je 3,5.');
   assert.equal((await sig({ hodnoceni: 3 }, 'hodnoceni_nizke')).evidence, 'Hodnocení prodejce je 3.');
   assert.equal((await sig({ stari_obchodu_dny: 30 }, 'obchod_novy')).evidence, 'Obchod je starý 30 dní.');
   assert.equal((await sig({ stari_obchodu_dny: 1 }, 'obchod_novy')).evidence, 'Obchod je starý 1 den.');
   assert.equal((await sig({ stari_obchodu_dny: 3 }, 'obchod_novy')).evidence, 'Obchod je starý 3 dny.');
   assert.equal((await sig({ stari_obchodu_dny: 0 }, 'obchod_novy')).evidence, 'Obchod je starý 0 dní.');
+});
+
+// --- stupně hodnocení prodejce a minimum údajů o prodejci ---
+const { computeVerdict } = require('../engine/scoring');
+const runMk = (p, extra = {}) => sellerSignals({ x: X(p), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, fetchers: {}, coiList: null, ...extra });
+
+test('hodnocení prodejce: pod 3,5 střední signál, 3,5 až 4,0 nízký, od 4,0 žádný, 0 se nehodnotí', async () => {
+  const sev = async (h) => (await runMk({ hodnoceni: h })).signals.map((s) => s.id + ':' + s.severity);
+  assert.deepEqual(await sev(3.4), ['hodnoceni_nizke:medium']);
+  assert.deepEqual(await sev(1), ['hodnoceni_nizke:medium']);
+  assert.deepEqual(await sev(3.5), ['hodnoceni_prumerne:low']);
+  assert.deepEqual(await sev(3.9), ['hodnoceni_prumerne:low']);
+  assert.deepEqual(await sev(4.0), []);
+  assert.deepEqual(await sev(4.8), []);
+  assert.deepEqual(await sev(0), []);
+});
+
+test('hodnocení prodejce: 3,9 samo o sobě oranžovou nedá, 3,4 ano', async () => {
+  const verdict = async (h) => { const r = await runMk({ hodnoceni: h, pocet_prodeju: 500 }); return computeVerdict(r.signals, { offer: 'ok', seller: r.status, safety: 'ok' }).semafor; };
+  assert.equal(await verdict(3.9), 'zelená');
+  assert.equal(await verdict(3.4), 'oranžová');
+});
+
+test('bez externí kontroly modul prodejce platí za zkontrolovaný až od 2 údajů; jediný údaj = nezkontrolováno', async () => {
+  assert.equal((await runMk({})).status, 'unchecked');
+  assert.equal((await runMk({ hodnoceni: 4.8 })).status, 'unchecked');
+  assert.equal((await runMk({ pocet_prodeju: 1200 })).status, 'unchecked');
+  assert.equal((await runMk({ hodnoceni: 4.8, pocet_prodeju: 1200 })).status, 'ok');
+  assert.equal((await runMk({ kontakt_uveden: true, podminky_uvedeny: true })).status, 'ok');
+});
+
+test('marketplace/screenshot s jediným údajem o prodejci nikdy nedá zelenou (šedá), s dvěma údaji ano', async () => {
+  const verdict = async (p) => { const r = await runMk(p); return computeVerdict(r.signals, { offer: 'ok', seller: r.status, safety: 'ok' }).semafor; };
+  assert.equal(await verdict({ hodnoceni: 4.8 }), 'šedá');
+  assert.equal(await verdict({ hodnoceni: 4.8, pocet_prodeju: 1200 }), 'zelená');
+});
+
+test('s externím zdrojem (ČOI) stačí modul prodejce i bez údajů z nabídky', async () => {
+  const r = await runMk({}, { rezim: 'eshop', host: 'example.cz', coiList: {} });
+  assert.equal(r.external, true);
+  assert.equal(r.status, 'ok');
 });

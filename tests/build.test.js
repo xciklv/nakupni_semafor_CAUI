@@ -1083,7 +1083,7 @@ const withShortDeadlines = (src, ms = 40) => DEADLINE_CONSTS.reduce((acc, name) 
   return acc.replace(re, 'const ' + name + ' = ' + ms + ';');
 }, src);
 const DL_CTX = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'example.cz' };
-const DL_EXTRACT = () => NOTEBOOK({ prodejce: { ico: '27082440', kontakt_uveden: true } });
+const DL_EXTRACT = () => NOTEBOOK({ prodejce: { ico: '27082440', kontakt_uveden: true, podminky_uvedeny: true } }); // 2 údaje: modul prodejce je zkontrolovaný i bez externích zdrojů
 const hang = () => new Promise(() => {});
 // stub: všechny zdroje v pořádku, kromě těch v `hung` (nevracejí se nikdy)
 const dlStub = (hung) => (o) => {

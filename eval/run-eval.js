@@ -6,6 +6,8 @@
 //   node eval/run-eval.js                        všechny případy
 //   node eval/run-eval.js --only podvod          jen jeden label (ok | sporne | podvod)
 //   node eval/run-eval.js --ids coi-epiona-cz,text-asdf-sporne    jen vybraná id
+//   node eval/run-eval.js --ids produkt-megaknihy-parfem --repeat 5   každý případ 5× (1 až 10) a přehled, kolik se výsledek mění;
+//                                                                     model nejde nastavit na deterministický výstup, takže jeden běh stabilitu neukáže
 //
 // Proměnné prostředí:
 //   API         adresa webhooku (výchozí http://127.0.0.1:5678/webhook/nakupni-kontrola)
@@ -35,7 +37,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { computeMetrics } = require('./metrics');
-const { buildRequestBody, toResultRecord, errorRecord, readNumberEnv, parseArgs, selectCases, renderReport } = require('./report');
+const { buildRequestBody, toResultRecord, errorRecord, readNumberEnv, parseArgs, selectCases, renderReport, stabilityLines } = require('./report');
 
 const API = process.env.API || 'http://127.0.0.1:5678/webhook/nakupni-kontrola';
 // Neplatná hodnota (nečíslo, záporná; u TIMEOUT_MS i 0) = výchozí.
@@ -78,19 +80,24 @@ async function main() {
   const all = JSON.parse(fs.readFileSync(path.join(__dirname, 'cases.json'), 'utf8'));
   const cases = selectCases(all, opts);
   if (!cases.length) throw new Error('Žádný případ nevyhovuje výběru.');
-  console.log('API: ' + API + ', případů: ' + cases.length);
+  console.log('API: ' + API + ', případů: ' + cases.length + (opts.repeat > 1 ? ', opakování: ' + opts.repeat : ''));
   const results = [];
-  for (let i = 0; i < cases.length; i++) {
-    const c = cases[i];
-    const rec = await runCase(c);
-    results.push(rec);
-    console.log(c.id.padEnd(40), c.label.padEnd(7), rec.semafor || rec.stav + (rec.chyba ? ' (' + rec.chyba + ')' : ''));
-    if (i + 1 < cases.length && DELAY_MS > 0) await sleep(DELAY_MS);
+  const total = cases.length * opts.repeat;
+  let done = 0;
+  for (const c of cases) {
+    for (let rep = 0; rep < opts.repeat; rep++) {
+      const rec = await runCase(c);
+      results.push(rec);
+      done += 1;
+      console.log(c.id.padEnd(40), c.label.padEnd(7), rec.semafor || rec.stav + (rec.chyba ? ' (' + rec.chyba + ')' : ''), opts.repeat > 1 ? 'skóre ' + rec.skore : '');
+      if (done < total && DELAY_MS > 0) await sleep(DELAY_MS);
+    }
   }
+  if (opts.repeat > 1) { console.log('\nStabilita:'); for (const l of stabilityLines(results)) console.log(l); }
   const m = computeMetrics(results);
   const datum = new Date().toISOString().slice(0, 10);
   fs.writeFileSync(path.join(__dirname, 'vysledky.json'), JSON.stringify({ datum, api: API, metriky: m, vysledky: results }, null, 2));
-  fs.writeFileSync(path.join(__dirname, 'vysledky.md'), renderReport(results, { datum, api: API }));
+  fs.writeFileSync(path.join(__dirname, 'vysledky.md'), renderReport(results, { datum, api: API, repeat: opts.repeat }));
   console.log(m);
   console.log('Zapsáno: eval/vysledky.json, eval/vysledky.md');
 }
