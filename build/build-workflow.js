@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const ENGINE = ['signals', 'scoring', 'input', 'llm', 'offer', 'seller', 'safety', 'explain'];
+const ENGINE = ['signals', 'scoring', 'input', 'llm', 'dossier', 'offer', 'seller', 'identity', 'safety', 'plausibility', 'images', 'explain'];
 const root = path.join(__dirname, '..');
 // Výchozí modely mají jediný zdroj pravdy v enginu (testované konstanty).
 const MODEL_EXTRACT_DEFAULT = require('../engine/llm').LLM_MODEL_EXTRACT_DEFAULT;

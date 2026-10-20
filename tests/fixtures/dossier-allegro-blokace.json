@@ -1,0 +1,50 @@
+{
+  "schema": "nakupni-kontrola/dossier@0-spike",
+  "collectedAt": "2026-10-20T18:25:22.626Z",
+  "url": "https://allegro.cz/produkt/nahradni-hlavice-holici-hlavy-pro-philips-oneblade-360-koncovka-a6ae4ecd-fdf1-4a68-aabb-fe88d40a97d9?offerId=18724176560",
+  "finalUrl": "https://allegro.cz/produkt/nahradni-hlavice-holici-hlavy-pro-philips-oneblade-360-koncovka-a6ae4ecd-fdf1-4a68-aabb-fe88d40a97d9?offerId=18724176560",
+  "platform": "allegro",
+  "ok": false,
+  "blocked": {
+    "kind": "captcha",
+    "vendor": "DataDome",
+    "evidence": "HTTP 403, stránka obsahuje iframe geo.captcha-delivery.com",
+    "status": 403,
+    "url": "https://allegro.cz/produkt/nahradni-hlavice-holici-hlavy-pro-philips-oneblade-360-koncovka-a6ae4ecd-fdf1-4a68-aabb-fe88d40a97d9?offerId=18724176560"
+  },
+  "pageTitle": "allegro.cz",
+  "challenge": null,
+  "gaps": [
+    {
+      "what": "celá stránka",
+      "why": "výzva k ověření (CAPTCHA) – DataDome: nahlášeno, neobcházeno"
+    }
+  ],
+  "actions": [],
+  "evidenceIndex": [],
+  "stats": {
+    "ms": 11496,
+    "jsonResponsesSeen": 0,
+    "jsonBytesSeen": 0,
+    "dossier": {
+      "chars": 962,
+      "tokensLow": 241,
+      "tokensHigh": 321,
+      "assumptions": {
+        "promptTokens": 1000,
+        "outTokens": 800
+      },
+      "costUsd": {
+        "haiku": {
+          "low": 0.00052,
+          "high": 0.00053
+        },
+        "sonnet": {
+          "low": 0.01048,
+          "high": 0.01064
+        }
+      },
+      "charsPretty": 1358
+    }
+  }
+}

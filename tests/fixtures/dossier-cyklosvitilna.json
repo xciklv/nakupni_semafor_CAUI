@@ -1,0 +1,442 @@
+{
+  "schema": "nakupni-kontrola/dossier@0-spike",
+  "collectedAt": "2026-10-20T18:24:23.068Z",
+  "url": "https://www.aliexpress.com/item/1005011759581041.html",
+  "finalUrl": "https://www.aliexpress.com/item/1005011759581041.html",
+  "platform": "aliexpress",
+  "ok": true,
+  "blocked": null,
+  "title": {
+    "value": "Bicycle Light Front With Taillight 25500Lumen Bike Light 10000mAh Flashlight USB Charging MTB Road Cycling Lamp Accessories",
+    "source": {
+      "section": "hlavička produktu (h1 [data-pl=product-title])",
+      "quote": "Bicycle Light Front With Taillight 25500Lumen Bike Light 10000mAh Flashlight USB Charging MTB Road Cycling Lamp Accessories"
+    }
+  },
+  "price": {
+    "currency": "CZK",
+    "amount": 1088.49,
+    "text": "CZK1,088.49",
+    "discount": "2% off",
+    "lowest30d": {
+      "text": "CZK1,113.21",
+      "currency": "CZK",
+      "amount": 1113.21
+    },
+    "note": "Price includes VAT | Import charges will apply ; Extra 1% off with coins",
+    "source": {
+      "section": "cenový blok",
+      "quote": "CZK1,088.49 | 2% off | Price includes VAT | Import charges will apply ; Extra 1% off with coins"
+    }
+  },
+  "sold": {
+    "value": "23",
+    "source": {
+      "section": "hlavička produktu",
+      "quote": "23 sold"
+    }
+  },
+  "headerSeller": null,
+  "brand": {
+    "value": "VASTFIRE",
+    "source": {
+      "section": "JSON-LD Product.brand",
+      "quote": "VASTFIRE"
+    }
+  },
+  "structuredData": {
+    "source": {
+      "section": "JSON-LD v hlavičce stránky",
+      "quote": "{\"name\":\"Bicycle Light Front With Taillight 25500Lumen Bike Light 10000mAh Flashlight USB Charging MTB Road Cycling Lamp Accessories - AliExpress 18\",\"brand\":{\"@type\":\"Brand\",\"name\":\"VASTFIRE\"},\"offers\":{\"price\":\"1088.49\",\"priceCurrency\":\"CZK\"},\"aggr"
+    },
+    "jsonLd": {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      "name": "Bicycle Light Front With Taillight 25500Lumen Bike Light 10000mAh Flashlight USB Charging MTB Road Cycling Lamp Accessories - AliExpress 18",
+      "image": [
+        "https://ae-pic-a1.aliexpress-media.com/kf/S805fed01073f424ba0c1bf186f5d416cF.jpg",
+        "https://ae-pic-a1.aliexpress-media.com/kf/S805fed01073f424ba0c1bf186f5d416cF.jpg",
+        "https://ae-pic-a1.aliexpress-media.com/kf/S68f1ec7786864c9dba63e70b810f9833j.jpg"
+      ],
+      "description": "VASTFIRE 25500Lumen front bike light with taillight, 10000mAh aluminum alloy flashlight, USB rechargeable, 2000-3000 lumen, handlebar mount, ideal for MTB and road cycling.",
+      "brand": {
+        "@type": "Brand",
+        "name": "VASTFIRE"
+      },
+      "offers": {
+        "@type": "Offer",
+        "availability": "https://schema.org/InStock",
+        "url": "https://www.aliexpress.com/item/1005011759581041.html",
+        "priceCurrency": "CZK",
+        "price": "1088.49"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.3",
+        "reviewCount": "4"
+      }
+    }
+  },
+  "variants": {
+    "properties": [
+      {
+        "name": "Color",
+        "selected": "8LED",
+        "options": [
+          {
+            "label": "8LED",
+            "selected": true
+          },
+          {
+            "label": "8LED With Taillight",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "name": "Lumen",
+        "selected": "2000-3000 Lumen",
+        "options": [
+          {
+            "label": "2000-3000 Lumen",
+            "selected": true
+          }
+        ]
+      },
+      {
+        "name": "Battery Capacity(mAh)",
+        "selected": ">8000 Mah",
+        "options": [
+          {
+            "label": ">8000 Mah",
+            "selected": true
+          }
+        ]
+      }
+    ],
+    "source": {
+      "section": "výběr variant (sku-item--*)",
+      "quote": "Color: 8LED | Lumen: 2000-3000 Lumen | Battery Capacity(mAh): >8000 Mah"
+    },
+    "optionPrices": []
+  },
+  "specifications": {
+    "rows": [
+      {
+        "name": "Intelligent sensing",
+        "value": "N"
+      },
+      {
+        "name": "High-concerned chemical",
+        "value": "none"
+      },
+      {
+        "name": "Waterproof Level",
+        "value": "IPX6"
+      },
+      {
+        "name": "Support Dimmer",
+        "value": "2 - 4 Files"
+      },
+      {
+        "name": "Body Material",
+        "value": "Aluminum alloy"
+      },
+      {
+        "name": "Type",
+        "value": "HEADLIGHTS"
+      }
+    ],
+    "documents": [],
+    "truncatedBeforeViewMore": true,
+    "source": {
+      "section": "Specifications (#nav-specification)",
+      "quote": "Specifications Intelligent sensing N High-concerned chemical none Waterproof Level IPX6 Support Dimmer 2 - 4 Files Body Material Aluminum alloy Type HEADLIGHTS "
+    }
+  },
+  "description": {
+    "aiOverview": {
+      "generatedByPlatform": true,
+      "disclaimer": "Disclaimer: This content is generated by AI and does not represent the merchants opinion. The platform and merchants assume no related legal liability.",
+      "bullets": [
+        "Ultra-bright 25500 Lumen front and taillight combo Featuring a powerful 25500 Lumen output, this bicycle light delivers exceptional visibility for safe night riding on both mountain and road trails.",
+        "High-capacity 10000mAh rechargeable battery Equipped with a 10000mAh battery, this light ensures long-lasting performance, ideal for extended cycling sessions without frequent recharging.",
+        "Durable aluminum alloy body construction Built with a premium aluminum alloy body, this light offers superior durability, heat dissipation, and resistance to impact and harsh weather conditions.",
+        "USB rechargeable for convenient power-up Powered by a USB charging system, the light can be easily recharged using any standard USB power source, making it highly portable and user-friendly.",
+        "Secure handlebar mounting with adjustable fit Designed for handlebar mounting, this light provides a stable and adjustable installation, ensuring optimal beam direction and secure attachment during rides.",
+        "8LED design with integrated taillight The 8LED front light paired with a built-in taillight enhances visibility from all angles, improving safety for both day and night cycling.",
+        "Brand: VASTFIRE – Reliable performance Crafted by VASTFIRE, this high-performance lighting system combines advanced technology and reliable engineering for serious cyclists."
+      ],
+      "source": {
+        "section": "AI přehled platformy (seo-sellpoints--*)",
+        "quote": "Disclaimer: This content is generated by AI and does not represent the merchants opinion. The platform and merchants ass"
+      },
+      "viewMoreButtonPresent": true
+    },
+    "sellerDescription": {
+      "text": null,
+      "images": 0,
+      "iframes": 1,
+      "source": {
+        "section": "Description (#nav-description / #product-description)",
+        "quote": "Description report"
+      },
+      "frameText": null
+    }
+  },
+  "reviews": {
+    "count": 4,
+    "average": 4.3,
+    "verifiedPurchasesOnly": true,
+    "source": {
+      "section": "sekce recenzí (#nav-review)",
+      "quote": "Reviews | 4.3 4 ratings All from verified purchases All ratings (0) (0) (0) Sort by defaultShow original language Color:8LED Lumen:2000-3000 Lumen Battery Capac"
+    },
+    "items": [
+      {
+        "rating": 5,
+        "text": "A beautiful lamp that illuminates very well during the day; can't wait to see it at night 🙂",
+        "author": "AliExpress Shopper",
+        "date": "03 Jun 2026",
+        "variant": "Color:8LED Lumen:2000-3000 Lumen Battery Capacity(mAh):>8000 Mah",
+        "helpful": "Helpful (0)",
+        "photos": 0
+      },
+      {
+        "rating": 5,
+        "text": null,
+        "author": "AliExpress Shopper",
+        "date": "19 Jun 2026",
+        "variant": "Color:8LED With Taillight Lumen:2000-3000 Lumen Battery Capacity(mAh):>8000 Mah",
+        "helpful": "Helpful (0)",
+        "photos": 0
+      },
+      {
+        "rating": 5,
+        "text": null,
+        "author": "AliExpress Shopper",
+        "date": "10 Jun 2026",
+        "variant": "Color:8LED Lumen:2000-3000 Lumen Battery Capacity(mAh):>8000 Mah",
+        "helpful": "Helpful (0)",
+        "photos": 0
+      }
+    ],
+    "shown": 3,
+    "complete": false
+  },
+  "seller": {
+    "name": "Shop1103729767 Store",
+    "type": "Trader",
+    "storeId": "1103729767",
+    "storeUrl": "https://www.aliexpress.com/store/1103729767",
+    "positiveFeedbackPct": 94.2,
+    "followers": 190,
+    "source": {
+      "section": "Sold By (store-detail--*) a blok obchodu (#nav-store)",
+      "quote": "Sold By Shop1103729767 Store (Trader) || Shop1103729767 Store 94.2% Positive Feedback | 190 Followers"
+    },
+    "registration": {
+      "soldBy": "Shop1103729767 Store",
+      "processedBy": null,
+      "logisticsBy": "AliExpress",
+      "source": {
+        "section": "Additional regulatory information",
+        "quote": "Sold by Shop1103729767 Store. Logistics by AliExpress."
+      }
+    },
+    "headerLine": null
+  },
+  "delivery": {
+    "text": "Service commitment | Free shipping  | Delivery: Nov 01 - 05  | Return & refund policy",
+    "lines": [
+      "Free shipping ",
+      "Delivery: Nov 01 - 05 ",
+      "Return & refund policy"
+    ],
+    "source": {
+      "section": "nákupní box (Service commitment)",
+      "quote": "Service commitment Free shipping Delivery: Nov 01 - 05 Return & refund policy"
+    }
+  },
+  "returns": {
+    "label": "Return & refund policy",
+    "detail": null,
+    "source": {
+      "section": "nákupní box (Return & refund policy)",
+      "quote": "Return & refund policy"
+    }
+  },
+  "overlays": {},
+  "compliance": {
+    "regulatoryText": "Additional regulatory information\nFor items delivered from outside the European Union, you may be subject to additional charges for VAT and, when applicable, customs duties in your country. If AliExpress is obliged by law to collect VAT, you will see the VAT inclusive price at checkout. For more information about these costs, please contact the tax and customs authorities in your country.\nSold by Shop1103729767 Store. Logistics by AliExpress.",
+    "soldBy": "Shop1103729767 Store",
+    "processedBy": null,
+    "logisticsBy": "AliExpress",
+    "source": {
+      "section": "Additional regulatory information",
+      "quote": "Sold by Shop1103729767 Store. Logistics by AliExpress."
+    }
+  },
+  "store": {
+    "url": "https://www.aliexpress.com/store/1103729767?sortType=bestmatch_sort",
+    "positiveFeedback": null,
+    "followers": null,
+    "openSince": null,
+    "ratingLine": null,
+    "links": [
+      {
+        "text": "Return&refund policy",
+        "href": "https://www.aliexpress.com/ssr/300000437/PinKTaDpEb?disableNav=YES&pha_manifest=ssr&_immersiveMode=true"
+      },
+      {
+        "text": "Return Policy",
+        "href": "https://www.aliexpress.com/ssr/300000437/G7ZED4yXte?disableNav=YES&pha_manifest=ssr&_immersiveMode=true"
+      },
+      {
+        "text": "Privacy Policy",
+        "href": "https://campaign.aliexpress.com/wow/gcp/app-redirect-terms/index"
+      },
+      {
+        "text": "Privacy Policy",
+        "href": "https://campaign.aliexpress.com/wow/gcp/app-redirect-terms/index"
+      }
+    ],
+    "source": {
+      "section": "stránka obchodu",
+      "quote": "AliExpress Download the AliExpress app Other/EN/ CZK Welcome Sign in / Register 0 Cart Shop1103729767 Store Best Match Orders New Price 280LED Outdoor LED Christmas Tree Decoration Christmas Gift Garl"
+    }
+  },
+  "identifiers": [],
+  "challenge": {
+    "vendor": "AliExpress baxia (reCAPTCHA)",
+    "evidence": "viditelný iframe https://recom-acs.aliexpress.com//h5/mtop.relationrecommend.aliexpressrecommend.recommend/1.0/_____tmd_____/punish?x5secdata=…&x5step=2&acti",
+    "firstSeenBefore": "po načtení stránky (před posunem)",
+    "tMs": 4537
+  },
+  "gaps": [
+    {
+      "what": "Specifications: řádky za „View more“",
+      "why": "nerozbaleno (výzva k ověření)"
+    },
+    {
+      "what": "Reviews: recenze za „View more“",
+      "why": "nerozbaleno (výzva k ověření)"
+    },
+    {
+      "what": "popis prodejce",
+      "why": "prázdný (#product-description bez textu; zřejmě jen obrázky nebo se nedotáhl)"
+    },
+    {
+      "what": "doba existence obchodu",
+      "why": "na stránce produktu není; hledá se na stránce obchodu"
+    },
+    {
+      "what": "doba existence obchodu",
+      "why": "na stránce obchodu není uvedena"
+    }
+  ],
+  "actions": [
+    {
+      "what": "AI přehled: View More",
+      "ok": false,
+      "note": "přeskočeno: stránku překrývá výzva k ověření",
+      "tMs": 8300
+    },
+    {
+      "what": "Specifications: View more",
+      "ok": false,
+      "note": "přeskočeno: stránku překrývá výzva k ověření",
+      "tMs": 8300
+    },
+    {
+      "what": "Reviews: View more",
+      "ok": false,
+      "note": "přeskočeno: stránku překrývá výzva k ověření",
+      "tMs": 8332
+    },
+    {
+      "what": "Varianty",
+      "ok": false,
+      "note": "přeskočeno: stránku překrývá výzva k ověření",
+      "tMs": 8332
+    },
+    {
+      "what": "klik: Return & refund policy",
+      "ok": false,
+      "note": "přeskočeno: stránku překrývá výzva k ověření",
+      "tMs": 8332
+    },
+    {
+      "what": "klik: Delivery detail",
+      "ok": false,
+      "note": "přeskočeno: stránku překrývá výzva k ověření",
+      "tMs": 8332
+    },
+    {
+      "what": "klik: Product compliance information",
+      "ok": false,
+      "note": "přeskočeno: stránku překrývá výzva k ověření",
+      "tMs": 8332
+    },
+    {
+      "what": "klik: Trader",
+      "ok": false,
+      "note": "přeskočeno: stránku překrývá výzva k ověření",
+      "tMs": 8332
+    },
+    {
+      "what": "stránka obchodu načtena",
+      "ok": true,
+      "note": "8082 znaků",
+      "tMs": 12601
+    }
+  ],
+  "evidenceIndex": [
+    {
+      "id": "e1",
+      "section": "snapshot-body",
+      "via": "dom",
+      "chars": 16391,
+      "head": "AliExpress Download the AliExpress app Other/EN/ CZK Welcome Sign in / Register 0 Cart Bicycle Light Front With Taillight 25500Lumen Bike Light 10000mAh Flashli"
+    },
+    {
+      "id": "e2",
+      "section": "snapshot-final",
+      "via": "dom",
+      "chars": 16170,
+      "head": "AliExpress Download the AliExpress app Other/EN/ CZK Welcome Sign in / Register 0 Cart Bicycle Light Front With Taillight 25500Lumen Bike Light 10000mAh Flashli"
+    },
+    {
+      "id": "e3",
+      "section": "store-page",
+      "via": "dom",
+      "chars": 8082,
+      "head": "AliExpress Download the AliExpress app Other/EN/ CZK Welcome Sign in / Register 0 Cart Shop1103729767 Store Best Match Orders New Price 280LED Outdoor LED Chris"
+    }
+  ],
+  "stats": {
+    "ms": 12625,
+    "jsonResponsesSeen": 21,
+    "jsonBytesSeen": 1741335,
+    "dossier": {
+      "chars": 11855,
+      "tokensLow": 2964,
+      "tokensHigh": 3952,
+      "assumptions": {
+        "promptTokens": 1000,
+        "outTokens": 800
+      },
+      "costUsd": {
+        "haiku": {
+          "low": 0.0008,
+          "high": 0.0009
+        },
+        "sonnet": {
+          "low": 0.01593,
+          "high": 0.0179
+        }
+      },
+      "charsPretty": 14036
+    }
+  }
+}
