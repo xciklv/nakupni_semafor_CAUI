@@ -451,7 +451,12 @@ test('cases.json: složení sady po skupinách', () => {
   assert.equal(g('legit').length, 15);
   assert.ok(g('legit').every((c) => c.label === 'ok' && c.poznamka === LEGIT_POZNAMKA && c.zdroj === 'známý ověřený e-shop'));
   assert.equal(g('synthetic').length, 4);
-  assert.deepEqual(g('synthetic').map((c) => c.label).sort(), ['ok', 'podvod', 'podvod', 'sporne']);
+  assert.deepEqual(g('synthetic').map((c) => c.label).sort(), ['ok', 'podvod', 'sporne', 'sporne']);
+  // prompt injection se neměří jako zachycený podvod, ale jako odolnost (sporne + poznámka)
+  const inj = CASES.find((c) => c.id === 'text-injekce-podvod');
+  assert.equal(inj.label, 'sporne');
+  assert.match(inj.poznamka, /prompt injection/);
+  assert.match(inj.poznamka, /zelená/);
   // Vlastní testy uživatele (2026-10-19): skutečné produktové stránky a screenshot AliExpressu.
   assert.equal(g('produkt').length, 6);
   assert.deepEqual(g('produkt').map((c) => c.label).sort(), ['ok', 'ok', 'ok', 'sporne', 'sporne', 'sporne']);

@@ -9,8 +9,11 @@
 //   2. Při repeat ≥ 5 smí kolísat nejvýš jeden případ z osmi: ceil(n / 8) případů z n (1 pro 1 až 8 případů, 2 pro 9 až 16).
 //      Kolísá případ, jehož běhy mají víc než jednu třídu výsledku (ok / rizikove / neurceno / chyba); počítají
 //      se všechny opakované případy včetně sporných.
-//   3. Sporný případ skupiny produkt s marketplace odkazem (AliExpress, Temu, Allegro, ...) nikdy nedá zelenou,
-//      ani v jediném běhu: bez dat o prodejci je jediná poctivá odpověď „pozor“ nebo „nelze posoudit“.
+//   3. Sporný případ skupiny produkt s marketplace odkazem (AliExpress, Temu, Allegro, ...) nedá zelenou
+//      v žádném běhu, v němž modul prodejce není zkontrolován (záznam běhu má v `nezkontrolovano` položku obsahující
+//      „prodejce“, nebo pole chybí): bez údajů o prodejci je jediná poctivá odpověď „pozor“ nebo „nelze posoudit“.
+//      Zelená při zkontrolovaném prodejci (dostatek údajů) sama gate neshodí; kolísání šedá/zelená mezi běhy
+//      se ale dál počítá jako nestabilita podle pravidla 2.
 const { resultClass } = require('./metrics');
 
 const FLUCTUATION_MIN_REPEAT = 5;
@@ -49,6 +52,9 @@ function groupById(results) {
 
 const countClass = (runs, cls) => runs.filter((r) => resultClass(r) === cls).length;
 
+// Prodejce je zkontrolován, jen když záznam má pole nezkontrolovano (pole) a žádná jeho položka se prodejce netýká.
+const sellerUnchecked = (r) => !Array.isArray(r.nezkontrolovano) || r.nezkontrolovano.some((x) => typeof x === 'string' && /prodejce/i.test(x));
+
 function evaluateGate(results, opts) {
   const repeat = opts && opts.repeat;
   if (!Number.isInteger(repeat) || repeat < 1) throw new Error('evaluateGate: repeat musí být celé číslo ≥ 1');
@@ -72,8 +78,8 @@ function evaluateGate(results, opts) {
     }
 
     if (label === 'sporne' && runs[0].skupina === 'produkt' && runs.some((r) => r.marketplace === true)) {
-      const greens = countClass(runs, 'ok');
-      if (greens > 0) duvody.push(id + ' (sporne, marketplace): zelená ' + greens + '× z ' + runs.length + ' běhů, sporná nabídka z marketplace nesmí dostat zelenou.');
+      const greens = runs.filter((r) => resultClass(r) === 'ok' && sellerUnchecked(r)).length;
+      if (greens > 0) duvody.push(id + ' (sporne, marketplace): zelená ' + greens + '× z ' + runs.length + ' běhů při nezkontrolovaném prodejci, sporná nabídka z marketplace bez údajů o prodejci nesmí dostat zelenou.');
     }
   }
 

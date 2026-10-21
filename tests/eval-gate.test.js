@@ -102,18 +102,49 @@ test('gate: kolísání počítá i sporné případy a sporný případ se sám
   assert.equal(evaluateGate([...stable(6), ...sporne('x1'), ...sporne('x2')], { repeat: 5 }).pass, false);
 });
 
-test('gate: sporný marketplace případ skupiny produkt se zelenou je selhání, i při jediném zeleném běhu', () => {
-  const m = { skupina: 'produkt', marketplace: true };
-  const g = evaluateGate(runs('produkt-cyklosvitilna-odkaz', 'sporne', [O, O, O, O, Z], m), { repeat: 5 });
+// Sporný marketplace případ: zelená je selhání jen u běhu, kde modul prodejce není zkontrolován (nezkontrolovano obsahuje „prodejce“).
+const M = { skupina: 'produkt', marketplace: true };
+const UNCHECKED = { ...M, nezkontrolovano: ['prodejce'] };
+const CHECKED = { ...M, nezkontrolovano: [] };
+
+test('gate: sporný marketplace případ se zelenou a nezkontrolovaným prodejcem je selhání, i při jediném zeleném běhu', () => {
+  const g = evaluateGate(runs('produkt-cyklosvitilna-odkaz', 'sporne', [O, O, O, O, Z], UNCHECKED), { repeat: 5 });
   assert.equal(g.pass, false);
-  assert.ok(g.duvody.some((d) => d.includes('produkt-cyklosvitilna-odkaz') && /zelen/i.test(d)), g.duvody.join('|'));
-  assert.equal(evaluateGate(runs('p', 'sporne', [Z], m), { repeat: 1 }).pass, false);
-  assert.equal(evaluateGate(runs('p', 'sporne', [O, O, O, O, O], m), { repeat: 5 }).pass, true);
+  assert.ok(g.duvody.some((d) => d.includes('produkt-cyklosvitilna-odkaz') && /zelen/i.test(d) && /prodejc/i.test(d)), g.duvody.join('|'));
+  assert.equal(evaluateGate(runs('p', 'sporne', [Z], UNCHECKED), { repeat: 1 }).pass, false);
+  assert.equal(evaluateGate(runs('p', 'sporne', [O, O, O, O, O], UNCHECKED), { repeat: 5 }).pass, true);
 });
 
-test('gate: sporný případ mimo marketplace nebo mimo skupinu produkt se zelenou neselhává', () => {
-  assert.equal(evaluateGate(runs('p', 'sporne', [Z, Z, Z, Z, Z], { skupina: 'produkt' }), { repeat: 5 }).pass, true);
-  assert.equal(evaluateGate(runs('p', 'sporne', [Z, Z, Z, Z, Z], { skupina: 'synthetic', marketplace: true }), { repeat: 5 }).pass, true);
+test('gate: nezkontrolovano s „prodejce“ i s doplněním (prodejce: zdroj) nebo chybějící pole se bere jako nezkontrolovaný prodejce', () => {
+  assert.equal(evaluateGate(runs('p', 'sporne', [Z], { ...M, nezkontrolovano: ['Prodejce: ARES'] }), { repeat: 1 }).pass, false);
+  assert.equal(evaluateGate(runs('p', 'sporne', [Z], { ...M, nezkontrolovano: ['identita', 'prodejce'] }), { repeat: 1 }).pass, false);
+  assert.equal(evaluateGate(runs('p', 'sporne', [Z], M), { repeat: 1 }).pass, false); // bez pole nelze doložit zkontrolovaného prodejce
+  assert.equal(evaluateGate(runs('p', 'sporne', [Z], { ...M, nezkontrolovano: ['obrázky'] }), { repeat: 1 }).pass, true);
+});
+
+test('gate: zelená u sporného marketplace případu se zkontrolovaným prodejcem sama o sobě neselhává', () => {
+  assert.equal(evaluateGate(runs('p', 'sporne', [Z, Z, Z, Z, Z], CHECKED), { repeat: 5 }).pass, true);
+  assert.equal(evaluateGate(runs('p', 'sporne', [Z], CHECKED), { repeat: 1 }).pass, true);
+  // jednotlivé běhy se posuzují zvlášť: zelená s nezkontrolovaným prodejcem selže i vedle zelených zkontrolovaných
+  const mixed = [...runs('p', 'sporne', [Z, Z, Z, Z], CHECKED), ...runs('p', 'sporne', [Z], UNCHECKED)];
+  const g = evaluateGate(mixed, { repeat: 5 });
+  assert.equal(g.pass, false);
+  assert.ok(g.duvody.some((d) => /1× z 5/.test(d)), g.duvody.join('|'));
+});
+
+test('gate: kolísání šedá/zelená u sporného marketplace případu se zkontrolovaným prodejcem se dál hlásí jako nestabilita', () => {
+  const stable = (n) => Array.from({ length: n }, (_, i) => runs('s' + i, 'ok', [Z, Z, Z, Z, Z])).flat();
+  const wobble = (id) => [...runs(id, 'sporne', [S, S, Z, Z, Z], CHECKED)];
+  assert.equal(evaluateGate([...stable(7), ...wobble('w1')], { repeat: 5 }).pass, true); // jeden z osmi smí
+  const g = evaluateGate([...stable(6), ...wobble('w1'), ...wobble('w2')], { repeat: 5 });
+  assert.equal(g.pass, false);
+  assert.equal(g.duvody.length, 1, g.duvody.join('|'));
+  assert.match(g.duvody[0], /Kolísá 2 z 8.*w1.*w2/);
+});
+
+test('gate: sporný případ mimo marketplace nebo mimo skupinu produkt se zelenou neselhává ani s nezkontrolovaným prodejcem', () => {
+  assert.equal(evaluateGate(runs('p', 'sporne', [Z, Z, Z, Z, Z], { skupina: 'produkt', nezkontrolovano: ['prodejce'] }), { repeat: 5 }).pass, true);
+  assert.equal(evaluateGate(runs('p', 'sporne', [Z, Z, Z, Z, Z], { skupina: 'synthetic', marketplace: true, nezkontrolovano: ['prodejce'] }), { repeat: 5 }).pass, true);
 });
 
 test('gate: více důvodů najednou a prázdný vstup', () => {
