@@ -4,6 +4,7 @@
   "scripts": {
     "test": "node --test \"tests/*.test.js\"",
     "build": "node build/build-workflow.js",
-    "reader": "node tools/page-reader/server.js"
+    "reader": "node tools/page-reader/server.js",
+    "purge": "node tools/purge-executions.js"
   }
 }

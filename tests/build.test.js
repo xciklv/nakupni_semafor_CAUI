@@ -3028,3 +3028,11 @@ test('nálezy: stránka používá navigator.clipboard a nemá žádnou externí
   assert.match(html, /navigator\.clipboard/);
   assert.equal(/https?:\/\//.test(html), false);
 });
+
+test('věta o soukromí: průběh se ukládá lokálně v n8n, říká jak ho smazat a že SAVE_EXECUTIONS=none ukládání vypíná', () => {
+  const text = pageHtml().replace(/\s+/g, ' ');
+  assert.match(text, /ukládá lokálně v n8n/);
+  assert.match(text, /npm run purge/);
+  assert.match(text, /README/);
+  assert.match(text, /SAVE_EXECUTIONS=none/);
+});
