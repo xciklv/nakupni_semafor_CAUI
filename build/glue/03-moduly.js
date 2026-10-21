@@ -1,11 +1,11 @@
-// Id modelu vysvětlení se dosazuje při sestavení (LLM_MODEL_EXPLAIN); výchozí hodnota = LLM_MODEL_EXPLAIN_DEFAULT v engine/explain.js.
-const MODEL_EXPLAIN = 'claude-haiku-5-5';
 // Safety Gate je volitelné obohacení: jakákoli chyba/timeout/divná odpověď = žádný signál. Deadline je celkový (wall-clock), request má vlastní timeout 8 s.
 const SAFETY_GATE_DEADLINE_MS = 9000;
 // Wall-clock deadline zdrojů prodejce (n8n timeout je jen idle/socket timeout; pomalý server by kontrolu držel déle). Deadline = selhání zdroje.
 const COI_DEADLINE_MS = 10000;
 const RDAP_DEADLINE_MS = 6500;
 const ARES_DEADLINE_MS = 6500;
+const VIES_DEADLINE_MS = 6500;
+const ICECAT_DEADLINE_MS = 6500;
 // Spustí request hned; opuštěný request má .catch (pozdní odmítnutí není unhandled), timer se vždy uklidí.
 const glueDeadline = (make, ms) => {
   let req;
@@ -18,8 +18,19 @@ const glueDeadline = (make, ms) => {
 try {
   const ctx = $('Vstup a načtení').first().json;
   const nowMs = Date.now();
-  const parsed = parseLlmJson($input.first().json);
-  const x = normalizeExtraction(parsed.ok ? parsed.data : {});
+  // Čtečka vrátila dossier: x se z něj odvodí (dossierToExtraction). Jinak x pochází z extrakce modelu a dossier se z ní složí (extractionToDossier).
+  // Blokovaný nebo neplatný dossier se bere jako žádný: bez dat je výsledek šedý, nikdy zelený.
+  const nd = ctx.dossier ? normalizeDossier(ctx.dossier) : null;
+  const fromReader = nd && nd.ok && nd.dossier && !nd.dossier.blokace ? nd.dossier : null;
+  let x, dossier;
+  if (fromReader) {
+    dossier = fromReader;
+    x = dossierToExtraction(dossier);
+  } else {
+    const parsed = parseLlmJson($input.first().json);
+    x = normalizeExtraction(parsed.ok ? parsed.data : {});
+    dossier = extractionToDossier(x, ctx.input);
+  }
 
   const cache = $getWorkflowStaticData('global');
   const fetchers = {
@@ -29,6 +40,20 @@ try {
       if (r.statusCode === 404) return null;
       if (r.statusCode >= 400) throw new Error('ARES ' + r.statusCode);
       return r.body;
+    },
+    // VIES (ověření DIČ): jen 200 s tělem; cokoli jiného je nedostupný zdroj. cc a číslo prošly kontrolou tvaru v sellerSignals.
+    vies: async (cc, cislo) => {
+      const r = await glueDeadline(() => this.helpers.httpRequest({ url: 'https://ec.europa.eu/taxation_customs/vies/rest-api/ms/' + cc + '/vat/' + cislo, json: true, timeout: 6000, ignoreHttpStatusErrors: true, returnFullResponse: true }), VIES_DEADLINE_MS);
+      if (r.statusCode !== 200) throw new Error('VIES ' + r.statusCode);
+      return r.body;
+    },
+    // Icecat odpovídá 400 (GTIN nenalezen), 403 (značka mimo Open Icecat) a 404 tělem: je to "nelze ověřit", ne chyba služby. Ostatní stavy (429, 5xx) jsou nedostupný zdroj.
+    icecat: async (gtin) => {
+      const r = await glueDeadline(() => this.helpers.httpRequest({ url: icecatUrl(gtin), json: true, timeout: 6000, ignoreHttpStatusErrors: true, returnFullResponse: true }), ICECAT_DEADLINE_MS);
+      const body = r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : null;
+      if (r.statusCode === 400 || r.statusCode === 403 || r.statusCode === 404) return body || {};
+      if (r.statusCode !== 200 || !body) throw new Error('Icecat ' + r.statusCode);
+      return body;
     },
   };
   // Seznam ČOI se stahuje souběžně s RDAP, ARES a Safety Gate: promise se spustí hned a čeká se na něj až v sellerSignals.
@@ -68,16 +93,20 @@ try {
   const offer = offerSignals(x);
   const safety = safetySignals(x);
   const gateQuery = safetyGateQuery(x);
-  const [seller, gate] = await Promise.all([
+  const [seller, gate, identity] = await Promise.all([
     sellerSignals({ x, rezim: ctx.rezim, host: ctx.host, fetchers, coiList, nowMs }),
     gateQuery ? safetyGateFetch(gateQuery) : [],
+    identitySignals({ dossier, fetchers }).catch(() => ({ status: 'unchecked', signals: [], skipped: [] })),
   ]);
 
-  const signals = [...offer.signals, ...seller.signals, ...safety.signals, ...gate];
-  const verdict = computeVerdict(signals, { offer: offer.status, seller: seller.status, safety: safety.status }, { external: seller.external, skipped: coiStale ? seller.skipped.concat(['seznam ČOI (neaktuální)']) : seller.skipped });
-  return [{ json: { verdict, signals, llmRequest: buildExplainRequest(verdict, signals, MODEL_EXPLAIN) } }];
+  const signals = [...offer.signals, ...seller.signals, ...identity.signals, ...safety.signals, ...gate];
+  const moduly = { offer: offer.status, seller: seller.status, safety: safety.status };
+  const skipped = (coiStale ? seller.skipped.concat(['seznam ČOI (neaktuální)']) : seller.skipped).concat(identity.skipped);
+  const verdict = computeVerdict(signals, moduly, { external: seller.external, skipped });
+  // Souhrn přepočítá verdikt po věrohodnosti a obrázcích; potřebuje k tomu stavy modulů a zda uspěl externí zdroj.
+  return [{ json: { verdict, signals, dossier, x, moduly, external: seller.external, mameObrazky: Array.isArray(dossier.obrazky) && dossier.obrazky.length > 0 } }];
 } catch (e) {
   // Degradace místo pádu: bez dat z modulů vznikne šedý verdikt a běh pokračuje k vysvětlení.
-  const verdict = computeVerdict([], { offer: 'unchecked', seller: 'unchecked', safety: 'unchecked' });
-  return [{ json: { verdict, signals: [], llmRequest: buildExplainRequest(verdict, [], MODEL_EXPLAIN) } }];
+  const moduly = { offer: 'unchecked', seller: 'unchecked', safety: 'unchecked' };
+  return [{ json: { verdict: computeVerdict([], moduly), signals: [], dossier: null, x: null, moduly, external: false, mameObrazky: false } }];
 }

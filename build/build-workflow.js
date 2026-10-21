@@ -6,6 +6,8 @@ const root = path.join(__dirname, '..');
 // Výchozí modely mají jediný zdroj pravdy v enginu (testované konstanty).
 const MODEL_EXTRACT_DEFAULT = require('../engine/llm').LLM_MODEL_EXTRACT_DEFAULT;
 const MODEL_EXPLAIN_DEFAULT = require('../engine/explain').LLM_MODEL_EXPLAIN_DEFAULT;
+const MODEL_PLAUSIBILITY_DEFAULT = require('../engine/plausibility').LLM_MODEL_PLAUSIBILITY_DEFAULT;
+const MODEL_IMAGES_DEFAULT = require('../engine/images').LLM_MODEL_IMAGES_DEFAULT;
 const CRED_NAME_DEFAULT = 'Anthropic account';
 // Čtečka stránek (tools/page-reader): lokální služba, kterou krok "Vstup a načtení" volá pro marketplace. Smí mířit jen na 127.0.0.1.
 const PAGE_READER_URL_DEFAULT = 'http://127.0.0.1:5687/read';
@@ -29,7 +31,7 @@ function resolveQuota(v, warn = console.warn) {
   return QUOTA_DEFAULT;
 }
 
-// Id modelu (LLM_MODEL_EXTRACT / LLM_MODEL_EXPLAIN): /^[A-Za-z0-9._:-]{1,64}$/. Neplatná hodnota -> výchozí s varováním; nedefinovaná/prázdná -> výchozí bez varování.
+// Id modelu (LLM_MODEL_EXTRACT / _EXPLAIN / _PLAUSIBILITY / _IMAGES): /^[A-Za-z0-9._:-]{1,64}$/. Neplatná hodnota -> výchozí s varováním; nedefinovaná/prázdná -> výchozí bez varování.
 function resolveModel(v, def, envName, warn = console.warn) {
   if (v === undefined || v === null || v === '') return def;
   if (typeof v === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(v)) {
@@ -55,7 +57,9 @@ const glue = (f, o = {}) => fs.readFileSync(path.join(__dirname, 'glue', f), 'ut
   .replace(/^(\s*const MAX_DENNE = )\d+;/m, (m, p) => p + (o.quota === undefined ? QUOTA_DEFAULT : o.quota) + ';')
   .replace(/^(\s*const PAGE_READER_URL = )'[^']*';/m, (m, p) => p + "'" + (o.pageReaderUrl === undefined ? PAGE_READER_URL_DEFAULT : o.pageReaderUrl) + "';")
   .replace(/^(\s*const MODEL_EXTRACT = )'[^']*';/m, (m, p) => p + "'" + (o.modelExtract || MODEL_EXTRACT_DEFAULT) + "';")
-  .replace(/^(\s*const MODEL_EXPLAIN = )'[^']*';/m, (m, p) => p + "'" + (o.modelExplain || MODEL_EXPLAIN_DEFAULT) + "';");
+  .replace(/^(\s*const MODEL_EXPLAIN = )'[^']*';/m, (m, p) => p + "'" + (o.modelExplain || MODEL_EXPLAIN_DEFAULT) + "';")
+  .replace(/^(\s*const MODEL_PLAUSIBILITY = )'[^']*';/m, (m, p) => p + "'" + (o.modelPlausibility || MODEL_PLAUSIBILITY_DEFAULT) + "';")
+  .replace(/^(\s*const MODEL_IMAGES = )'[^']*';/m, (m, p) => p + "'" + (o.modelImages || MODEL_IMAGES_DEFAULT) + "';");
 // Code nody nesdílejí scope, proto KAŽDÝ nese celý bundle enginu.
 const code = (name, file, pos, o) => ({
   id: name, name, type: 'n8n-nodes-base.code', typeVersion: 2, position: pos,
@@ -82,44 +86,67 @@ function resolveSaveExecutions(v, warn = console.warn) {
   return SAVE_EXECUTIONS_DEFAULT;
 }
 
-function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, modelExtract, modelExplain, saveExecutions, pageReaderUrl }) {
+// IF uzel s jednou booleovskou podmínkou (strict): pravda = výstup 0, nepravda = výstup 1.
+const boolIf = (name, pos, condId, leftValue, operation) => ({
+  id: name, name, type: 'n8n-nodes-base.if', typeVersion: 2.2, position: pos,
+  parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
+    conditions: [{ id: condId, leftValue, rightValue: operation === 'true', operator: { type: 'boolean', operation, singleValue: true } }], combinator: 'and' } },
+});
+
+function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, modelExtract, modelExplain, modelPlausibility, modelImages, saveExecutions, pageReaderUrl }) {
   const quota = resolveQuota(quotaPerDay);
   const reader = resolvePageReaderUrl(pageReaderUrl);
   const save = resolveSaveExecutions(saveExecutions);
   const mExtract = resolveModel(modelExtract, MODEL_EXTRACT_DEFAULT, 'LLM_MODEL_EXTRACT');
   const mExplain = resolveModel(modelExplain, MODEL_EXPLAIN_DEFAULT, 'LLM_MODEL_EXPLAIN');
+  const mPlausibility = resolveModel(modelPlausibility, MODEL_PLAUSIBILITY_DEFAULT, 'LLM_MODEL_PLAUSIBILITY');
+  const mImages = resolveModel(modelImages, MODEL_IMAGES_DEFAULT, 'LLM_MODEL_IMAGES');
   const nodes = [
     // allowedOrigins '*': HTML servírované z webhooku běží v CSP sandboxu bez allow-same-origin (n8n-core html-sandbox.js),
     // takže jeho origin je 'null' a fetch na tento webhook je cross-origin.
     { id: 'Webhook', name: 'Webhook', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [80, 0], webhookId: '2477b1ff-1caf-474d-9db3-1104c8e3ca48',
       parameters: { httpMethod: 'POST', path: 'nakupni-kontrola', responseMode: 'responseNode', options: { allowedOrigins: '*' } } },
     code('Vstup a načtení', '01-vstup.js', [224, 0], { quota, pageReaderUrl: reader }),
-    { id: 'Stačí vstup?', name: 'Stačí vstup?', type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [368, 0],
-      parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
-        conditions: [{ id: 'c1', leftValue: '={{ $json.zkratka }}', rightValue: false, operator: { type: 'boolean', operation: 'false', singleValue: true } }], combinator: 'and' } } },
+    boolIf('Stačí vstup?', [368, 0], 'c1', '={{ $json.zkratka }}', 'false'),
+    // Čtečka vrátila hotový dossier: extrakce textu modelem se přeskočí.
+    boolIf('Máme dossier?', [512, 0], 'c3', '={{ !!$json.dossier }}', 'true'),
     // Bez obsahu (jen URL e-shopu) se LLM extrakce přeskočí: Moduly provedou aspoň kontroly hostitele.
-    { id: 'Je obsah?', name: 'Je obsah?', type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [560, -16],
-      parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
-        conditions: [{ id: 'c2', leftValue: '={{ $json.obsah }}', rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' } } },
-    code('Sestavit extrakci', '02-extrakce-req.js', [768, -96], { modelExtract: mExtract }),
-    llm('LLM – extrakce', [960, -96], credId, credName),
-    code('Moduly', '03-moduly.js', [1184, 0], { modelExplain: mExplain }),
-    llm('LLM – vysvětlení', [1328, 0], credId, credName),
-    code('Odpověď', '04-odpoved.js', [1472, 0]),
-    { id: 'Respond', name: 'Respond', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [1616, 0],
+    boolIf('Je obsah?', [656, -16], 'c2', '={{ $json.obsah }}', 'true'),
+    code('Sestavit extrakci', '02-extrakce-req.js', [864, -96], { modelExtract: mExtract }),
+    llm('LLM – extrakce', [1056, -96], credId, credName),
+    code('Moduly', '03-moduly.js', [1264, 0]),
+    code('Sestavit věrohodnost', '05-verohodnost.js', [1408, 0], { modelPlausibility: mPlausibility }),
+    llm('LLM – věrohodnost', [1552, 0], credId, credName),
+    // Obrázky jdou k analýze jen tehdy, když je dossier má; výraz čte Moduly, protože výstupem předchozího uzlu je odpověď modelu.
+    boolIf('Jsou obrázky?', [1696, 0], 'c4', "={{ $('Moduly').first().json.mameObrazky }}", 'true'),
+    code('Obrázky – příprava', '06-obrazky.js', [1888, -96], { modelImages: mImages, pageReaderUrl: reader }),
+    llm('LLM – obrázky', [2080, -96], credId, credName),
+    code('Souhrn', '07-souhrn.js', [2304, 0], { modelExplain: mExplain }),
+    llm('LLM – vysvětlení', [2448, 0], credId, credName),
+    code('Odpověď', '04-odpoved.js', [2592, 0]),
+    { id: 'Respond', name: 'Respond', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [2736, 0],
       parameters: { respondWith: 'json', responseBody: '={{ JSON.stringify($json.odpoved) }}', options: { responseCode: '={{ $json.status }}' } } },
-    { id: 'Respond – více vstupu', name: 'Respond – více vstupu', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [560, 128],
+    { id: 'Respond – více vstupu', name: 'Respond – více vstupu', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [512, 128],
       parameters: { respondWith: 'json', responseBody: '={{ JSON.stringify($json.odpoved) }}', options: { responseCode: '={{ $json.status }}' } } },
   ];
   const link = (a, b, out = 0) => ({ [a]: { main: [...Array(out).fill([]), [{ node: b, type: 'main', index: 0 }]] } });
+  // IF: [cíl při pravdě, cíl při nepravdě]
+  const branch = (a, whenTrue, whenFalse) => ({ [a]: { main: [[{ node: whenTrue, type: 'main', index: 0 }], [{ node: whenFalse, type: 'main', index: 0 }]] } });
   const connections = {
     ...link('Webhook', 'Vstup a načtení'),
     ...link('Vstup a načtení', 'Stačí vstup?'),
-    'Stačí vstup?': { main: [[{ node: 'Je obsah?', type: 'main', index: 0 }], [{ node: 'Respond – více vstupu', type: 'main', index: 0 }]] },
-    'Je obsah?': { main: [[{ node: 'Sestavit extrakci', type: 'main', index: 0 }], [{ node: 'Moduly', type: 'main', index: 0 }]] },
+    ...branch('Stačí vstup?', 'Máme dossier?', 'Respond – více vstupu'),
+    ...branch('Máme dossier?', 'Moduly', 'Je obsah?'),
+    ...branch('Je obsah?', 'Sestavit extrakci', 'Moduly'),
     ...link('Sestavit extrakci', 'LLM – extrakce'),
     ...link('LLM – extrakce', 'Moduly'),
-    ...link('Moduly', 'LLM – vysvětlení'),
+    ...link('Moduly', 'Sestavit věrohodnost'),
+    ...link('Sestavit věrohodnost', 'LLM – věrohodnost'),
+    ...link('LLM – věrohodnost', 'Jsou obrázky?'),
+    ...branch('Jsou obrázky?', 'Obrázky – příprava', 'Souhrn'),
+    ...link('Obrázky – příprava', 'LLM – obrázky'),
+    ...link('LLM – obrázky', 'Souhrn'),
+    ...link('Souhrn', 'LLM – vysvětlení'),
     ...link('LLM – vysvětlení', 'Odpověď'),
     ...link('Odpověď', 'Respond'),
   };
@@ -152,7 +179,7 @@ function buildWebWorkflow() {
 function cliOptions(env) {
   const credId = env.ANTHROPIC_CRED_ID || env.CRED_ID;
   if (!credId) return null;
-  return { credId, credName: env.ANTHROPIC_CRED_NAME || CRED_NAME_DEFAULT, quotaPerDay: env.QUOTA_PER_DAY, modelExtract: env.LLM_MODEL_EXTRACT, modelExplain: env.LLM_MODEL_EXPLAIN, saveExecutions: env.SAVE_EXECUTIONS, pageReaderUrl: env.PAGE_READER_URL };
+  return { credId, credName: env.ANTHROPIC_CRED_NAME || CRED_NAME_DEFAULT, quotaPerDay: env.QUOTA_PER_DAY, modelExtract: env.LLM_MODEL_EXTRACT, modelExplain: env.LLM_MODEL_EXPLAIN, modelPlausibility: env.LLM_MODEL_PLAUSIBILITY, modelImages: env.LLM_MODEL_IMAGES, saveExecutions: env.SAVE_EXECUTIONS, pageReaderUrl: env.PAGE_READER_URL };
 }
 
 if (require.main === module) {
@@ -166,4 +193,4 @@ if (require.main === module) {
   console.log('workflow-web.json (stránka) zapsán, nodů:', web.nodes.length);
 }
 
-module.exports = { buildBundle, buildWorkflow, buildWebWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, resolvePageReaderUrl, cliOptions, PAGE_READER_URL_DEFAULT, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT };
+module.exports = { buildBundle, buildWorkflow, buildWebWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, resolvePageReaderUrl, cliOptions, PAGE_READER_URL_DEFAULT, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT, MODEL_PLAUSIBILITY_DEFAULT, MODEL_IMAGES_DEFAULT };
