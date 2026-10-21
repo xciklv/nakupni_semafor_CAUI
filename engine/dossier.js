@@ -14,6 +14,9 @@ const DOS_GAPS_MAX = 12;
 const DOS_IDENT_MAX = 10;
 const DOS_IDENT_KEEP = 20;
 const DOS_IMAGES_MAX = 20;
+const DOS_IMAGE_URL_MAX = 500;
+const DOS_JSONLD_MAX = 4000; // JSON-LD z rozšíření v prohlížeči (input.jsonld) jde do tvrzení jen jako text
+const DOS_JSONLD_PREFIX = 'JSON-LD: ';
 const DOS_BRAND_ROW_RE = /^(brand|brand name|značka|znacka)$/i;
 const DOS_MODEL_ROW_RE = /^(model|model number|číslo modelu|cislo modelu)$/i;
 const DOS_CERT_ROW_RE = /certif|conformity|prohlášení o shodě|prohlaseni o shode/i;
@@ -146,12 +149,13 @@ function dossierToExtraction(d) {
       nazev: x.nazev, znacka: rowValue(DOS_BRAND_ROW_RE), model: rowValue(DOS_MODEL_ROW_RE), cena: cena.castka, mena: cena.mena,
       tvrzene_parametry: tvrzeni, tvrzeni_certifikace: certRows.concat(tvrzeni.filter((t) => DOS_CERT_CLAIM_RE.test(t))),
     },
-    prodejce: { nazev: p.nazev, hodnoceni: proc != null && proc <= 100 ? dosRound(proc / DOS_RATING_PER_PERCENT, 100) : null },
+    // Z dossieru složeného z textu se předá všechno, co o prodejci opravdu obsahuje (jen vyplněné údaje; nic se nedomýšlí).
+    prodejce: { nazev: p.nazev, hodnoceni: proc != null && proc <= 100 ? dosRound(proc / DOS_RATING_PER_PERCENT, 100) : null, pocet_prodeju: dosNonNeg(p.pocetProdeju), ico: dosStr(p.ico), dic: dosStr(p.dic) },
     recenze: { pocet: rec.pocet, prumer: rec.prumer, vsechny_5_hvezd: rec.uplne === true && polozky.length > 0 ? polozky.every((r) => r && r.hodnoceni === 5) : null },
   });
 }
 
-// ExtractionRecord (z textu nebo screenshotu) -> Dossier; `input` je výstup validateInput (z něj jen platforma marketplace).
+// ExtractionRecord (z textu nebo screenshotu) -> Dossier; `input` je výstup validateInput (z něj platforma marketplace, adresy obrázků a JSON-LD z rozšíření).
 function extractionToDossier(x, input) {
   const e = normalizeExtraction(x);
   const p = e.produkt, s = e.prodejce, r = e.recenze;
@@ -166,8 +170,12 @@ function extractionToDossier(x, input) {
   if (p.znacka) d.specifikace.push({ nazev: 'Značka', hodnota: p.znacka });
   if (p.model) d.specifikace.push({ nazev: 'Model', hodnota: p.model });
   d.tvrzeni = p.tvrzene_parametry.slice();
+  const ld = typeof dosObj(input).jsonld === 'string' ? dosObj(input).jsonld.trim().slice(0, DOS_JSONLD_MAX) : '';
+  if (ld) d.tvrzeni.push(DOS_JSONLD_PREFIX + ld);
+  const seen = new Set();
+  d.obrazky = dosArr(dosObj(input).obrazky).map(dosHttps).filter((u) => u && u.length <= DOS_IMAGE_URL_MAX && !seen.has(u) && seen.add(u)).slice(0, DOS_IMAGES_MAX).map((url) => ({ url }));
   d.recenze = { pocet: r.pocet, prumer: r.prumer, uplne: false, polozky: [] };
-  d.prodejce = { nazev: s.nazev, typ: null, hodnoceniProc: s.hodnoceni == null ? null : dosRound(s.hodnoceni * DOS_RATING_PER_PERCENT, 10), sledujici: null, odkaz: null };
+  d.prodejce = { nazev: s.nazev, typ: null, hodnoceniProc: s.hodnoceni == null ? null : dosRound(s.hodnoceni * DOS_RATING_PER_PERCENT, 10), sledujici: null, odkaz: null, pocetProdeju: s.pocet_prodeju, ico: s.ico, dic: s.dic };
   // Pole z rozšířené extrakce (ean, kod_vyrobce) se přenesou, pokud je extrakce už má.
   if (typeof p.ean === 'string' && p.ean) d.identifikatory.push({ hodnota: p.ean, druh: 'ean' });
   if (typeof p.kod_vyrobce === 'string' && p.kod_vyrobce) d.identifikatory.push({ hodnota: p.kod_vyrobce, druh: 'manufacturer-code' });
@@ -232,7 +240,7 @@ function dossierPromptText(d, maxChars = DOS_PROMPT_MAX_DEFAULT) {
     cena.castka != null ? 'Cena: ' + cena.castka + (cena.mena ? ' ' + dosEsc(cena.mena) : '') : null,
     x.blokace ? 'Stránku nabídky se nepodařilo přečíst: ' + dosEsc(bl.druh || 'výzva k ověření') + (bl.dodavatel ? ' (' + dosEsc(bl.dodavatel) + ')' : '') + '. Údaje z ní nejsou k dispozici.' : null,
     p.nazev || p.hodnoceniProc != null || p.sledujici != null
-      ? 'Prodejce: ' + [dosEsc(p.nazev || 'neuveden') + (p.typ ? ' (' + dosEsc(p.typ) + ')' : ''), p.hodnoceniProc != null ? 'kladných hodnocení ' + p.hodnoceniProc + ' %' : null, p.sledujici != null ? p.sledujici + ' sledujících' : null].filter(Boolean).join(', ')
+      ? 'Prodejce: ' + [dosEsc(p.nazev || 'neuveden') + (p.typ ? ' (' + dosEsc(p.typ) + ')' : ''), p.hodnoceniProc != null ? 'kladných hodnocení ' + p.hodnoceniProc + ' %' : null, p.sledujici != null ? p.sledujici + ' sledujících' : null, p.pocetProdeju != null ? p.pocetProdeju + ' prodejů' : null].filter(Boolean).join(', ')
       : null,
   ].filter(Boolean).forEach((l) => push(l, mainBudget));
 
@@ -241,7 +249,7 @@ function dossierPromptText(d, maxChars = DOS_PROMPT_MAX_DEFAULT) {
     return '- ' + dosCutText(dosEsc(o.nazev || '') + ': ' + (o.vybrano ? 'vybráno „' + dosEsc(o.vybrano) + '“' : 'nic nevybráno') + (dosArr(o.moznosti).length ? '; možnosti: ' + dosArr(o.moznosti).map(dosEsc).join(', ') : ''), DOS_LINE_MAX);
   }));
   section('specifikace', 'Specifikace:', dosArr(x.specifikace).map((r) => '- ' + dosCutText(dosEsc(dosObj(r).nazev || '') + ': ' + dosEsc(dosObj(r).hodnota || ''), DOS_LINE_MAX)));
-  section('tvrzení', 'Tvrzení z nabídky:', dosArr(x.tvrzeni).map((t) => '- ' + dosCutText(dosEsc(t), DOS_LINE_MAX)));
+  section('tvrzení', 'Tvrzení z nabídky:', dosArr(x.tvrzeni).map((t) => '- ' + dosCutText(dosEsc(t), typeof t === 'string' && t.startsWith(DOS_JSONLD_PREFIX) ? DOS_JSONLD_MAX + DOS_JSONLD_PREFIX.length + 2 : DOS_LINE_MAX)));
   section('AI přehled', 'AI přehled platformy (generuje ho platforma, není to text prodejce):', dosArr(x.aiPrehled).map((t) => '- ' + dosCutText(dosEsc(t), DOS_LINE_MAX)));
   if (typeof x.popis === 'string' && x.popis.trim()) {
     const room = Math.min(Math.floor(max * DOS_POPIS_SHARE), mainBudget - used - 1);

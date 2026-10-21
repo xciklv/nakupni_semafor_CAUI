@@ -1,29 +1,52 @@
-# browser-capture (spike)
+# browser-capture: rozšíření do Chrome (hlavní cesta sběru dat)
 
-Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, kterou už uživatel otevřel a prošel, a pošle ji do Nákupní kontroly (`POST http://127.0.0.1:5678/webhook/nakupni-kontrola`, tělo `{ odkaz, text }`). Jen čte, na stránce nic neklikne ani nerozbaluje.
+Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, kterou už uživatel otevřel a prošel, **ukáže celý text, který odejde**, a po potvrzení ho pošle do Nákupní kontroly (`POST http://127.0.0.1:5678/webhook/nakupni-kontrola`, tělo `{ odkaz, text, obrazky, jsonld }`). Jen čte: na stránce nic neklikne, nerozbalí ani nevyplní. Proč právě rozšíření: čte to, co člověk vidí, takže prochází i Allegro, které server blokuje (zpráva `docs/superpowers/research/2026-10-20-zalozka-spike.md`).
 
 ## Instalace (1 minuta)
 
-1. V Chrome otevřete `chrome://extensions`, zapněte „Režim pro vývojáře“.
-2. „Načíst rozbalené“ a vyberte tuto složku (`tools/browser-capture`).
-3. Přišpendlete ikonu rozšíření na lištu.
-4. n8n musí běžet na `127.0.0.1:5678` a workflow „Nákupní kontrola“ být aktivní.
+1. Spusťte n8n lokálně (`127.0.0.1:5678`) a ověřte, že workflow „Nákupní kontrola“ je aktivní a nasazené s aktuálním `build/glue/01-vstup.js`.
+2. V Chrome otevřete `chrome://extensions` a vpravo nahoře zapněte „Režim pro vývojáře“.
+3. Klikněte na „Načíst rozbalené“ a vyberte složku `tools/browser-capture` (ta, kde leží `manifest.json`).
+4. V seznamu se objeví „Nákupní kontrola – sběr stránky“ (verze 0.2.0). Bez chybové hlášky u karty rozšíření je instalace v pořádku. Přišpendlete ikonu (puzzle na liště, špendlík u rozšíření).
+5. Po každé změně souborů v této složce klikněte u rozšíření na „Znovu načíst“ (kruhová šipka) a na otevřených stránkách obnovte kartu.
 
 ## Použití
 
-1. Otevřete stránku nabídky a projděte ověření / rozbalte recenze a parametry sami (rozšíření nic nerozbaluje).
-2. Klikněte na ikonu. Vpravo nahoře se ukáže překryv: kolik znaků se přečetlo, kolik obrázků, JSON-LD a vložená data. Nic se zatím neodeslalo.
-3. „Zkontrolovat“ odešle text do kontroly (stojí asi 0,02 USD), po 20–60 s se v překryvu ukáže semafor, shrnutí a signály.
-4. „Uložit náhled (JSON)“ uloží do Stažených soubor `browser-capture-<doména>-<čas>.json` s odesílaným textem, diagnostikou a odpovědí (pro měření).
+1. Otevřete stránku nabídky (Allegro, AliExpress, Temu…). Případně sami rozbalte recenze, parametry a popis: rozšíření nic nerozbaluje, přečte jen to, co je na stránce.
+2. Klikněte na ikonu rozšíření. Vpravo nahoře se ukáže okno „Nákupní kontrola“ s **celým textem, který by se odeslal** (odkaz, text, adresy obrázků, JSON-LD). Nic se zatím neodeslalo.
+3. „Zkontrolovat“ odešle přesně to, co vidíte. Po 10 až 60 s se v okně ukáže semafor, shrnutí a signály. Kontrola stojí řádově 0,01 až 0,03 USD.
+4. „Vymazat sběr“ zahodí sebrané stránky bez odeslání. Okno zavřete tlačítkem ×.
 
-## Vícekrokový sběr
+Víc stránek najednou: po kliknutí na ikonu přejděte třeba na stránku prodejce a klikněte znovu. Každé kliknutí přidá stránku do sbírky (drží se do zavření prohlížeče, stejná adresa se přepíše), „Zkontrolovat“ pošle všechny stránky jako jeden text. První stránka je nabídka (dostane až 12 000 znaků z 20 000, obrázky a JSON-LD se berou z ní). **Po odeslání se sbírka vyprázdní.** Když se odeslání nepovede (n8n neběží), sbírka zůstane pro další pokus.
 
-Každé kliknutí na ikonu přidá aktuální stránku do sbírky (platí napříč kartami a oknem, drží se do zavření prohlížeče; stejná adresa se přepíše). Typický postup: stránka nabídky → klik na ikonu → otevřít stránku prodejce / jeho hodnocení → klik na ikonu → „Zkontrolovat sběr“. První stránka je považovaná za nabídku (dostane až 12 000 znaků), ostatní si dělí zbytek do 20 000. „Vymazat sběr“ začne znovu.
+## Co se odesílá a co ne
+
+- `odkaz`: adresa karty bez sledovacích parametrů (`gclid`, `wbraid`, `gbraid`, `pvid`, `scm`, `spm`, `algo_pvid`, `algo_exp_id`, `pdp_ext_f`, `pdp_npi`, `curPageLogUid`, `utm_*`, `_gl`, `share_token`), bez `#fragmentu` a přihlašovacích údajů; `offerId` (Allegro) zůstává.
+- `text`: viditelný text stránky bez hlavičky a menu (vše před titulkem nabídky a řádky typu „Můj účet“, „Košík“, pozdrav se jménem), ořezaný na celé věty, nejvýše 20 000 znaků.
+- `obrazky`: nejvýše 8 adres `https://` (každá do 500 znaků, bez sledovacích parametrů). Jen adresy, obrázky se nestahují z prohlížeče.
+- `jsonld`: strukturovaná data stránky (cena, hodnocení, recenze), nejvýše 4 000 znaků.
+- Nečte se: cookies, `localStorage`, hesla, formuláře, jiné karty. Oprávnění `activeTab` platí jen pro kartu, na kterou kliknete; `host_permissions` jen pro lokální n8n.
+- Stránky ve sbírce jsou v `chrome.storage.session` (jen v paměti prohlížeče, zmizí při zavření).
+
+## Co zkontrolovat při ručním ověření (první spuštění ve vašem Chrome)
+
+1. Rozšíření se načte bez chyby (`chrome://extensions`, žádné „Chyby“ u karty) a ikona jde kliknout na stránce Allegra i AliExpressu.
+2. **Allegro** (nabídka s `offerId`, např. OneBlade): v okně je celý text; v textu ani v odkazu **není jméno vašeho účtu** (hledejte ho klávesou Ctrl+F v okně, i v části JSON-LD), v odkazu zůstalo `offerId`; adresy obrázků jsou `https://…allegroimg.com/…`.
+3. **AliExpress** (např. cyklosvítilna 1005011759581041): v odkazu nejsou `spm` ani `algo_pvid`; v textu je cena, hodnocení a prodejce; JSON-LD obsahuje Product.
+4. „Zkontrolovat“: okno ukáže průběh a po dokončení semafor. Spusťte to u dlouhé kontroly (nad 30 s): výsledek se musí zobrazit (oprava service workeru ze spiku).
+5. V n8n u průběhu (Executions → „Vstup a načtení“): `odkaz`, `text`, `obrazky`, `jsonld` jsou v těle žádosti; uzel nevolal čtečku ani HEAD/GET (žádné požadavky na allegro.cz ani aliexpress.com); jméno účtu v uloženém těle není.
+6. Po odeslání kliknutí na ikonu na jiné stránce začíná **nová** sbírka (v okně je „Sběr: 1 stránka“).
 
 ## Soubory
 
-- `manifest.json`: MV3, oprávnění `activeTab`, `scripting`, `downloads`, `storage`, `host_permissions` jen pro `http://127.0.0.1:5678/*`.
-- `background.js`: ikona, vkládání skriptů, odeslání (z service workeru, takže se nevztahuje CSP stránky).
-- `extract.js`: čtení stránky (text, titulek, URL, max 8 obrázků, JSON-LD, vložená data), text max 20 000 znaků ořezaný na celé věty.
-- `overlay.js`: překryv ve Shadow DOM.
-- `bookmarklet.html`: sonda bookmarkletu (zdarma, posílá `{}` a čeká 400), zjišťuje, jestli `fetch` ze stránky na 127.0.0.1 vůbec projde.
+- `manifest.json`: MV3, oprávnění `activeTab`, `scripting`, `storage`, `host_permissions` jen pro `http://127.0.0.1:5678/*`.
+- `background.js`: service worker: ikona, vkládání skriptů, sbírka v `chrome.storage.session`, odeslání z workeru (nevztahuje se na něj CSP stránky). Při dlouhé kontrole se worker udržuje při životě (`getPlatformInfo` každých 20 s) a čekání má limit 180 s.
+- `extract.js`: čtení stránky a čisté funkce `cleanUrl`, `trimToSentences`, `dropPageChrome` (testy: `tests/browser-capture.test.js`).
+- `overlay.js`: okno ve Shadow DOM (stránka na něj nedosáhne a on nedědí její CSS), jen `textContent`, žádné `innerHTML`.
+- `bookmarklet.html`: sonda ze spiku (zdarma, posílá `{}` a čeká 400). Bookmarklet není podporovaná cesta: Chrome blokuje přístup z webu do místní sítě.
+
+## Omezení
+
+- Instalace v režimu pro vývojáře je pro demo; pro skutečné uživatele je nutný Chrome Web Store a `host_permissions` na veřejnou adresu API.
+- Text bez jména účtu se spoléhá na rozpoznání řádků menu a titulku nabídky. Je-li jméno na stránce na jiném místě (např. v textu recenze), zůstane: proto se celý odesílaný text před odesláním ukazuje.
+- Úplnost závisí na uživateli: co nerozbalí (recenze, parametry), v textu nebude. Popisek prodejce na AliExpressu v `innerText` není.

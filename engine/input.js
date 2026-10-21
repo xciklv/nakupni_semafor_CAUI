@@ -2,6 +2,9 @@ const MAX_TEXT = 20000;
 const MAX_SHOTS = 4;
 const MAX_SHOT_CHARS = 5000000;
 const MIMES = ['image/png', 'image/jpeg', 'image/webp'];
+const MAX_OBRAZKY = 8; // adresy obrázků z rozšíření v prohlížeči
+const MAX_OBRAZEK_URL = 500;
+const MAX_JSONLD = 4000;
 const INP_B64_RE = /^[A-Za-z0-9+/]+={0,2}$/; // čisté base64 bez prefixu a bílých znaků (lineární)
 const SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'cutt.ly', 'rebrand.ly', 's.click.aliexpress.com', 'a.aliexpress.com', 'temu.to'];
 const MARKETPLACES = ['temu.com', 'aliexpress.com', 'aliexpress.us', 'allegro.cz', 'allegro.pl', 'amazon.com', 'amazon.de', 'amazon.pl', 'ebay.com', 'ebay.de', 'shein.com', 'joom.com', 'vinted.cz'];
@@ -88,6 +91,22 @@ function normalizeUrl(raw) {
   return { ok: true, url: scheme + '://' + fullHost + tail, host, rezim: inList(MARKETPLACES) ? 'marketplace' : 'eshop' };
 }
 
+// Adresy obrázků z rozšíření: jen https:// do 500 znaků, projdou stejnou kontrolou jako odkaz (interní adresy a přihlašovací údaje ne);
+// neplatné položky se zahodí beze zbytku a nejvýše osm platných se zachová v pořadí.
+function inpImageUrls(v) {
+  const out = [];
+  if (!Array.isArray(v)) return out;
+  for (const item of v) {
+    if (out.length >= MAX_OBRAZKY) break;
+    if (typeof item !== 'string') continue;
+    const t = item.trim();
+    if (t.length > MAX_OBRAZEK_URL || t.slice(0, 8).toLowerCase() !== 'https://') continue;
+    const n = normalizeUrl(t);
+    if (n && n.ok && n.url.length <= MAX_OBRAZEK_URL && out.indexOf(n.url) === -1) out.push(n.url);
+  }
+  return out;
+}
+
 function validateInput(body) {
   const b = body || {};
   const text = typeof b.text === 'string' ? b.text.trim() : '';
@@ -105,7 +124,8 @@ function validateInput(body) {
     if (sh.data.length > MAX_SHOT_CHARS) return { ok: false, status: 413, chyba: 'Screenshot je příliš velký.' };
     if (!INP_B64_RE.test(sh.data)) return { ok: false, status: 400, chyba: 'Nepodporovaný formát obrázku (PNG, JPEG, WEBP).' };
   }
-  return { ok: true, input: { text, screenshoty: shots, url: url && url.ok ? url : null } };
+  const jsonld = typeof b.jsonld === 'string' ? b.jsonld.trim().slice(0, MAX_JSONLD) : '';
+  return { ok: true, input: { text, screenshoty: shots, url: url && url.ok ? url : null, obrazky: inpImageUrls(b.obrazky), jsonld } };
 }
 
 // Odstraní komentáře a obsah script/style/noscript. Neuzavřený blok zahodí zbytek dokumentu.

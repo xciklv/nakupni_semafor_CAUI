@@ -454,3 +454,61 @@ test('validateInput: screenshot nad 5 000 000 znaků -> 413, přesně 5 000 000 
   assert.equal(r.ok, false);
   assert.equal(r.status, 413);
 });
+
+// --- obrázky a JSON-LD z rozšíření v prohlížeči ---
+
+const OBR_BODY = { odkaz: 'https://allegro.cz/produkt/x?offerId=1', text: 'Powerbanka 199 Kč' };
+
+test('validateInput: obrázky jen https, ostatní položky se zahodí bez chyby', () => {
+  const r = validateInput({ ...OBR_BODY, obrazky: ['https://a.cz/1.jpg', 'http://x', 'javascript:1', 5] });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.input.obrazky, ['https://a.cz/1.jpg']);
+});
+
+test('validateInput: devět adres se ořízne na osm, pořadí zůstane', () => {
+  const urls = Array.from({ length: 9 }, (_, i) => 'https://a.cz/' + i + '.jpg');
+  assert.deepEqual(validateInput({ ...OBR_BODY, obrazky: urls }).input.obrazky, urls.slice(0, 8));
+});
+
+test('validateInput: neplatné položky nezabírají místo z osmi', () => {
+  const urls = ['http://x', 5, null, ...Array.from({ length: 9 }, (_, i) => 'https://a.cz/' + i + '.jpg')];
+  assert.deepEqual(validateInput({ ...OBR_BODY, obrazky: urls }).input.obrazky, urls.slice(3, 11));
+});
+
+test('validateInput: adresa obrázku má nejvýš 500 znaků, delší se zahodí', () => {
+  const ok = 'https://a.cz/' + 'a'.repeat(487);
+  assert.equal(ok.length, 500);
+  assert.deepEqual(validateInput({ ...OBR_BODY, obrazky: [ok, ok + 'a', 'https://a.cz/2.jpg'] }).input.obrazky, [ok, 'https://a.cz/2.jpg']);
+});
+
+test('validateInput: obrázky na interní adresu, s přihlašovacími údaji nebo bez protokolu se zahodí (SSRF)', () => {
+  const r = validateInput({ ...OBR_BODY, obrazky: ['https://127.0.0.1/a.jpg', 'https://localhost/a.jpg', 'https://10.0.0.5/a.jpg', 'https://u:p@a.cz/1.jpg', 'a.cz/1.jpg', ' https://a.cz/2.jpg ', 'https://a.cz/2.jpg', 'https://a.cz/3 4.jpg'] });
+  assert.deepEqual(r.input.obrazky, ['https://a.cz/2.jpg']);
+});
+
+test('validateInput: obrazky, které není pole, nebo chybí, dají prázdné pole', () => {
+  for (const o of [undefined, null, 'https://a.cz/1.jpg', 5, { 0: 'https://a.cz/1.jpg' }]) {
+    const r = validateInput({ ...OBR_BODY, obrazky: o });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.input.obrazky, []);
+  }
+});
+
+test('validateInput: jsonld je řetězec do 4000 znaků, delší se ořízne, jiný typ se zahodí', () => {
+  assert.equal(validateInput({ ...OBR_BODY, jsonld: ' {"a":1} ' }).input.jsonld, '{"a":1}');
+  assert.equal(validateInput({ ...OBR_BODY, jsonld: 'x'.repeat(4000) }).input.jsonld.length, 4000);
+  assert.equal(validateInput({ ...OBR_BODY, jsonld: 'x'.repeat(5000) }).input.jsonld.length, 4000);
+  for (const j of [undefined, null, 5, {}, ['a']]) assert.equal(validateInput({ ...OBR_BODY, jsonld: j }).input.jsonld, '');
+});
+
+test('validateInput: samotné obrázky nebo JSON-LD nejsou vstup (bez odkazu, textu a screenshotu chyba)', () => {
+  const r = validateInput({ obrazky: ['https://a.cz/1.jpg'], jsonld: '{}' });
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+});
+
+test('validateInput: bez obrázků a JSON-LD vrací prázdné hodnoty', () => {
+  const r = validateInput(OBR_BODY);
+  assert.deepEqual(r.input.obrazky, []);
+  assert.equal(r.input.jsonld, '');
+});

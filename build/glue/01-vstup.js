@@ -13,6 +13,8 @@ const PAGE_COLLECT_URL = PAGE_READER_URL.replace(/\/read$/, '/collect');
 const PAGE_READER_DEADLINE_MS = 45000;
 const PAGE_READER_MAX_CHARS = 15000;
 const PAGE_READER_MIN_CHARS = 300;
+// Text vložený uživatelem (typicky z rozšíření v prohlížeči) o aspoň tolika znacích je obsah nabídky: server stránku pak nestahuje vůbec (ani čtečkou, ani HEAD/GET).
+const USER_TEXT_MIN_CHARS = 300;
 // Stahování stránky: n8n-core vynucuje neomezený maxContentLength a AbortSignal v runtime chybí, proto velikost a typ hlídá předběžný HEAD
 // (typ jiný než HTML nebo Content-Length nad limitem = nestahovat) a GET žádá jen prvních ~2 MB (Range).
 const FETCH_MAX_BYTES = 3000000;
@@ -30,7 +32,7 @@ try {
   let pageStatus = 'bez_odkazu';
   let dossier = null;
   let blokace = null;
-  if (input.url) {
+  if (input.url && input.text.length < USER_TEXT_MIN_CHARS) {
     // Deadline: abortSignal (zastaví stahování, pokud ho runtime předá) + Promise.race (omezí čekání v každém případě).
     const abortSignal = (ms) => (typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined);
     const call = async (opts, ms) => {

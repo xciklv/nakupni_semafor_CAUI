@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Nákupní kontrola – záchyt stránky (spike)",
-  "version": "0.1.0",
-  "description": "Po kliknutí přečte aktuální stránku (jen čtení) a pošle ji do lokální Nákupní kontroly.",
-  "permissions": ["activeTab", "scripting", "downloads", "storage"],
+  "name": "Nákupní kontrola – sběr stránky",
+  "version": "0.2.0",
+  "description": "Po kliknutí přečte aktuální stránku (jen čtení), ukáže, co se odešle, a po potvrzení to pošle do lokální Nákupní kontroly.",
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["http://127.0.0.1:5678/*"],
   "background": { "service_worker": "background.js" },
   "action": { "default_title": "Nákupní kontrola: přečíst tuto stránku" }
