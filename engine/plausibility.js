@@ -25,7 +25,8 @@ const PLA_SYSTEM_BASE = [
   '   v_poradku = tvrzení jsou v rozumných mezích. Špičková hodnota výslovně označená jako špičková (peak, turbo, na pár sekund) je v pořádku. Chybějící údaj není důvod k varování. Nehledej problém, kde není: když výpočet sedí, řekni to.',
   '5. jistota: vysoka (výpočet je jednoznačný), stredni (závisí na typické hodnotě, kterou jsi odhadl), nizka (nedostatek údajů).',
   '6. vysvetleni_pro_laika: nejvýš 3 krátké věty česky, srozumitelně bez žargonu: proč to nedává smysl a co to znamená pro kupujícího; uveď 1 až 2 klíčová čísla z výpočtu. U v_poradku jedna věta, že čísla sedí. Nikdy netvrď, že prodejce podvádí nebo lže.',
-  '7. otazka_pro_prodejce: jedna konkrétní věta anglicky, kterou kupující pošle prodejci a která míří přesně na rozporný nebo nereálný údaj. U v_poradku prázdný řetězec.',
+  '7. otazka_pro_prodejce: jedna konkrétní věta česky, kterou kupující pošle prodejci a která míří přesně na rozporný nebo nereálný údaj. U v_poradku prázdný řetězec.',
+  'Jazyk: hruba_kontrola, vysvetleni_pro_laika a otazka_pro_prodejce piš vždy česky, i když je nabídka anglická; pole tvrzeni cituje nabídku doslovně v jazyce nabídky.',
   'Odpověz pouze JSON podle schématu.',
 ].join('\n');
 
@@ -103,6 +104,11 @@ function parsePlausibility(api) {
 
 // Pole, které by obviňovalo prodejce, se zahodí (filtr llmAccuses); nález sám zůstává.
 const plaClean = (t) => (t && !llmAccuses(t) ? t : null);
+// Text pro laika a otázka pro prodejce mají být česky. Anglický (aspoň dvě různá běžná anglická slova a žádné české znaky s diakritikou) se zahodí;
+// jediné anglické slovo (značka, model, jednotka) nevadí.
+const PLA_EN_WORDS = /\b(the|you|your|is|are|can|could|please|which|what|does|this|that|with|and|for|of)\b/gi;
+const plaEnglish = (t) => !/[ěščřžýáíéúůďťňó]/i.test(t) && new Set((String(t).match(PLA_EN_WORDS) || []).map((w) => w.toLowerCase())).size >= 2;
+const plaCzech = (t) => { const c = plaClean(t); return c && !plaEnglish(c) ? c : null; };
 
 function plausibilitySignals(parsed) {
   if (!parsed || !parsed.ok || parsed.verdikt === 'v_poradku') return [];
@@ -111,7 +117,7 @@ function plausibilitySignals(parsed) {
   const strong = parsed.verdikt === 'nesmysl' && parsed.jistota !== 'nizka' && !(worst && worst.typ === 'cena');
   const citace = worst && worst.tvrzeni ? plaClean(worst.tvrzeni) : null;
   const vypocet = worst && worst.hruba_kontrola ? plaClean(worst.hruba_kontrola) : null;
-  const vysvetleni = plaClean(parsed.vysvetleni);
+  const vysvetleni = plaCzech(parsed.vysvetleni);
   return [signal({
     id: 'nesmysl_v_nabidce',
     module: 'plausibility',
@@ -122,7 +128,7 @@ function plausibilitySignals(parsed) {
     citace,
     vypocet,
     vysvetleni,
-    otazka: plaClean(parsed.otazka),
+    otazka: plaCzech(parsed.otazka),
     jistota: plaOneOf(PLA_CONFIDENCES, parsed.jistota, null),
   })];
 }

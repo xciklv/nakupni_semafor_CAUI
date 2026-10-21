@@ -400,3 +400,9 @@ test('buildExplainRequest: payload nese druh nálezu a SYSTEM_EXPLAIN pravidlo o
   assert.match(SYSTEM_EXPLAIN, /prodejce_duveryhodny/);
   assert.match(SYSTEM_EXPLAIN, /prodejce působí věrohodně/);
 });
+
+test('buildResponse: přeskočené zdroje mimo prodejce (věrohodnost, obrázky, Icecat) nemají předponu „prodejce: “', () => {
+  const v = computeVerdict([], { offer: 'ok', seller: 'ok', safety: 'ok' }, { external: true, skipped: ['seznam ČOI', 'ověření věrohodnosti', 'analýza obrázků', 'Icecat', 'VIES'] });
+  const r = buildResponse({ verdict: v, signals: [], explanation: null });
+  assert.deepEqual(r.nezkontrolovano, ['prodejce: seznam ČOI', 'ověření věrohodnosti', 'analýza obrázků', 'identita produktu: Icecat', 'prodejce: VIES']);
+});

@@ -2473,7 +2473,13 @@ test('čtečka: e2e - text z prohlížeče projde extrakcí do požadavku na mod
 // --- Task 8: dossier, věrohodnost, obrázky a souhrn zapojené do workflow ---
 const fixtureJson = (n) => JSON.parse(fs.readFileSync(path.join(root, 'tests', 'fixtures', n), 'utf8'));
 const DOSSIER_CYKLO = fixtureJson('dossier-cyklosvitilna.json');
-const PLAUS_CYKLO = fixtureJson('plausibility-response.json');
+// Odpověď ze spiku má otázku anglicky (nález ji zahodí); pro tok se používá varianta s českou otázkou, jakou dnes žádá prompt.
+const PLAUS_CYKLO = (() => {
+  const r = fixtureJson('plausibility-response.json');
+  const body = JSON.parse(r.content[0].text);
+  body.otazka_pro_prodejce = 'Jaký je skutečný naměřený světelný tok svítilny v nejsilnějším režimu a jaká je přesná kapacita baterie ve Wh?';
+  return { ...r, content: [{ type: 'text', text: JSON.stringify(body) }] };
+})();
 const IMG_RUNS_CYKLO = fixtureJson('images-runs.json').behy;
 const { normalizeDossier: nd8 } = require('../engine/dossier');
 const DOSSIER_CYKLO_NORM = nd8(DOSSIER_CYKLO).dossier;

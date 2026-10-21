@@ -151,7 +151,7 @@ test('imagesSignals: A je low rozpor s odkazy na vyhledání hlavní fotky', () 
   const sigs = imagesSignals(consolidateImages(runs(), d));
   assert.equal(sigs.length, 1);
   const s = sigs[0];
-  assert.equal(s.module, 'obrazky');
+  assert.equal(s.module, 'images');
   assert.equal(s.severity, 'low');
   assert.equal(s.druh, 'rozpor');
   assert.equal(s.hard, false);
@@ -294,4 +294,13 @@ test('parseImages: chyba API, refusal, max_tokens, ne-JSON, špatný tvar → ok
 test('výstup parseImages jde rovnou do consolidateImages', () => {
   const parsed = runs().map((r) => parseImages(apiOf(r)).data);
   assert.equal(consolidateImages(parsed, cyklo()).tvrzeni.length, 1);
+});
+
+test('imagesSignals: modul je klíč images, který zná MODULE_NAMES, takže odpověď má modul „obrázky“', () => {
+  const { buildResponse } = require('../engine/explain');
+  const sigs = imagesSignals(consolidateImages(runs(), cyklo()));
+  assert.equal(sigs[0].module, 'images');
+  const r = buildResponse({ verdict: { semafor: 'oranžová', score: 1, confidence: 'střední', unchecked: [], skipped: [] }, signals: sigs });
+  assert.equal(r.nalezy[0].modul, 'obrázky');
+  assert.equal(r.signaly[0].modul, 'obrázky');
 });

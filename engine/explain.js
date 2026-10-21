@@ -25,10 +25,12 @@ const EXPLAIN_BEZPECNOST_TVRZENI = /bezpecn\w*|v poradku|v pohode|bez obav|neni 
 const EXPLAIN_ZELENA_VAROVANI = /nekup\w*|nedoporuc\w*|nedokoncuj\w*|nakup radeji|radeji ne|varuj\w*|varovan\w*|podvod\w*|nebezpecn\w*|riziko|rizikov/;
 
 // Nezkontrolované moduly následované nedostupnými zdroji ('prodejce: seznam ČOI'); chybějící/špatné pole se toleruje.
+// Přeskočené zdroje jiných modulů než prodejce (ostatní se píší jako „prodejce: <zdroj>“).
+const EXPLAIN_SKIPPED_OTHER = { 'ověření věrohodnosti': 'ověření věrohodnosti', 'analýza obrázků': 'analýza obrázků', Icecat: MODULE_NAMES.identity + ': Icecat' };
 function explainUnchecked(verdict) {
   const mods = Array.isArray(verdict.unchecked) ? verdict.unchecked : [];
   const skipped = Array.isArray(verdict.skipped) ? verdict.skipped.filter((x) => typeof x === 'string' && x) : [];
-  return mods.map((k) => MODULE_NAMES[k]).concat(skipped.map((x) => MODULE_NAMES.seller + ': ' + x));
+  return mods.map((k) => MODULE_NAMES[k]).concat(skipped.map((x) => (Object.hasOwn(EXPLAIN_SKIPPED_OTHER, x) ? EXPLAIN_SKIPPED_OTHER[x] : MODULE_NAMES.seller + ': ' + x)));
 }
 
 // Výchozí model vysvětlení: Claude Haiku 5.5 (krátký český text z hotového verdiktu). Build ho může přepsat (LLM_MODEL_EXPLAIN).

@@ -44,7 +44,8 @@ test('plausibilitySignals: nesmysl s vysokou jistotou dá jeden nález medium/ne
   assert.equal(s[0].citace, 'Svítivost 25 500 lumenů (titulek)');
   assert.ok(s[0].vypocet.startsWith('25 500 lm ÷ 100 lm/W'));
   assert.ok(s[0].vysvetleni.includes('255 W'));
-  assert.ok(s[0].otazka.startsWith('The title says'));
+  // Fixture je skutečná odpověď ze spiku, kde model napsal otázku anglicky; v nálezu se anglická otázka zahazuje (prompt dnes žádá češtinu).
+  assert.equal(s[0].otazka, null);
   assert.ok(s[0].evidence.length > 0);
   assert.equal(s[0].hard, false);
 });
@@ -177,4 +178,24 @@ test('prompt: vzorový výpočet je jiný než reálný případ (žádné 25500
   assert.ok(PLA_SYSTEM_BASE.includes('jen to, co lze vypočítat z čísel v nabídce'));
   assert.ok(PLA_SYSTEM_BASE.includes('chybějící údaj není důvod k varování'));
   assert.ok(PLA_SYSTEM_BASE.includes('fyzika | cena | rozpor_textu | jine'));
+});
+
+test('prompt: citace jsou doslovně z nabídky, výpočet, vysvětlení i otázka pro prodejce vždy česky (ne anglicky)', () => {
+  assert.ok(!/anglicky/i.test(PLA_SYSTEM_BASE), 'prompt nesmí žádat anglické pole');
+  assert.match(PLA_SYSTEM_BASE, /otazka_pro_prodejce: jedna konkrétní věta česky/);
+  assert.match(PLA_SYSTEM_BASE, /hruba_kontrola, vysvetleni_pro_laika a otazka_pro_prodejce piš vždy česky, i když je nabídka anglická/);
+  assert.match(PLA_SYSTEM_BASE, /tvrzeni cituje nabídku doslovně/);
+});
+
+test('plausibilitySignals: anglická otázka nebo vysvětlení se zahodí, nález zůstává; česká (i bez diakritiky) projde', () => {
+  const en = plausibilitySignals(parsed({ vysvetleni: 'The claim is not possible with this battery, it lasts about one hour.', otazka: 'Could you please confirm the real runtime of the lamp?' }));
+  assert.equal(en.length, 1);
+  assert.equal(en[0].otazka, null);
+  assert.equal(en[0].vysvetleni, null);
+  assert.equal(en[0].druh, 'nesmysl');
+  const cs = plausibilitySignals(parsed({ vysvetleni: 'Baterie vydrží asi hodinu, ne šest.', otazka: 'Jaka je skutecna svitivost svitilny na nejvyssi rezim?' }));
+  assert.equal(cs[0].otazka, 'Jaka je skutecna svitivost svitilny na nejvyssi rezim?');
+  assert.equal(cs[0].vysvetleni, 'Baterie vydrží asi hodinu, ne šest.');
+  // jediné anglické slovo (značka, jednotka, název modelu) nestačí
+  assert.equal(plausibilitySignals(parsed({ otazka: 'Jaká je výdrž baterie na režim Turbo u modelu Pro?' }))[0].otazka, 'Jaká je výdrž baterie na režim Turbo u modelu Pro?');
 });

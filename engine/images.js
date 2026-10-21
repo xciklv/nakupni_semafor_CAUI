@@ -261,7 +261,7 @@ function imagesSignals(consolidated) {
     const citace = imgStr(t.citace, 500);
     if (!f || !citace || imgBad(citace) || imgBad(imgStr(t.text, 500))) return null;
     return signal({
-      id: f.id, module: 'obrazky', severity: f.severity, title: f.title, evidence: citace, source: 'analýza obrázků', druh: 'rozpor',
+      id: f.id, module: 'images', severity: f.severity, title: f.title, evidence: citace, source: 'analýza obrázků', druh: 'rozpor',
       citace, vysvetleni: f.vysvetleni, otazka: f.otazka, jistota: imgPick(t.jistota, IMG_CONFIDENCE, 'stredni'), odkazy,
     });
   }).filter(Boolean);
