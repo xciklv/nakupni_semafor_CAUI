@@ -151,6 +151,32 @@ test('prompt uvádí škálu hodnocení 0-5 a pravidlo pro převod', () => {
   assert.match(SYSTEM_EXTRACT, /0-5/);
 });
 
+test('prompt: prodejce.hodnoceni jen z výslovného hodnocení prodejce, nikdy průměr produktu', () => {
+  assert.match(SYSTEM_EXTRACT, /prodejce\.hodnoceni[^\n]*(jen|pouze)[^\n]*prodejc/i);
+  assert.match(SYSTEM_EXTRACT, /doporučuje 94,7 %/);
+  assert.match(SYSTEM_EXTRACT, /nikdy průměr[^\n]*recenze\.prumer/);
+});
+
+test('normalizeExtraction: hodnocení prodejce shodné s průměrem produktu při málo recenzích je nezjištěné', () => {
+  const n = (hodnoceni, prumer, pocet) => normalizeExtraction({ prodejce: { hodnoceni }, recenze: { prumer, pocet } });
+  // Allegro OneBlade: „Hodnocení: 3,00 (2 hodnocení a 2 recenze)“ je hodnocení produktu, ne prodejce
+  const a = n(3, 3, 2);
+  assert.equal(a.prodejce.hodnoceni, null);
+  assert.equal(a.recenze.prumer, 3);
+  assert.equal(a.recenze.pocet, 2);
+  assert.equal(n(3, 3, 5).prodejce.hodnoceni, null);
+  // hodně recenzí: shoda je věrohodná (4,8 u prodejce i produktu), zůstává
+  assert.equal(n(4.8, 4.8, 500).prodejce.hodnoceni, 4.8);
+  assert.equal(n(3, 3, 6).prodejce.hodnoceni, 3);
+  // různé hodnoty při málo recenzích: hodnocení prodejce zůstává
+  assert.equal(n(4.7, 3, 2).prodejce.hodnoceni, 4.7);
+  // neznámý počet recenzí: nic se nepřepisuje
+  assert.equal(n(3, 3, null).prodejce.hodnoceni, 3);
+  assert.equal(n(3, 3, undefined).prodejce.hodnoceni, 3);
+  // bez průměru produktu
+  assert.equal(n(3, null, 2).prodejce.hodnoceni, 3);
+});
+
 test('normalizeExtraction: produkt.znacka a produkt.model (trim, max 60 znaků, jinak null)', () => {
   const p = (o) => normalizeExtraction({ produkt: o }).produkt;
   assert.equal(p({ znacka: '  Anker ', model: ' A1263 ' }).znacka, 'Anker');

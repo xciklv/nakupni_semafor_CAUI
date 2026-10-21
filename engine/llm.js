@@ -10,6 +10,7 @@ const SYSTEM_EXTRACT = [
   '"gpsr":{"vyrobce_uveden":"ano"|"ne"|"neuvedeno","adresa_vyrobce":"ano"|"ne"|"neuvedeno","odpovedna_osoba_eu":"ano"|"ne"|"neuvedeno"},',
   '"nerealne_parametry":[str],"nesoulady":[str]}',
   'Hodnocení (prodejce.hodnoceni, recenze.prumer) je na škále 0-5. Pokud zdroj používá jinou škálu (např. 0-10 nebo procenta), převeď ji na 0-5; pokud převod nelze, vrať null.',
+  'prodejce.hodnoceni smí být jen hodnocení výslovně přiřazené prodejci (např. "Prodejce: X, doporučuje 94,7 %" = 94,7 % z 5 = 4,7; "kladných hodnocení 98 %"), nikdy průměr hodnocení nebo recenzí produktu (ten patří do recenze.prumer, např. "Hodnocení: 3,00 (2 hodnocení a 2 recenze)" u zboží). Pokud hodnocení prodejce není uvedeno, vrať null.',
   'ico: 8místné číslo bez mezer, pokud ho nabídka neuvádí, vrať null.',
   'znacka a model: značka a název/číslo modelu výrobku, opsané pouze z nabídky; pokud nabídka značku nebo model neuvádí, vrať null. Nikdy je neodhaduj.',
   'ean: opiš jen pokud je v nabídce výslovně označen jako EAN/GTIN/čárový kód; číslo z pole model, SKU, katalogové číslo ani jiný kód za EAN nevydávej. Jinak prázdný řetězec "".',
@@ -135,6 +136,15 @@ const llmDic = (v) => { const t = typeof v === 'string' ? v.replace(/\s+/g, '').
 const llmYesNo = (v) => (v === 'ano' || v === 'ne' ? v : null);
 const llmCountry = (v) => { const t = llmStr(v); return t && /^[A-Za-z]{2}$/.test(t) ? t.toUpperCase() : null; };
 
+// Pojistka k promptu: model občas opíše průměr hodnocení produktu i jako hodnocení prodejce (Allegro: „Hodnocení: 3,00 (2 hodnocení)“ u zboží).
+// Shoda přesně s recenze.prumer při nejvýš LLM_THIN_REVIEWS recenzích se bere jako hodnocení prodejce nezjištěné (null, nikdy podezření).
+// U stovek recenzí je shoda běžná a věrohodná, proto zůstává; neznámý počet recenzí nic nepřepisuje.
+const LLM_THIN_REVIEWS = 5;
+const llmSellerRating = (s, r) => {
+  const h = llmRating(s.hodnoceni), avg = llmRating(r.prumer), n = llmNonNeg(r.pocet);
+  return h != null && h === avg && n != null && n <= LLM_THIN_REVIEWS ? null : h;
+};
+
 function normalizeExtraction(d) {
   const x = d && typeof d === 'object' ? d : {};
   const p = x.produkt || {}, s = x.prodejce || {}, r = x.recenze || {}, o = x.obrazky || {};
@@ -153,7 +163,7 @@ function normalizeExtraction(d) {
     },
     prodejce: {
       nazev: llmStr(s.nazev), ico: llmIco(s.ico), provozovatel_uveden: llmBool(s.provozovatel_uveden), kontakt_uveden: llmBool(s.kontakt_uveden),
-      podminky_uvedeny: llmBool(s.podminky_uvedeny), hodnoceni: llmRating(s.hodnoceni), pocet_prodeju: llmNonNeg(s.pocet_prodeju),
+      podminky_uvedeny: llmBool(s.podminky_uvedeny), hodnoceni: llmSellerRating(s, r), pocet_prodeju: llmNonNeg(s.pocet_prodeju),
       stari_obchodu_dny: llmNonNeg(s.stari_obchodu_dny), zeme_odeslani: llmCountry(s.zeme_odeslani), dic: llmDic(s.dic),
     },
     recenze: { pocet: llmNonNeg(r.pocet), prumer: llmRating(r.prumer), podobne_texty: llmBool(r.podobne_texty), vsechny_5_hvezd: llmBool(r.vsechny_5_hvezd), genericke: llmBool(r.genericke) },
