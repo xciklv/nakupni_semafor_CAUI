@@ -1390,7 +1390,7 @@ function loadPage(opts = {}) {
     static revokeObjectURL(u) { log.push('revoke:' + u); }
   }
   const ctx = vm.createContext({
-    document: dom.document, location: { href: opts.href || 'http://x/webhook/nakupni-kontrola-web' }, URL: FakeURL, Image: FakeImage, console,
+    document: dom.document, navigator: opts.navigator, location: { href: opts.href || 'http://x/webhook/nakupni-kontrola-web' }, URL: FakeURL, Image: FakeImage, console,
     fetch: async (...args) => { fetchCalls.push(args); if (opts.gate) await opts.gate; if (opts.fetchFail) throw new Error('síť'); return { json: async () => (opts.response || {}) }; },
   });
   vm.runInContext(m[1] + '\n;this.__render = render; this.__toJpegBase64 = toJpegBase64; this.__apiUrl = apiUrl; this.__API = API;', ctx);
@@ -2858,4 +2858,173 @@ test('glue 04: odpověď nese nalezy z buildResponse (včetně citace, otázky a
   assert.equal(out.odpoved.nalezy[0].otazka, 'Q?');
   assert.equal(out.odpoved.nalezy[0].modul, 'věrohodnost');
   assert.deepEqual(out.odpoved.signaly.map((x) => x.id), ['b', 'a']);
+});
+
+// --- Task 9: stránka ukazuje nálezy (skupiny, karta s citací, vysvětlením a otázkou pro prodejce) ---
+const NALEZY_CLASSES = new Set([...ALLOWED_CLASSES, 'nalez', 'skupina', 'citace', 'otazka', 'odkazy', 'vypocet', 'poznamka']);
+const nalez = (o) => ({ id: 'x', modul: 'věrohodnost', druh: 'nesmysl', zavaznost: 'medium', titul: 'Tvrzení nedává smysl', dukaz: 'Důkaz', citace: 'Citace z nabídky', vysvetleni: 'Proto to nejde.', vypocet: '25 500 ÷ 3 000 = 8,5', otazka: 'Jaký je skutečný výkon?', jistota: 'vysoka', odkazy: [], zdroj: null, ...o });
+const holyNalez = (o) => nalez({ citace: null, vysvetleni: null, otazka: null, vypocet: null, ...o });
+const odpoved = (nalezy, extra = {}) => ({ stav: 'ok', semafor: 'oranžová', skore: 3, jistota: 'střední', shrnuti: 'Shrnutí', co_delat: ['Zeptejte se prodejce'], signaly: [], nalezy, nezkontrolovano: [], upozorneni: 'U', ...extra });
+function walk(node, acc = []) { acc.push(node); node.children.forEach((c) => walk(c, acc)); return acc; }
+// Kontejner skupiny: element, jehož první potomek je nadpis (h2 nebo summary) s daným začátkem textu.
+function skupina(dom, nadpis) {
+  return dom.all.find((n) => n.children[0] && /^(h2|summary)$/i.test(n.children[0].tagName) && n.children[0].textContent.startsWith(nadpis));
+}
+function nactiNalezy(r, opts) {
+  const p = loadPage(opts);
+  p.render(r);
+  return p;
+}
+function tlacitko(dom, text) { return dom.all.find((n) => n.tagName === 'button' && n.textContent === text); }
+function tridyVWhitelistu(dom) {
+  for (const n of dom.all) for (const c of n.className.split(' ')) assert.ok(NALEZY_CLASSES.has(c), 'nepovolená třída: ' + c);
+}
+
+test('nálezy: karta nesmyslu má titul, citaci v uvozovkách, Proč, Výpočet, otázku pro prodejce a tlačítko Kopírovat', () => {
+  const { dom } = nactiNalezy(odpoved([nalez()]));
+  const g = skupina(dom, 'Tvrzení, která nesedí');
+  assert.ok(g, 'chybí skupina');
+  const t = texts(g);
+  assert.ok(t.includes('Tvrzení nedává smysl'));
+  assert.ok(t.includes('„Citace z nabídky“'));
+  assert.ok(t.includes('Proč'));
+  assert.ok(t.includes('Proto to nejde.'));
+  assert.ok(t.includes('Zeptejte se prodejce'));
+  assert.ok(t.includes('Jaký je skutečný výkon?'));
+  assert.ok(walk(g).some((n) => n.tagName === 'button' && n.textContent === 'Kopírovat'));
+  const v = walk(g).find((n) => n.tagName === 'details' && n.children[0].textContent === 'Výpočet');
+  assert.ok(v, 'chybí Výpočet');
+  assert.ok(!v.open && v.attrs.open === undefined, 'Výpočet má být sbalený');
+  assert.ok(texts(v).includes('25 500 ÷ 3 000 = 8,5'));
+  assert.equal(dom.all.filter((n) => n.htmlWrites > 0).length, 0);
+  tridyVWhitelistu(dom);
+});
+
+test('nálezy: Kopírovat zapíše otázku do schránky a potvrdí; selhání schránky ukáže pokyn, ne výjimku', async () => {
+  const zapsano = [];
+  const ok = nactiNalezy(odpoved([nalez()]), { navigator: { clipboard: { writeText: async (t) => { zapsano.push(t); } } } });
+  const b = tlacitko(ok.dom, 'Kopírovat');
+  await settle(Promise.resolve(b.listeners.click()));
+  assert.deepEqual(zapsano, ['Jaký je skutečný výkon?']);
+  assert.equal(b.textContent, 'Zkopírováno');
+  for (const navigator of [{ clipboard: { writeText: async () => { throw new Error('zakázáno'); } } }, {}, undefined]) {
+    const p = nactiNalezy(odpoved([nalez()]), { navigator });
+    const bt = tlacitko(p.dom, 'Kopírovat');
+    const r = await settle(Promise.resolve(bt.listeners.click()));
+    assert.ok(!r.timeout && r.ok, 'kliknutí nesmí vyhodit');
+    assert.ok(texts(p.dom.byId.out).some((x) => /ručně/.test(x)), 'chybí pokyn ke kopírování ručně');
+  }
+});
+
+test('nálezy: tři skupiny podle druhu; rozpor patří k tvrzením, riziko k rizikům, nelze ověřit je sbalené a není podezření', () => {
+  const { dom } = nactiNalezy(odpoved([
+    nalez({ id: 'a', druh: 'nesmysl', titul: 'T-nesmysl' }),
+    nalez({ id: 'b', druh: 'rozpor', zavaznost: 'low', titul: 'T-rozpor' }),
+    holyNalez({ id: 'c', druh: 'riziko', zavaznost: 'low', titul: 'T-riziko' }),
+    holyNalez({ id: 'd', druh: 'nelze_overit', zavaznost: 'info', titul: 'T-nelze' }),
+  ]));
+  const g1 = texts(skupina(dom, 'Tvrzení, která nesedí'));
+  const g2 = texts(skupina(dom, 'Rizika'));
+  const g3 = skupina(dom, 'Nepodařilo se ověřit');
+  assert.ok(g1.includes('T-nesmysl') && g1.includes('T-rozpor') && !g1.includes('T-riziko') && !g1.includes('T-nelze'));
+  assert.ok(g2.includes('T-riziko') && !g2.includes('T-nesmysl'));
+  assert.equal(g3.tagName, 'details');
+  assert.ok(!g3.open && g3.attrs.open === undefined, 'skupina má být sbalená');
+  assert.ok(texts(g3).includes('T-nelze'));
+  assert.ok(texts(g3).some((x) => /podezření/.test(x)), 'poznámka, že nelze ověřit není podezření');
+  // nikdy nevypadá jako problém: žádný štítek závažnosti ani barevný okraj
+  assert.ok(!walk(g3).some((n) => /\b(high|medium|low)\b/.test(n.className) || n.className.split(' ').includes('sev')));
+  tridyVWhitelistu(dom);
+});
+
+test('nálezy: pořadí skupin je Tvrzení, Rizika, Nepodařilo se ověřit; prázdné skupiny se nevykreslí', () => {
+  const plna = nactiNalezy(odpoved([
+    holyNalez({ druh: 'nelze_overit', titul: 'N' }), holyNalez({ druh: 'riziko', titul: 'R' }), nalez({ titul: 'T' }),
+  ]));
+  const poradi = plna.dom.byId.out.children.map((c) => c.children[0] && c.children[0].textContent).filter(Boolean);
+  const i = (s) => poradi.findIndex((x) => x.startsWith(s));
+  assert.ok(i('Tvrzení') >= 0 && i('Tvrzení') < i('Rizika') && i('Rizika') < i('Nepodařilo se ověřit'), poradi.join(' | '));
+  const jen = nactiNalezy(odpoved([holyNalez({ druh: 'riziko' })]));
+  assert.ok(skupina(jen.dom, 'Rizika'));
+  assert.equal(skupina(jen.dom, 'Tvrzení, která nesedí'), undefined);
+  assert.equal(skupina(jen.dom, 'Nepodařilo se ověřit'), undefined);
+});
+
+test('nálezy: riziko bez citace a vysvětlení ukáže důkaz; nález s vysvětlením důkaz neopakuje', () => {
+  const a = nactiNalezy(odpoved([holyNalez({ druh: 'riziko', dukaz: 'Nabídka o CE mlčí.' })]));
+  assert.ok(texts(a.dom.byId.out).includes('Nabídka o CE mlčí.'));
+  const b = nactiNalezy(odpoved([nalez({ dukaz: 'DUKAZ-DUPLICITA' })]));
+  assert.ok(!texts(b.dom.byId.out).includes('DUKAZ-DUPLICITA'));
+});
+
+test('nálezy: odkazy jen https s target=_blank a rel=noopener noreferrer; ostatní schémata se nevykreslí', () => {
+  const odkazy = [
+    { text: 'Fotka v Google Lens', url: 'https://lens.google.com/uploadbyurl?url=https%3A%2F%2Fa.cz%2Fx.jpg' },
+    { text: 'JS', url: 'javascript:alert(1)' },
+    { text: 'JS velkými', url: 'JavaScript:alert(2)' },
+    { text: 'Data', url: 'data:text/html,<script>1</script>' },
+    { text: 'Http', url: 'http://example.cz/x' },
+    { text: 'Bez schématu', url: '//example.cz/x' },
+    { text: 'Prázdné', url: '' },
+    { text: 'Objekt', url: { a: 1 } },
+    null, 5,
+  ];
+  const { dom } = nactiNalezy(odpoved([nalez({ odkazy })]));
+  const as = dom.all.filter((n) => n.tagName === 'a');
+  assert.equal(as.length, 1);
+  assert.equal(as[0].textContent, 'Fotka v Google Lens');
+  assert.match(as[0].href, /^https:\/\/lens\.google\.com\//);
+  assert.equal(as[0].attrs.target, '_blank');
+  assert.equal(as[0].attrs.rel, 'noopener noreferrer');
+});
+
+test('nálezy: HTML a <script> v citaci, titulu i otázce zůstane prostým textem', () => {
+  const payload = '<script>alert(1)</script>';
+  const { dom } = nactiNalezy(odpoved([nalez({ citace: payload, titul: payload + 't', otazka: payload + 'q', vysvetleni: payload + 'v', vypocet: payload + 'w' })]));
+  assert.equal(dom.all.filter((n) => n.textContent === '„' + payload + '“').length, 1);
+  assert.equal(dom.all.filter((n) => n.htmlWrites > 0).length, 0);
+  assert.equal(dom.all.filter((n) => Object.keys(n.attrs).some((k) => /^on/i.test(k))).length, 0);
+});
+
+test('nálezy: nepovolená závažnost ani druh nerozbijí třídy; neznámý druh jde mezi rizika', () => {
+  const { dom } = nactiNalezy(odpoved([holyNalez({ druh: 'card err', zavaznost: 'zelená zelená', titul: 'T-divný' })]));
+  assert.ok(texts(skupina(dom, 'Rizika')).includes('T-divný'));
+  tridyVWhitelistu(dom);
+});
+
+test('nálezy: špatný tvar polí nevyhodí výjimku a nevypíše [object Object]', () => {
+  const shapes = [
+    odpoved('x'), odpoved(null), odpoved({}), odpoved([null, 5, 'x', [], {}]),
+    odpoved([{ druh: 'nesmysl', titul: 1, citace: { a: 1 }, vysvetleni: 5, otazka: [], vypocet: {}, odkazy: 'x' }]),
+    odpoved([nalez({ odkazy: { text: 'a', url: 'https://a.cz' } })]),
+  ];
+  for (const r of shapes) {
+    let p;
+    assert.doesNotThrow(() => { p = nactiNalezy(r); }, JSON.stringify(r));
+    assert.equal(p.dom.all.filter((n) => n.htmlWrites > 0).length, 0, JSON.stringify(r));
+    assert.ok(!texts(p.dom.byId.out).some((s) => s.includes('[object Object]')), JSON.stringify(r));
+  }
+});
+
+test('nálezy: odpověď bez nalezy se vykreslí jako dřív ze signalu; s nalezy se signaly neopakují', () => {
+  const sig = [{ id: 's', modul: 'M', zavaznost: 'high', titul: 'Starý signál', dukaz: 'D', zdroj: 'z' }];
+  const stara = nactiNalezy({ stav: 'ok', semafor: 'červená', shrnuti: 'S', co_delat: [], signaly: sig });
+  const t = texts(stara.dom.byId.out);
+  assert.ok(t.includes('Zjištěné signály') && t.includes('Starý signál'));
+  const nova = nactiNalezy(odpoved([nalez()], { signaly: sig }));
+  const tn = texts(nova.dom.byId.out);
+  assert.ok(!tn.includes('Starý signál') && !tn.includes('Zjištěné signály'));
+  assert.ok(tn.includes('Co dělat'));
+});
+
+test('nálezy: prázdné pole nalezy při neprázdných signalech spadne zpět na signaly', () => {
+  const sig = [{ id: 's', modul: 'M', zavaznost: 'low', titul: 'Záložní signál', dukaz: 'D', zdroj: 'z' }];
+  const { dom } = nactiNalezy(odpoved([], { signaly: sig }));
+  assert.ok(texts(dom.byId.out).includes('Záložní signál'));
+});
+
+test('nálezy: stránka používá navigator.clipboard a nemá žádnou externí adresu', () => {
+  const html = pageHtml();
+  assert.match(html, /navigator\.clipboard/);
+  assert.equal(/https?:\/\//.test(html), false);
 });

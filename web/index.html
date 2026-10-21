@@ -38,6 +38,18 @@
   .sig.high { border-color:var(--red); } .sig.medium { border-color:var(--orange); } .sig.low { border-color:var(--gray); } .sig.info { border-color:var(--muted); }
   .sig b { display:inline; } .sig span { color:var(--muted); font-size:.9rem; }
   .sig .sev { display:inline-block; margin-right:8px; padding:0 8px; border:1px solid var(--line); border-radius:999px; font-weight:600; font-size:.8rem; }
+  .nalez { margin:16px 0; }
+  .nalez p { margin:4px 0; }
+  .citace { margin:6px 0; padding:6px 10px; background:var(--bg); border-left:3px solid var(--line); border-radius:4px; font-style:italic; }
+  .otazka { margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+  .nalez button { margin:8px 8px 0 0; padding:8px 14px; min-height:44px; }
+  .odkazy { margin-top:10px; }
+  .odkazy a { display:inline-block; margin:0 16px 4px 0; padding:8px 0; color:var(--accent); font-weight:600; }
+  a:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  summary { cursor:pointer; font-weight:600; padding:4px 0; }
+  details.skupina > summary { font-size:1.2rem; }
+  details.vypocet { margin-top:8px; }
+  .poznamka { color:var(--muted); font-size:.9rem; margin:4px 0 0; }
   .err { color:var(--red); font-weight:600; }
   ul { padding-left:20px; }
 </style>
@@ -86,6 +98,11 @@ const SEMAFOR_STITEK = { 'zelená': 'Nízké riziko', 'oranžová': 'Střední r
 const ZAVAZNOSTI = ['info', 'low', 'medium', 'high'];
 // Závažnost se ukazuje i textem, ne jen barvou.
 const ZAVAZNOST_STITEK = { info: 'Informace', low: 'Nízká', medium: 'Střední', high: 'Vysoká' };
+const DRUHY_TVRZENI = ['nesmysl', 'rozpor'];
+const JISTOTA_STITEK = { vysoka: 'vysoká', stredni: 'střední', nizka: 'nízká' };
+const NOTE_NELZE_OVERIT = 'Nenalezení údaje není podezření na nabídku, jen jsme ho nemohli potvrdit.';
+const KOPIROVAT = 'Kopírovat';
+const CHYBA_KOPIE = 'Kopírování se nepovedlo, označte text a zkopírujte ho ručně.';
 const out = document.getElementById('out');
 const shots = document.getElementById('shots');
 const limit = document.getElementById('limit');
@@ -141,6 +158,103 @@ function toJpegBase64(file) {
 
 function chybaObrazku(err) { return !!err && typeof err.message === 'string' && err.message.indexOf('Obrázek') === 0; }
 
+// Odkaz z odpovědi je data: projde jen platná adresa https bez přihlašovacích údajů (ne javascript:, data:, http:).
+function bezpecnyOdkaz(v) {
+  const u = str(v).trim();
+  if (!/^https:/i.test(u)) return '';
+  try {
+    const p = new URL(u);
+    return p.protocol === 'https:' && p.host && !p.username && !p.password ? p.href : '';
+  } catch (e) { return ''; }
+}
+
+// Tlačítko Kopírovat: při selhání (bez schránky, zakázáno) ukáže pokyn, jak text zkopírovat ručně.
+function kopirovat(text) {
+  const wrap = el('div');
+  const b = el('button', KOPIROVAT, 'sekundarni');
+  const zprava = el('span', '', 'hint');
+  b.setAttribute('type', 'button');
+  zprava.setAttribute('role', 'status');
+  b.addEventListener('click', async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') throw new Error('schránka');
+      await navigator.clipboard.writeText(text);
+      b.textContent = 'Zkopírováno';
+      zprava.textContent = '';
+    } catch (e) {
+      b.textContent = KOPIROVAT;
+      zprava.textContent = CHYBA_KOPIE;
+    }
+  });
+  wrap.append(b, zprava);
+  return wrap;
+}
+
+function sbalene(nadpis, cls, obsah) {
+  const d = el('details', null, cls);
+  d.append(el('summary', nadpis), ...obsah);
+  return d;
+}
+
+// Karta nálezu: titul, citace z nabídky, Proč, Výpočet (sbalený), otázka pro prodejce, odkazy. Vše přes textContent.
+function kartaNalezu(n) {
+  const nelze = n.druh === 'nelze_overit';
+  // Co se nepodařilo ověřit nikdy nevypadá jako problém: bez štítku závažnosti, jen informační barva.
+  const zavaznost = nelze ? 'info' : povoleno(str(n.zavaznost), ZAVAZNOSTI, 'low');
+  const d = el('div', null, 'sig ' + zavaznost + ' nalez');
+  const hlavicka = el('div');
+  if (!nelze) hlavicka.append(el('span', ZAVAZNOST_STITEK[zavaznost], 'sev'));
+  hlavicka.append(el('b', str(n.titul)));
+  d.append(hlavicka);
+  const citace = str(n.citace);
+  const vysvetleni = str(n.vysvetleni);
+  if (citace) d.append(el('blockquote', '„' + citace + '“', 'citace'));
+  if (vysvetleni) d.append(el('b', 'Proč'), el('p', vysvetleni));
+  if (!citace && !vysvetleni && str(n.dukaz)) d.append(el('div', str(n.dukaz)));
+  const vypocet = str(n.vypocet);
+  if (vypocet) d.append(sbalene('Výpočet', 'vypocet', [el('p', vypocet)]));
+  const otazka = str(n.otazka);
+  if (otazka) {
+    const o = el('div', null, 'otazka');
+    o.append(el('b', 'Zeptejte se prodejce'), el('p', otazka), kopirovat(otazka));
+    d.append(o);
+  }
+  const odkazy = objs(n.odkazy).map((o) => ({ text: str(o.text), url: bezpecnyOdkaz(o.url) })).filter((o) => o.url);
+  if (odkazy.length) {
+    const box = el('div', null, 'odkazy');
+    odkazy.forEach((o) => {
+      const a = el('a', o.text || 'Otevřít');
+      a.href = o.url;
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener noreferrer');
+      box.append(a);
+    });
+    d.append(box);
+  }
+  const zdroj = str(n.zdroj);
+  const jistota = nelze ? '' : JISTOTA_STITEK[str(n.jistota)];
+  const meta = [str(n.modul), zdroj && 'zdroj: ' + zdroj, jistota && 'jistota: ' + jistota].filter(Boolean).join(' · ');
+  if (meta) d.append(el('span', meta));
+  return d;
+}
+
+// Tři skupiny: tvrzení, která nesedí; rizika; nepodařilo se ověřit (sbalené). Prázdné skupiny se nevykreslí.
+function vykreslitNalezy(nalezy) {
+  const tvrzeni = nalezy.filter((n) => DRUHY_TVRZENI.includes(n.druh));
+  const nelze = nalezy.filter((n) => n.druh === 'nelze_overit');
+  const rizika = nalezy.filter((n) => !DRUHY_TVRZENI.includes(n.druh) && n.druh !== 'nelze_overit');
+  [['Tvrzení, která nesedí', tvrzeni], ['Rizika', rizika]].forEach(([nadpis, seznamNalezu]) => {
+    if (!seznamNalezu.length) return;
+    const g = el('div', null, 'card skupina');
+    g.append(el('h2', nadpis), ...seznamNalezu.map(kartaNalezu));
+    out.append(g);
+  });
+  if (nelze.length) {
+    const g = sbalene('Nepodařilo se ověřit (' + nelze.length + ')', 'card skupina', [el('p', NOTE_NELZE_OVERIT, 'poznamka'), ...nelze.map(kartaNalezu)]);
+    out.append(g);
+  }
+}
+
 function render(r) {
   out.replaceChildren();
   drop.classList.remove('highlight');
@@ -163,7 +277,10 @@ function render(r) {
   if (nezkontrolovano.length) card.append(el('p', 'Nezkontrolováno: ' + nezkontrolovano.join(', '), 'hint'));
   out.append(card);
   const signaly = objs(r.signaly);
-  if (signaly.length) {
+  const nalezy = objs(r.nalezy).filter((n) => str(n.titul) || str(n.dukaz));
+  // Nové pole nalezy má přednost; odpověď bez něj (nebo s prázdným při neprázdných signalech) se ukáže jako dřív.
+  if (Array.isArray(r.nalezy) && (nalezy.length || !signaly.length)) vykreslitNalezy(nalezy);
+  else if (signaly.length) {
     const sc = el('div', null, 'card');
     sc.append(el('h2', 'Zjištěné signály'));
     signaly.forEach((s) => {
