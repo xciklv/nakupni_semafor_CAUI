@@ -78,7 +78,7 @@ function toResultRecord(c, j) {
 const MAX_REPEAT = 10;
 
 function parseArgs(argv) {
-  const out = { only: null, ids: null, repeat: 1 };
+  const out = { only: null, ids: null, repeat: 1, gate: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--only') {
@@ -94,8 +94,10 @@ function parseArgs(argv) {
       const v = argv[++i];
       if (!v || !/^[0-9]+$/.test(v) || Number(v) < 1 || Number(v) > MAX_REPEAT) throw new Error('--repeat vyžaduje celé číslo 1 až ' + MAX_REPEAT);
       out.repeat = Number(v);
+    } else if (a === '--gate') {
+      out.gate = true;
     } else {
-      throw new Error('Neznámý argument ' + a + ' (použití: --only <label> | --ids a,b | --repeat N)');
+      throw new Error('Neznámý argument ' + a + ' (použití: --only <label> | --ids a,b | --repeat N | --gate)');
     }
   }
   return out;

@@ -226,9 +226,9 @@ test('readNumberEnv: neplatné hodnoty padají na výchozí', () => {
 // ---- report: CLI helpers ----
 
 test('parseArgs a selectCases', () => {
-  assert.deepEqual(parseArgs([]), { only: null, ids: null, repeat: 1 });
-  assert.deepEqual(parseArgs(['--only', 'podvod']), { only: 'podvod', ids: null, repeat: 1 });
-  assert.deepEqual(parseArgs(['--ids', 'a,b, c']), { only: null, ids: ['a', 'b', 'c'], repeat: 1 });
+  assert.deepEqual(parseArgs([]), { only: null, ids: null, repeat: 1, gate: false });
+  assert.deepEqual(parseArgs(['--only', 'podvod']), { only: 'podvod', ids: null, repeat: 1, gate: false });
+  assert.deepEqual(parseArgs(['--ids', 'a,b, c']), { only: null, ids: ['a', 'b', 'c'], repeat: 1, gate: false });
   assert.throws(() => parseArgs(['--only']), /--only/);
   assert.throws(() => parseArgs(['--only', 'nesmysl']), /nesmysl/);
   assert.throws(() => parseArgs(['--foo']), /--foo/);
@@ -428,6 +428,7 @@ test('cases.json: schéma', () => {
     const kinds = ['odkaz', 'text', 'screenshotFiles'].filter((k) => c[k] !== undefined);
     assert.equal(kinds.length, 1, 'právě jeden druh vstupu: ' + c.id);
     // Skupiny coi a legit jsou kořeny domén; skupina produkt je konkrétní produktová stránka (cesta ano, query a fragment ne).
+    if (c.marketplace !== undefined) assert.equal(c.marketplace, true, 'marketplace smí být jen true: ' + c.id);
     if (c.odkaz !== undefined && c.skupina === 'produkt') assert.match(c.odkaz, /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/[^\s?#]*$/, 'odkaz ' + c.id);
     else if (c.odkaz !== undefined) assert.match(c.odkaz, /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/$/, 'odkaz ' + c.id);
     if (c.text !== undefined) assert.ok(typeof c.text === 'string' && c.text.trim().length > 0);
@@ -435,10 +436,11 @@ test('cases.json: schéma', () => {
       assert.ok(Array.isArray(c.screenshotFiles) && c.screenshotFiles.length > 0);
       for (const f of c.screenshotFiles) assert.match(f, /^[A-Za-z0-9._-]+\.(png|jpe?g|webp)$/i);
     }
-    assert.deepEqual(Object.keys(c).filter((k) => !['id', 'label', 'skupina', 'odkaz', 'text', 'screenshotFiles', 'zdroj', 'poznamka'].includes(k)), []);
+    assert.deepEqual(Object.keys(c).filter((k) => !['id', 'label', 'skupina', 'odkaz', 'text', 'screenshotFiles', 'zdroj', 'poznamka', 'marketplace'].includes(k)), []);
     // druh vstupu odpovídá skupině
-    const expected = { coi: 'odkaz', legit: 'odkaz', synthetic: 'text', produkt: 'odkaz', screens: 'screenshotFiles' }[c.skupina];
-    assert.equal(kinds[0], expected, 'vstup ve skupině ' + c.skupina + ': ' + c.id);
+    // produkt smí mít odkaz, nebo text vložený z uložené stránky
+    const expected = { coi: ['odkaz'], legit: ['odkaz'], synthetic: ['text'], produkt: ['odkaz', 'text'], screens: ['screenshotFiles'] }[c.skupina];
+    assert.ok(expected.includes(kinds[0]), 'vstup ve skupině ' + c.skupina + ': ' + c.id);
   }
 });
 
@@ -451,14 +453,39 @@ test('cases.json: složení sady po skupinách', () => {
   assert.equal(g('synthetic').length, 4);
   assert.deepEqual(g('synthetic').map((c) => c.label).sort(), ['ok', 'podvod', 'podvod', 'sporne']);
   // Vlastní testy uživatele (2026-10-19): skutečné produktové stránky a screenshot AliExpressu.
-  assert.equal(g('produkt').length, 4);
-  assert.deepEqual(g('produkt').map((c) => c.label).sort(), ['ok', 'ok', 'ok', 'sporne']);
+  assert.equal(g('produkt').length, 6);
+  assert.deepEqual(g('produkt').map((c) => c.label).sort(), ['ok', 'ok', 'ok', 'sporne', 'sporne', 'sporne']);
   assert.equal(g('screens').length, 1);
   assert.equal(g('screens')[0].label, 'sporne');
-  assert.equal(CASES.length, 39);
+  assert.equal(CASES.length, 41);
   assert.ok(CASES.some((c) => /Ignoruj všechny instrukce/.test(c.text || '')));
-  assert.equal(new Set(CASES.filter((c) => c.odkaz).map((c) => c.odkaz)).size, 34);
+  assert.equal(new Set(CASES.filter((c) => c.odkaz).map((c) => c.odkaz)).size, 35);
   assert.ok(!CASES.some((c) => /blockchain/.test(c.id)));
+});
+
+test('cases.json: nové produktové případy pro kritérium stability', () => {
+  const byId = (id) => CASES.find((c) => c.id === id);
+  const svitilna = byId('produkt-cyklosvitilna-odkaz');
+  assert.equal(svitilna.skupina, 'produkt');
+  assert.equal(svitilna.label, 'sporne');
+  assert.equal(svitilna.odkaz, 'https://www.aliexpress.com/item/1005011759581041.html');
+  const allegro = byId('produkt-allegro-oneblade-text');
+  assert.equal(allegro.skupina, 'produkt');
+  assert.equal(allegro.label, 'sporne');
+  assert.equal(allegro.marketplace, true);
+  // text je přesně obsah fixture (kontrola proti rozjetí kopie)
+  const fixture = fs.readFileSync(path.join(__dirname, '..', 'eval', 'fixtures', 'allegro-oneblade.txt'), 'utf8');
+  assert.equal(allegro.text, fixture.trim());
+  // sporné marketplace případy skupiny produkt rozpozná gate
+  const { isMarketplaceCase } = require('../eval/gate');
+  for (const id of ['produkt-cyklosvitilna-odkaz', 'produkt-allegro-oneblade-text', 'produkt-aliexpress-diffuser-odkaz']) assert.equal(isMarketplaceCase(byId(id)), true, id);
+  assert.equal(isMarketplaceCase(byId('produkt-action-haribo')), false);
+});
+
+test('parseArgs: --gate zapíná kritérium stability', () => {
+  assert.equal(parseArgs(['--repeat', '5', '--gate']).gate, true);
+  assert.equal(parseArgs(['--gate']).gate, true);
+  assert.equal(parseArgs(['--repeat', '5']).gate, false);
 });
 
 // --- opakování a stabilita ---
@@ -469,7 +496,7 @@ test('parseArgs: --repeat N (1 až 10), výchozí 1, špatné hodnoty selžou', 
   assert.equal(parseArgs(['--repeat', '5']).repeat, 5);
   assert.equal(parseArgs(['--repeat', '1']).repeat, 1);
   assert.equal(parseArgs(['--repeat', '10']).repeat, 10);
-  assert.deepEqual(parseArgs(['--ids', 'a', '--repeat', '3']), { only: null, ids: ['a'], repeat: 3 });
+  assert.deepEqual(parseArgs(['--ids', 'a', '--repeat', '3']), { only: null, ids: ['a'], repeat: 3, gate: false });
   for (const bad of [['--repeat'], ['--repeat', '0'], ['--repeat', '11'], ['--repeat', '-2'], ['--repeat', '2.5'], ['--repeat', 'pět'], ['--repeat', '']]) {
     assert.throws(() => parseArgs(bad), /--repeat/, JSON.stringify(bad));
   }

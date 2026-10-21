@@ -8,6 +8,8 @@
 //   node eval/run-eval.js --ids coi-epiona-cz,text-asdf-sporne    jen vybraná id
 //   node eval/run-eval.js --ids produkt-megaknihy-parfem --repeat 5   každý případ 5× (1 až 10) a přehled, kolik se výsledek mění;
 //                                                                     model nejde nastavit na deterministický výstup, takže jeden běh stabilitu neukáže
+//   node eval/run-eval.js --ids a,b --repeat 5 --gate   navíc vyhodnotí kritérium stability (eval/gate.js), vypíše PASS/FAIL s důvody
+//                                                       a při FAIL skončí s kódem 1
 //
 // Proměnné prostředí:
 //   API         adresa webhooku (výchozí http://127.0.0.1:5678/webhook/nakupni-kontrola)
@@ -37,6 +39,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { computeMetrics } = require('./metrics');
+const { evaluateGate, formatGate, isMarketplaceCase } = require('./gate');
 const { buildRequestBody, toResultRecord, errorRecord, readNumberEnv, parseArgs, selectCases, renderReport, stabilityLines } = require('./report');
 
 const API = process.env.API || 'http://127.0.0.1:5678/webhook/nakupni-kontrola';
@@ -87,6 +90,7 @@ async function main() {
   for (const c of cases) {
     for (let rep = 0; rep < opts.repeat; rep++) {
       const rec = await runCase(c);
+      if (isMarketplaceCase(c)) rec.marketplace = true;
       results.push(rec);
       done += 1;
       console.log(c.id.padEnd(40), c.label.padEnd(7), rec.semafor || rec.stav + (rec.chyba ? ' (' + rec.chyba + ')' : ''), opts.repeat > 1 ? 'skóre ' + rec.skore : '');
@@ -100,6 +104,12 @@ async function main() {
   fs.writeFileSync(path.join(__dirname, 'vysledky.md'), renderReport(results, { datum, api: API, repeat: opts.repeat }));
   console.log(m);
   console.log('Zapsáno: eval/vysledky.json, eval/vysledky.md');
+  if (opts.gate) {
+    const g = evaluateGate(results, { repeat: opts.repeat });
+    console.log('\nKritérium stability:');
+    for (const l of formatGate(g)) console.log(l);
+    if (!g.pass) process.exitCode = 1;
+  }
 }
 
 main().catch((e) => {

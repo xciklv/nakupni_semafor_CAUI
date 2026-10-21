@@ -301,6 +301,23 @@
     "poznamka": "Ne podvod, ale slabá nabídka (1 prodej, jediná recenze \"it never arrived\", 822 Kč, dodání z Číny). Čeká se oranžová až červená. Potřebuje běžící čtečku stránek (npm run reader), jinak vyjde šedá."
   },
   {
+    "id": "produkt-cyklosvitilna-odkaz",
+    "label": "sporne",
+    "skupina": "produkt",
+    "odkaz": "https://www.aliexpress.com/item/1005011759581041.html",
+    "zdroj": "vlastní test uživatele 2026-10-21, AliExpress, cyklosvítilna; živá kontrola dala oranžovou a nález nesmysl_v_nabidce",
+    "poznamka": "Sporná marketplace nabídka s fyzikálním nesmyslem v parametrech. Čeká se oranžová, nikdy zelená. Potřebuje běžící čtečku stránek (npm run reader), jinak vyjde šedá."
+  },
+  {
+    "id": "produkt-allegro-oneblade-text",
+    "label": "sporne",
+    "skupina": "produkt",
+    "marketplace": true,
+    "text": "NÁHRADNÍ HLAVICE HOLICÍ HLAVY PRO PHILIPS ONEBLADE 360 KONCOVKA, (198222626846)\nČEPEL NÁHRADNÍ HLAVICE PRO HOLICÍ STROJEK PRO PHILIPS ONEBLADE 360 HROT\nStav: nové\nHodnocení: 3,00 (2 hodnocení a 2 recenze). 13 lidí nedávno koupilo.\nCena: 211 Kč. Množství: 75 kusů.\nProdejce: EKSTRA-OFERTY, Super prodejce, doporučuje 94,7 %.\nDoručení za 0 Kč s aktivním doručením nákupů od 299 Kč. Vrácení zdarma – 14 dnů. Allegro bezpečný nákup.\n\nParametry\nStav: nové\nFaktura: S fakturou s DPH\nZnačka: žádná značka\nDruh: břit\nModel: 0198222626846\nUrčení: žiletka\nStav balení: originální\nKód výrobce: 0198222626846\n\nPopis (některé texty byly přeloženy strojově)\nNáhradní vyměnitelné břity Philips One Blade 360` od Minx I kód výrobce QP410/50\nkusů v sadě > 1\nSpecifikace\nTyp: Náhradní vyměnitelné břity Philips One Blade 360\nTyp zboží: Náhrada v kvalitě originálu\nPro stříhání, modelování a holení\nVhodné pro všechny držáky OneBlade\nKaždý z nich stačí na maximum. 4 měsíce *\nKompatibilní se všemi zařízeními OneBlade: OneBlade (QP25xx), OneBlade (QP26xx), OneBlade (QP27xx), OneBlade (QP28xx), OneBlade Pro (QP65xx), OneBlade Pro (QP66xx). Vhodné pro všechny modely OneBlade s výjimkou QP15XX.\nBarva upevnění se může lišit v závislosti na dodávce. Černá nebo šedá.\nReálné fotografie produktu! Představujeme originální fotografie produktu pořízené námi tak, aby zákazník přesně věděl, co obdrží v zásilce.\nSada obsahuje: vyměnitelné břity Philips One Blade 360` univerzální - 1 kus\n\nRecenze produktu: Uspokojivé, průměrné hodnocení 3,00 z 5 (2 hodnocení a 2 recenze). Všechny recenze přidali lidé, kteří si zboží skutečně koupili.\n1. září 2026 od C...6, nákup od EKSTRA-OFERTY. Nefunkční špatná kvalita. Klady: Žádné. Zápory: Nefunguje jak ma.\n\nPodobné nabídky na stejné stránce: Philips OneBlade Náhradní břit 360 QP440/50 za 899 Kč (4,85, 1 600 hodnocení); Philips OneBlade Náhradní břit QP240/50 za 899 Kč (4,78, 20 977 hodnocení); Náhradní břity pro holicí strojek Philips OneBlade QP936/50, 3 ks, 360 SkinProtect za 653 Kč (4,96, 126 hodnocení).",
+    "zdroj": "vlastní test uživatele 2026-10-20, Allegro, náhradní hlavice OneBlade; text uložen v eval/fixtures/allegro-oneblade.txt",
+    "poznamka": "Sporná marketplace nabídka vložená jako text (Allegro blokuje čtečku). Čeká se oranžová až šedá, nikdy zelená."
+  },
+  {
     "id": "produkt-aliexpress-diffuser-screenshot",
     "label": "sporne",
     "skupina": "screens",
