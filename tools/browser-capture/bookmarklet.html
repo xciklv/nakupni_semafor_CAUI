@@ -1,0 +1,8 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Bookmarklet – sonda (spike)</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem}a.bm{display:inline-block;padding:.4rem .9rem;border:2px dashed #555;border-radius:8px;text-decoration:none;color:#000;background:#fffbe6}</style>
+<h1>Sonda bookmarkletu</h1>
+<p>Přetáhněte toto tlačítko na lištu záložek:</p>
+<p><a class="bm" href="javascript:(async()=>{const o={url:location.href};try{const r=await fetch('http://127.0.0.1:5678/webhook/nakupni-kontrola',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});o.http=r.status}catch(e){o.chyba=String(e)}alert('Sonda bookmarkletu\n'+JSON.stringify(o,null,1)+'\n(HTTP 400 = fetch na 127.0.0.1 prošel; chyba = zablokováno)')})()">NK sonda</a></p>
+<p>Sonda pošle prázdné tělo <code>{}</code>, takže kontrola nespustí model (vrací 400, stojí 0 USD). Zjistí jen, jestli stránka smí z prohlížeče volat <code>127.0.0.1:5678</code>.</p>
