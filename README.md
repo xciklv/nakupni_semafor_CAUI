@@ -46,7 +46,7 @@ Kontrola proto nehodnotí „důvěryhodnost“ obecně. Ukazuje konkrétní ná
 
 Výsledek obsahuje semafor, krátké shrnutí a nálezy ve třech skupinách: **„Tvrzení, která nesedí“** (nesmysl, rozpor), **„Rizika“** a **„Nepodařilo se ověřit“** (sbaleno). Karta nálezu ukazuje titul, citaci, vysvětlení „proč“, výpočet a tlačítko **Kopírovat** u otázky pro prodejce. Nezkontrolované části jsou vždy vidět.
 
-Příklad z živé kontroly (AliExpress, cyklosvítilna s „25 500 lm“ v titulku, variantou 2 000–3 000 lm a fotkou „MAX 12000 LM“): semafor **oranžová**, skóre 5, nálezy `nesmysl_v_nabidce` (střední), `ce_chybi` (nízký) a `obrazek_cislo_rozpor` (nízký); jedna kontrola stála asi 0,02 USD. Ukázka vysvětlení modelu z měření věrohodnosti (uložená odpověď v [tests/fixtures/plausibility-response.json](tests/fixtures/plausibility-response.json)): „Titulek slibuje 25 500 lumenů, ale varianta uvádí jen 2 000–3 000 lumenů, tedy asi 8× méně. Pro takový světelný výkon by bylo potřeba kolem 255 W, což malá svítilna nezvládne uchladit ani napájet.“ a otázka pro prodejce anglicky.
+Příklad z živé kontroly (AliExpress, cyklosvítilna s „25 500 lm“ v titulku, variantou 2 000–3 000 lm a fotkou „MAX 12000 LM“): semafor **oranžová**, skóre 5, nálezy `nesmysl_v_nabidce` (střední), `ce_chybi` (nízký) a `obrazek_cislo_rozpor` (nízký); jedna kontrola stála asi 0,02 USD. Ukázka vysvětlení modelu z měření věrohodnosti (uložená odpověď v [tests/fixtures/plausibility-response.json](tests/fixtures/plausibility-response.json)): „Titulek slibuje 25 500 lumenů, ale varianta uvádí jen 2 000–3 000 lumenů, tedy asi 8× méně. Pro takový světelný výkon by bylo potřeba kolem 250 W, což malá svítilna nezvládne uchladit ani napájet.“ a otázka pro prodejce anglicky.
 
 ## Poctivost
 
