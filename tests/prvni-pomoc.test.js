@@ -141,10 +141,10 @@ test('první pomoc: stav obsahu je uveden (datum ověření zdrojů, bez odborn�
   assert.match(PP.upozorneni, /nelze zaručit/);
 });
 
-test('stránka: záložky Zkontrolovat nabídku / Stalo se mi to a oba panely', () => {
+test('stránka: záložky Zkontrolovat nabídku / První pomoc při podvodu a oba panely', () => {
   const html = pageHtml();
   assert.match(html, /<button id="tab-kontrola"[^>]*role="tab"[^>]*>Zkontrolovat nabídku<\/button>/);
-  assert.match(html, /<button id="tab-pomoc"[^>]*role="tab"[^>]*>Stalo se mi to<\/button>/);
+  assert.match(html, /<button id="tab-pomoc"[^>]*role="tab"[^>]*>První pomoc při podvodu<\/button>/);
   assert.match(html, /role="tablist"/);
   assert.match(html, /id="panel-kontrola"/);
   assert.match(html, /id="panel-pomoc"[^>]*hidden/);
@@ -162,7 +162,7 @@ test('záložky: kliknutí přepíná panely a aria-selected; první pomoc se vy
   assert.equal(tk.attrs['aria-selected'], 'false');
   assert.equal(pp.hidden, false);
   assert.equal(pk.hidden, true);
-  assert.ok(texts(pp).some((t) => /Klid\. Tohle se dá často řešit\./.test(t)));
+  assert.ok(texts(pp).some((t) => /Tohle se dá často řešit\./.test(t)));
   tk.click();
   assert.equal(pk.hidden, false);
   assert.equal(pp.hidden, true);
@@ -302,6 +302,55 @@ test('CSS: záložky a první pomoc používají tokeny motivu, mají focus a ne
   const p = nahled();
   tlacitkoPripadu(p, p.PP.pripady[2].nazev).click();
   const POVOLENE = new Set(['', 'card', 'hint', 'sekundarni', 'pripad', 'kroky', 'skupina-kroku', 'krok', 'proc', 'zdroje-kroku', 'podklad', 'podklad-radek', 'jak', 'nalehave', 'otazka-box',
-    'upozorneni', 'poznamka', 'odkazy', 'stitek', 'obecna', 'seznam-bez', 'zdroje', 'sbalene', 'volba', 'volba-label', 'karty', 'err', 'lead', 'hned', 'dny', 'pozdeji', 'podklady', 'podklad-detail', 'nav-pomoc', 'nadpis', 'popis']);
+    'upozorneni', 'poznamka', 'odkazy', 'stitek', 'obecna', 'seznam-bez', 'zdroje', 'sbalene', 'volba', 'volba-label', 'karty', 'err', 'lead', 'hned', 'dny', 'pozdeji', 'podklady', 'podklad-detail', 'nav-pomoc', 'nadpis', 'popis', 'pole-popis', 'popis-text']);
   for (const n of p.dom.all) for (const c of n.className.split(' ')) assert.ok(POVOLENE.has(c), 'nepovolená třída: ' + c);
+});
+
+test('úvod: tři sdělení (klid, nic neplatit ani když volá banka nebo policie, nic nemazat), bez věty o prohlížeči a bez právního upozornění', () => {
+  const p = nahled();
+  const uvod = out(p).children[0];
+  const body = findAll(uvod, (n) => n.tagName === 'LI').map((n) => n.textContent);
+  assert.equal(body.length, 3);
+  assert.match(body[0], /klid/i);
+  assert.match(body[1], /Nic neplať/);
+  assert.match(body[1], /banka/);
+  assert.match(body[1], /policie/);
+  assert.match(body[2], /Nemaž/);
+  for (const w of ['zprávy', 'e-maily', 'výpisy hovorů', 'screenshoty']) assert.ok(body[2].includes(w), 'nemazat: ' + w);
+  const vse = texts(uvod).join(' ');
+  assert.equal(/prohlížeči|orientační|právní poradenství/.test(vse), false, 'úvod je bez prohlížeče a bez právního upozornění');
+});
+
+test('upozornění o orientační pomůcce je dole: pod výběrem případu i pod detailem', () => {
+  const p = nahled();
+  const posledni = (n) => n.children[n.children.length - 1];
+  assert.ok(texts(posledni(out(p))).some((x) => /orientační pomůcka/.test(x)), 'pod výběrem');
+  tlacitkoPripadu(p, p.PP.pripady[0].nazev).click();
+  assert.ok(texts(posledni(out(p))).some((x) => /orientační pomůcka/.test(x)), 'pod detailem');
+  assert.equal(findAll(out(p), (n) => n.className === 'upozorneni').length, 0, 'žádný oranžový box nahoře');
+});
+
+test('popis situace: otevřené pole ve výběru případu; text se po výběru ukáže v detailu s tlačítkem Kopírovat, nic se neodesílá', () => {
+  const p = nahled();
+  const pole = find(out(p), (n) => n.tagName === 'TEXTAREA' && n.className === 'pole-popis');
+  assert.ok(pole, 'chybí pole');
+  assert.ok(find(out(p), (n) => n.tagName === 'LABEL' && /Popiš, co se stalo/.test(n.textContent)), 'popisek');
+  const payload = '<img src=x onerror=alert(1)> Včera jsem poslal 1 200 Kč.';
+  pole.value = payload; pole.listeners.input();
+  tlacitkoPripadu(p, p.PP.pripady[1].nazev).click();
+  const t = texts(out(p));
+  assert.ok(t.includes('Tvůj popis'));
+  assert.ok(t.includes(payload), 'popis je vložen jako prostý text');
+  assert.ok(findAll(out(p), (n) => n.tagName === 'BUTTON' && n.textContent === 'Kopírovat').length >= 1);
+  assert.equal(p.dom.all.filter((n) => n.htmlWrites > 0).length, 0);
+  find(out(p), (n) => n.tagName === 'BUTTON' && /Zpět na výběr/.test(n.textContent)).click();
+  assert.equal(find(out(p), (n) => n.tagName === 'TEXTAREA').value, payload);
+});
+
+test('popis situace: bez popisu se karta „Tvůj popis“ nezobrazí; kód první pomoci nic nevolá', () => {
+  const p = nahled();
+  tlacitkoPripadu(p, p.PP.pripady[0].nazev).click();
+  assert.equal(texts(out(p)).includes('Tvůj popis'), false);
+  const src = /const PRVNI_POMOC[\s\S]*$/.exec(pageHtml())[0];
+  assert.equal(/fetch\(|XMLHttpRequest|sendBeacon/.test(src), false, 'první pomoc nevolá server');
 });

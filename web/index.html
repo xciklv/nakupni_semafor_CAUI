@@ -79,6 +79,9 @@
   .zdroje ul { list-style:none; padding:0; margin:6px 0; }
   .podklad-detail { margin:0 0 8px 32px; }
   .podklad-detail p { margin:2px 0; }
+  textarea.pole-popis { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; resize:vertical; }
+  textarea.pole-popis:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  .popis-text { white-space:pre-wrap; }
   .nav-pomoc { display:flex; flex-wrap:wrap; gap:8px; }
 </style>
 </head>
@@ -87,7 +90,7 @@
   <h1>Nákupní kontrola</h1>
   <div class="zalozky" role="tablist" aria-label="Části nástroje">
     <button id="tab-kontrola" type="button" role="tab" class="zalozka" aria-selected="true" aria-controls="panel-kontrola">Zkontrolovat nabídku</button>
-    <button id="tab-pomoc" type="button" role="tab" class="zalozka" aria-selected="false" aria-controls="panel-pomoc">Stalo se mi to</button>
+    <button id="tab-pomoc" type="button" role="tab" class="zalozka" aria-selected="false" aria-controls="panel-pomoc">První pomoc při podvodu</button>
   </div>
   <section id="panel-kontrola" role="tabpanel" aria-labelledby="tab-kontrola">
   <p class="lead">Stačí odkaz na nabídku, nebo screenshot celé nabídky včetně údajů o prodejci. Nic nemusíš kopírovat.</p>
@@ -720,6 +723,7 @@ const panelKontrola = document.getElementById('panel-kontrola');
 const panelPomoc = document.getElementById('panel-pomoc');
 const TEXT_ODKAZ_POMOC = 'Už jste zaplatili? Co dělat';
 let ppVykresleno = false;
+let ppPopis = ''; // volný popis situace: jen v paměti stránky, nikam se neposílá
 
 function ppDatum(iso) { const p = String(iso).split('-'); return p.length === 3 ? Number(p[2]) + '. ' + Number(p[1]) + '. ' + p[0] : ''; }
 
@@ -772,26 +776,36 @@ function ppPripadKarta(p) {
 
 function ppUvod() {
   const c = el('div', null, 'card');
-  c.append(el('h2', 'Klid. Tohle se dá často řešit.'));
-  c.append(el('p', 'Stalo se to už hodně lidem a v mnoha případech jde něco udělat. Nadechni se, nic neukvapuj a postupuj krok za krokem.'));
+  c.append(el('h2', 'Tohle se dá často řešit.'));
   const ul = el('ul');
-  ['Nic dalšího neplať a nikomu nic nediktuj, ani když ti volá „banka“ nebo „policie“.',
-    'Nic nemaž: zprávy, e-maily a screenshoty nech být.',
-    'Celé to běží jen v tvém prohlížeči: nic se neodesílá a po zavření stránky nic nezůstane.'].forEach((t) => ul.append(el('li', t)));
-  c.append(ul, el('p', PRVNI_POMOC.upozorneni, 'upozorneni'));
+  ['Zachovej klid a postupuj krok za krokem.',
+    'Nic neplať, ani když ti volá „banka“ nebo „policie“.',
+    'Nemaž zprávy, e-maily, výpisy hovorů ani screenshoty.'].forEach((t) => ul.append(el('li', t)));
+  c.append(ul);
   return c;
 }
 
 function ppVyber() {
   const c = el('div', null, 'card');
   c.append(el('h2', 'Co se stalo?'));
+  const popisLabel = el('label', 'Popiš, co se stalo (nepovinné)');
+  popisLabel.setAttribute('for', 'popis-situace');
+  const pole = el('textarea', null, 'pole-popis');
+  pole.setAttribute('id', 'popis-situace');
+  pole.setAttribute('rows', '3');
+  pole.setAttribute('autocomplete', 'off');
+  pole.setAttribute('placeholder', 'Např. co ti kdo napsal, kolik a čím jsi platil(a), kdy to bylo…');
+  pole.value = ppPopis;
+  pole.addEventListener('input', () => { ppPopis = pole.value; });
+  c.append(popisLabel, pole, el('p', 'Je to tvoje poznámka, nikam se neodesílá. V dalším kroku se ti zobrazí a půjde zkopírovat.', 'hint'));
+  c.append(el('p', 'Teď vyber, co se nejvíc podobá tvé situaci:'));
   const karty = el('div', null, 'karty');
   PRVNI_POMOC.pripady.forEach((p) => karty.append(ppPripadKarta(p)));
   c.append(karty);
   const zpet = el('button', 'Zkontrolovat nabídku, než zaplatíte', 'sekundarni');
   zpet.setAttribute('type', 'button');
   zpet.addEventListener('click', () => prepnoutZalozku(false));
-  c.append(zpet);
+  c.append(zpet, el('p', PRVNI_POMOC.upozorneni, 'poznamka'));
   return c;
 }
 
@@ -829,7 +843,13 @@ function ppDetail(p) {
     karta.append(v);
   });
   karta.append(nalehave);
-  wrap.append(zpet, karta);
+  wrap.append(zpet);
+  if (ppPopis.trim()) {
+    const pk = el('div', null, 'card');
+    pk.append(el('h3', 'Tvůj popis'), el('p', ppPopis, 'popis-text'), kopirovat(ppPopis));
+    wrap.append(pk);
+  }
+  wrap.append(karta);
 
   const kroky = el('div', null, 'kroky');
   let cislo = 0;
