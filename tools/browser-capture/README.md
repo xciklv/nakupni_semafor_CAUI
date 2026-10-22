@@ -17,7 +17,7 @@ Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, k
 3. „Zkontrolovat“ odešle přesně to, co vidíte. Po 10 až 60 s se v okně ukáže semafor, shrnutí a signály. Kontrola stojí řádově 0,01 až 0,03 USD.
 4. „Vymazat sběr“ zahodí sebrané stránky bez odeslání. Okno zavřete tlačítkem ×.
 
-Víc stránek najednou: po kliknutí na ikonu přejděte třeba na stránku prodejce a klikněte znovu. Každé kliknutí přidá stránku do sbírky (drží se do zavření prohlížeče, stejná adresa se přepíše), „Zkontrolovat“ pošle všechny stránky jako jeden text. První stránka je nabídka (dostane až 12 000 znaků z 20 000, obrázky a JSON-LD se berou z ní). **Po odeslání se sbírka vyprázdní.** Když se odeslání nepovede (n8n neběží), sbírka zůstane pro další pokus.
+Víc stránek najednou: po kliknutí na ikonu přejděte třeba na stránku prodejce a klikněte znovu. Každé kliknutí přidá stránku do sbírky (drží se do zavření prohlížeče, stejná adresa se přepíše), „Zkontrolovat“ pošle všechny stránky jako jeden text. První stránka je nabídka (dostane až 12 000 znaků z 20 000, obrázky a JSON-LD se berou z ní). **Po provedené kontrole se sbírka vyprázdní.** Když kontrola neproběhne (n8n neběží, denní limit, příliš velký text, chyba serveru), sbírka zůstane pro další pokus a okno řekne proč.
 
 ## Co se odesílá a co ne
 

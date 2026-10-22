@@ -1,5 +1,5 @@
 // Service worker: každé kliknutí na ikonu přidá aktuální stránku do sbírky (platí napříč kartami); uživatel pak vidí celý text, který odejde,
-// a „Zkontrolovat“ pošle sebrané stránky najednou do kontroly. Po odeslání se sbírka vyprázdní.
+// a „Zkontrolovat“ pošle sebrané stránky najednou do kontroly. Po provedené kontrole se sbírka vyprázdní (při chybě serveru zůstane).
 // Odesílá z workeru (ne ze stránky), takže se na něj nevztahuje CSP stránky; stačí host_permissions.
 importScripts('extract.js'); // trimToSentences
 const API = 'http://127.0.0.1:5678/webhook/nakupni-kontrola';
@@ -56,6 +56,17 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   })();
 });
 
+// Srozumitelná hláška, když kontrola neproběhla (HTTP chyba nebo odpověď se stavem chyba); jinak null.
+function zpravaOChybe(res, odpoved) {
+  const zeServeru = odpoved && odpoved.stav === 'chyba' && odpoved.chyba ? ' Server hlásí: ' + String(odpoved.chyba) : '';
+  if (res.status === 429) return 'Denní limit kontrol je vyčerpaný, zkuste to zítra.' + zeServeru;
+  if (res.status === 413) return 'Odesílaný text je příliš velký. Vymažte sběr a pošlete méně stránek.' + zeServeru;
+  if (!res.ok) return 'Kontrola skončila chybou serveru (HTTP ' + res.status + ').' + zeServeru;
+  if (!odpoved || typeof odpoved !== 'object') return 'Kontrola vrátila nečekanou odpověď (HTTP ' + res.status + ').';
+  if (odpoved.stav === 'chyba') return String(odpoved.chyba || 'Kontrola selhala.');
+  return null;
+}
+
 async function odeslat(tabId, sbirka) {
   if (odesila) return;
   odesila = true;
@@ -78,9 +89,15 @@ async function odeslat(tabId, sbirka) {
       await hlasitTise(tabId, { faze: 'chyba', chyba: 'Kontrola není dostupná (' + spojeni + '). Běží n8n na 127.0.0.1:5678?' });
       return;
     }
-    await ulozSbirku([]); // server odpověděl, obsah je u něj: sbírka se vyprázdní
-    let odpoved;
-    try { odpoved = await res.json(); } catch (e) { odpoved = { stav: 'chyba', chyba: 'Kontrola vrátila nečekanou odpověď (HTTP ' + res.status + ').' }; }
+    let odpoved = null;
+    try { odpoved = await res.json(); } catch (e) { /* tělo není JSON: chyba se ukáže podle stavu HTTP */ }
+    const chyba = zpravaOChybe(res, odpoved);
+    if (chyba) {
+      // Server kontrolu neprovedl (denní limit, příliš velké tělo, chyba): sbírka zůstane pro další pokus nebo ruční smazání.
+      await hlasitTise(tabId, { faze: 'chyba', chyba });
+      return;
+    }
+    await ulozSbirku([]); // kontrola proběhla, obsah je u serveru: sbírka se vyprázdní
     await hlasitTise(tabId, { faze: 'vysledek', odpoved, stran: sbirka.length });
   } finally {
     odesila = false;

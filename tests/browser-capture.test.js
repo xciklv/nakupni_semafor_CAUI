@@ -230,7 +230,7 @@ function loadBackground({ fetchImpl, pages }) {
   return { store, handlers, states, intervals, cleared, timeouts, fetches, until };
 }
 
-const OK = (body = { stav: 'ok', semafor: 'zelená', shrnuti: 's', jistota: 'střední', signaly: [], co_delat: [] }) => async () => ({ status: 200, json: async () => body });
+const OK = (body = { stav: 'ok', semafor: 'zelená', shrnuti: 's', jistota: 'střední', signaly: [], co_delat: [] }) => async () => ({ ok: true, status: 200, json: async () => body });
 
 test('background: kliknutí uloží stránku do chrome.storage.session a ukáže celý odesílaný text', async () => {
   const b = loadBackground({ fetchImpl: OK(), pages: [NABIDKA, PRODEJCE] });
@@ -309,13 +309,44 @@ test('background: chyba spojení se ukáže uživateli, udržování se vypne a 
   assert.equal(b.store.sbirka.length, 1);
 });
 
-test('background: odpověď serveru s chybou (HTTP 413) sbírku vyprázdní a ukáže chybu z odpovědi', async () => {
-  const b = loadBackground({ fetchImpl: async () => ({ status: 413, json: async () => ({ stav: 'chyba', chyba: 'Text je příliš dlouhý.' }) }), pages: [NABIDKA] });
+// Nález 13: sbírka se vyprázdní jen po skutečně provedené kontrole; při chybě serveru zůstane a uživatel dostane srozumitelnou hlášku.
+async function odesliSChybou(fetchImpl) {
+  const b = loadBackground({ fetchImpl, pages: [NABIDKA] });
   await b.handlers.click({ id: 7 });
   b.handlers.message({ akce: 'odeslat' }, { tab: { id: 7 } });
-  await b.until(() => b.states.some((s) => s.faze === 'vysledek'));
-  assert.deepEqual(b.store.sbirka || [], []);
-  assert.equal(b.states.find((s) => s.faze === 'vysledek').odpoved.chyba, 'Text je příliš dlouhý.');
+  await b.until(() => b.states.some((s) => s.faze === 'vysledek' || s.faze === 'chyba'));
+  return b;
+}
+
+for (const [status, hlaska] of [[429, /limit/i], [413, /velk|dlouh/i], [500, /chyb.*server|server.*chyb/i]]) {
+  test('background: HTTP ' + status + ' sbírku nevyprázdní a ukáže srozumitelnou chybu', async () => {
+    const b = await odesliSChybou(async () => ({ ok: false, status, json: async () => ({ stav: 'chyba', chyba: 'text ze serveru' }) }));
+    assert.equal(b.store.sbirka.length, 1, 'sbírka zůstala pro další pokus');
+    const s = b.states.find((x) => x.faze === 'chyba');
+    assert.ok(s, 'ukáže se fáze chyba (ne výsledek)');
+    assert.match(s.chyba, hlaska);
+    assert.ok(!b.states.some((x) => x.faze === 'vysledek'));
+  });
+}
+
+test('background: HTTP 200 se stavem chyba sbírku nevyprázdní a ukáže chybu z odpovědi', async () => {
+  const b = await odesliSChybou(async () => ({ ok: true, status: 200, json: async () => ({ stav: 'chyba', chyba: 'Text je příliš dlouhý.' }) }));
+  assert.equal(b.store.sbirka.length, 1);
+  assert.match(b.states.find((x) => x.faze === 'chyba').chyba, /Text je příliš dlouhý./);
+});
+
+test('background: odpověď, která není JSON (HTTP 500), sbírku nevyprázdní', async () => {
+  const b = await odesliSChybou(async () => ({ ok: false, status: 500, json: async () => { throw new SyntaxError('x'); } }));
+  assert.equal(b.store.sbirka.length, 1);
+  assert.ok(b.states.some((x) => x.faze === 'chyba'));
+});
+
+test('background: úspěšná kontrola (200 ok) sbírku vyprázdní a potrebuji_vice se bere jako provedená kontrola', async () => {
+  for (const odpoved of [{ stav: 'ok', semafor: 'zelená' }, { stav: 'potrebuji_vice', zprava: 'víc podkladů' }]) {
+    const b = await odesliSChybou(async () => ({ ok: true, status: 200, json: async () => odpoved }));
+    assert.deepEqual(b.store.sbirka, []);
+    assert.deepEqual(b.states.find((x) => x.faze === 'vysledek').odpoved, odpoved);
+  }
 });
 
 // --- překryv (overlay.js) s falešným DOM ---
