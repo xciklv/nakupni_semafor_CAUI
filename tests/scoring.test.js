@@ -180,3 +180,25 @@ test('nález typu nesmysl (medium) sám dá oranžovou, s rizikem prodejce (medi
   const seller = signal({ id: 's', module: 'seller', severity: 'medium', title: 't', evidence: 'e' });
   assert.equal(computeVerdict([nesmysl, seller], ALL_OK).semafor, 'červená');
 });
+
+// Nález 7 z code review, rozhodnutí D3: přeskočená věrohodnost, obrázky nebo identita zelenou nepustí.
+test('přeskočené ověření věrohodnosti, analýza obrázků nebo výpadek Icecatu: místo zelené šedá', () => {
+  for (const x of ['ověření věrohodnosti', 'analýza obrázků', 'Icecat']) {
+    const v = computeVerdict([], ALL_OK, { external: true, skipped: [x] });
+    assert.equal(v.semafor, 'šedá', x);
+    assert.deepEqual(v.skipped, [x]);
+  }
+  assert.equal(computeVerdict([s('low')], ALL_OK, { external: true, skipped: ['analýza obrázků', 'seznam ČOI'] }).semafor, 'šedá');
+});
+
+test('nedostupný zdroj prodejce (ČOI, ARES, VIES, RDAP) zelenou dál nebrání, jen snižuje jistotu', () => {
+  for (const x of ['seznam ČOI', 'ARES', 'VIES', 'RDAP (stáří domény)']) {
+    assert.equal(computeVerdict([], ALL_OK, { external: true, skipped: [x] }).semafor, 'zelená', x);
+  }
+});
+
+test('přeskočený modul nic nemění na oranžové a červené (nálezy mají přednost)', () => {
+  const skipped = ['ověření věrohodnosti'];
+  assert.equal(computeVerdict([s('medium'), s('low'), s('low')], ALL_OK, { skipped }).semafor, 'oranžová');
+  assert.equal(computeVerdict([s('high'), s('high')], ALL_OK, { skipped }).semafor, 'červená');
+});

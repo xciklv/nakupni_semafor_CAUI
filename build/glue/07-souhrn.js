@@ -26,10 +26,11 @@ try {
     else skipped.push('analýza obrázků');
   }
 
-  // Prodejce působí věrohodně: modul prodejce je zkontrolovaný a žádný jeho nález není střední, vysoký ani tvrdý.
-  const prodejceDuveryhodny = m.moduly.seller === 'ok' && !m.signals.some((s) => s.module === 'seller' && (s.hard || s.severity === 'medium' || s.severity === 'high'));
+  // Prodejce působí věrohodně: aspoň jeden externí zdroj odpověděl (ARES, VIES, ČOI, RDAP), modul prodejce je zkontrolovaný a žádný jeho nález není střední, vysoký ani tvrdý.
+  // Jen z údajů přečtených z nabídky modelem (bez externího zdroje) se věrohodnost prodejce netvrdí.
+  const prodejceDuveryhodny = m.external === true && m.moduly.seller === 'ok' && !m.signals.some((s) => s.module === 'seller' && (s.hard || s.severity === 'medium' || s.severity === 'high'));
   const verdict = computeVerdict(signals, m.moduly, { external: m.external, skipped });
-  return [{ json: { verdict, signals, llmRequest: buildExplainRequest(verdict, signals, MODEL_EXPLAIN, { prodejceDuveryhodny }) } }];
+  return [{ json: { verdict, signals, prodejceDuveryhodny, llmRequest: buildExplainRequest(verdict, signals, MODEL_EXPLAIN, { prodejceDuveryhodny }) } }];
 } catch (e) {
   // Degradace místo pádu: bez dat z modulů vznikne šedý verdikt a běh pokračuje k vysvětlení.
   const verdict = computeVerdict([], { offer: 'unchecked', seller: 'unchecked', safety: 'unchecked' });

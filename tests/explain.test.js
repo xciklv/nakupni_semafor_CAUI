@@ -436,3 +436,21 @@ test('prompt a filtr jsou sladěné: věta, kterou prompt doporučuje, filtr nez
   assert.ok(pouzito(m[1][0].toUpperCase() + m[1].slice(1) + ', text nabídky ale obsahuje rozpor.', { prodejceDuveryhodny: true }));
   assert.ok(pouzito(m[1][0].toUpperCase() + m[1].slice(1) + ', text nabídky ale obsahuje rozpor.', {}));
 });
+
+// Nález 7 (D3): šedá kvůli přeskočenému modulu to řekne výslovně a nezmiňuje nízké riziko.
+test('fallbackAdvice (šedá): přeskočená věrohodnost, obrázky nebo Icecat se pojmenují v textu', () => {
+  const f = fallbackAdvice({ semafor: 'šedá', skipped: ['ověření věrohodnosti', 'analýza obrázků', 'Icecat', 'ARES'] });
+  assert.match(f.shrnuti, /nezkontrolovalo se/);
+  for (const s of ['ověření věrohodnosti', 'analýza obrázků', 'identita produktu']) assert.ok(f.shrnuti.includes(s), s);
+  assert.ok(!f.shrnuti.includes('ARES'));
+  assert.ok(!/bezpečn|v pořádku|nízké riziko/i.test(f.shrnuti));
+  assert.match(fallbackAdvice({ semafor: 'šedá', skipped: ['ARES'] }).shrnuti, /některý zdroj nebyl dostupný/);
+});
+
+test('buildResponse: šedá po přeskočené věrohodnosti nese v nezkontrolovano název modulu a zelená se neobjeví', () => {
+  const v = computeVerdict([], OK3, { external: true, skipped: ['ověření věrohodnosti'] });
+  const r = buildResponse({ verdict: v, signals: [] });
+  assert.equal(r.semafor, 'šedá');
+  assert.deepEqual(r.nezkontrolovano, ['ověření věrohodnosti']);
+  assert.match(r.shrnuti, /ověření věrohodnosti/);
+});

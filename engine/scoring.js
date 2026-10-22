@@ -1,6 +1,9 @@
 if (typeof require !== 'undefined' && typeof WEIGHT === 'undefined') { var { WEIGHT } = require('./signals'); }
 
 const MODULE_KEYS = ['offer', 'seller', 'safety'];
+// Přeskočené moduly mimo MODULE_KEYS (věrohodnost, obrázky, identita): bez nich nelze říct, že je nabídka bez nálezů, takže zelená se mění na šedou.
+// Nedostupné zdroje prodejce (ČOI, ARES, VIES, RDAP) zelenou dál nebrání, jen snižují jistotu.
+const GREEN_BLOCKING_SKIPPED = ['ověření věrohodnosti', 'analýza obrázků', 'Icecat'];
 
 // opts: { external: bool (uspěl aspoň jeden externí zdroj), skipped: string[] (zdroje, které se zkusily, ale nebyly dostupné) }
 function computeVerdict(signals, modules, opts = {}) {
@@ -20,9 +23,9 @@ function computeVerdict(signals, modules, opts = {}) {
   let semafor;
   if (hard || score >= 6) semafor = 'červená';
   else if (score >= 3 && (elevated || score >= 4)) semafor = 'oranžová';
-  else semafor = allOk ? 'zelená' : 'šedá';
+  else semafor = allOk && !skipped.some((x) => GREEN_BLOCKING_SKIPPED.includes(x)) ? 'zelená' : 'šedá';
   const unchecked = MODULE_KEYS.filter((k) => modules[k] !== 'ok');
   return { semafor, score, confidence, unchecked, skipped };
 }
 
-if (typeof module !== 'undefined') module.exports = { computeVerdict };
+if (typeof module !== 'undefined') module.exports = { computeVerdict, GREEN_BLOCKING_SKIPPED };

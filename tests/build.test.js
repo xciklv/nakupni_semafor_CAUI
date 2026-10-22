@@ -2828,9 +2828,10 @@ test('glue 07: selhání modulů se zapíše do verdict.skipped; bez dat k posou
   assert.deepEqual(c.out.verdict.skipped, ['analýza obrázků']);
 });
 
-test('glue 07: prodejceDuveryhodny = modul prodejce ok a žádný nález prodejce medium/high/hard', async () => {
-  const flag = async (moduly, signals) => explainPayload((await run7(NODES7({ Moduly: MOD7({ moduly, signals }) }))).out).prodejce_duveryhodny;
+test('glue 07: prodejceDuveryhodny = externí zdroj odpověděl, modul prodejce ok a žádný nález prodejce medium/high/hard', async () => {
+  const flag = async (moduly, signals, external = true) => explainPayload((await run7(NODES7({ Moduly: MOD7({ moduly, signals, external }) }))).out).prodejce_duveryhodny;
   const ok = { offer: 'ok', seller: 'ok', safety: 'ok' };
+  assert.equal(await flag(ok, [], false), false, 'bez externího zdroje se věrohodnost prodejce netvrdí');
   assert.equal(await flag(ok, []), true);
   assert.equal(await flag(ok, [sigSeller('low')]), true);
   assert.equal(await flag(ok, [sigSeller('info')]), true);
