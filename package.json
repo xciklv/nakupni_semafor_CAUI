@@ -2,7 +2,7 @@
   "name": "nakupni-kontrola",
   "private": true,
   "scripts": {
-    "test": "node --test \"tests/*.test.js\"",
+    "test": "node --test \"tests/*.test.js\" \"tools/**/*.test.js\"",
     "build": "node build/build-workflow.js",
     "reader": "node tools/page-reader/server.js",
     "purge": "node tools/purge-executions.js"
