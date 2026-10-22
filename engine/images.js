@@ -162,7 +162,13 @@ function consolidateImages(runs, dossier, obrazky) {
   const tvrzeni = [];
   if (valid.length < IMG_MIN_VOTES) return { tvrzeni, hlavniUrl };
   const jistota = (votes) => (votes === valid.length ? 'vysoka' : 'stredni');
-  const add = (kod, obrazek, citace, votes) => { if (!imgBad(citace)) tvrzeni.push({ kod, obrazek, text: citace, citace, jistota: jistota(votes) }); };
+  // Čtečka vrací jen obrázky, které se podařilo stáhnout, a číslují se od 1 podle odeslaného seznamu. Pořadí v nabídce určuje adresa:
+  // hlavní fotka je první obrázek dossieru, ne první stažený; uživateli se ukazuje pořadí v nabídce. Bez seznamu platí pořadí = číslo.
+  const sent = imgArr(obrazky);
+  const dossierUrls = imgArr(d.obrazky).map((o) => imgObjOf(o).url);
+  const origin = (n) => { const at = sent.length ? dossierUrls.indexOf(imgObjOf(sent[n - 1]).url) : n - 1; return at >= 0 ? at + 1 : null; };
+  const shown = (n) => origin(n) || n;
+  const add = (kod, obrazek, citace, votes) => { if (!imgBad(citace)) tvrzeni.push({ kod, obrazek: shown(obrazek), text: citace, citace, jistota: jistota(votes), pozice: obrazek }); };
   const offerText = imgOfferText(d);
   const offerNums = new Set(imgNums(offerText));
 
@@ -181,7 +187,7 @@ function consolidateImages(runs, dossier, obrazky) {
     const img = imgArr(best.run.obrazky).find((o) => imgObjOf(o).n === best.r.obrazek);
     const read = imgArr(imgObjOf(img).precteny_text).filter((t) => best.c.novel.some((x) => imgNums(t).includes(x)));
     const naObrazku = read.length ? read.join(' / ') : imgStr(best.r.co_je_na_obrazku, 120);
-    add('A', best.r.obrazek, 'Na obrázku č. ' + best.r.obrazek + ' je napsáno ‚' + imgCut(naObrazku, 120) + '‘, nabídka uvádí ‚' + imgCut(best.r.tvrzeni_nabidky, 160) + '‘.', g.behy.size);
+    add('A', best.r.obrazek, 'Na obrázku č. ' + shown(best.r.obrazek) + ' je napsáno ‚' + imgCut(naObrazku, 120) + '‘, nabídka uvádí ‚' + imgCut(best.r.tvrzeni_nabidky, 160) + '‘.', g.behy.size);
   });
 
   // B a C: hlavní fotka a obrázky proti prodávanému předmětu (stále se hlasuje; C je silnější než B, proto se B při C nevypisuje).
@@ -189,14 +195,15 @@ function consolidateImages(runs, dossier, obrazky) {
   const ns = [...new Set(valid.flatMap((r) => r.obrazky.map((o) => imgObjOf(o).n)).filter((n) => Number.isInteger(n)))].sort((a, b) => a - b);
   const neVotes = (n) => imgVotes(valid, n, prod, (v) => v === 'ne');
   const neImages = ns.filter((n) => neVotes(n) >= IMG_MIN_VOTES);
-  const mainNe = neImages.includes(1);
+  const main = ns.find((n) => origin(n) === 1) || null;
+  const mainNe = main !== null && neImages.includes(main);
   const nazev = imgCut(d.nazev || '', 100);
   if (mainNe || neImages.length >= 2) {
-    const n = mainNe ? 1 : neImages[0];
-    add('C', n, 'Na obrázku č. ' + n + ' je podle čtení: ‚' + imgDescribe(valid, n) + '‘, nabídka prodává: ‚' + nazev + '‘.', neVotes(n));
-  } else {
-    const alone = imgVotes(valid, 1, prod, (v) => v === 'ne' || v === 'jen_jako_soucast_celku');
-    if (alone >= IMG_MIN_VOTES) add('B', 1, 'Na hlavní fotce (obrázek č. 1) je: ‚' + imgDescribe(valid, 1) + '‘; prodávaný předmět na ní není vidět samostatně.', alone);
+    const n = mainNe ? main : neImages[0];
+    add('C', n, 'Na obrázku č. ' + shown(n) + ' je podle čtení: ‚' + imgDescribe(valid, n) + '‘, nabídka prodává: ‚' + nazev + '‘.', neVotes(n));
+  } else if (main !== null) {
+    const alone = imgVotes(valid, main, prod, (v) => v === 'ne' || v === 'jen_jako_soucast_celku');
+    if (alone >= IMG_MIN_VOTES) add('B', main, 'Na hlavní fotce (obrázek č. 1) je: ‚' + imgDescribe(valid, main) + '‘; prodávaný předmět na ní není vidět samostatně.', alone);
   }
 
   // D: značka na fotce, kterou nabídka neuvádí. Jen slova jako značka (ne ceny, časy, adresy ani jméno platformy).
@@ -213,8 +220,11 @@ function consolidateImages(runs, dossier, obrazky) {
     g.behy.add(i);
   }));
   Object.values(brands).filter((g) => g.behy.size >= IMG_MIN_VOTES).slice(0, IMG_BRANDS_MAX).forEach((g) => {
-    add('D', g.obrazek, 'Na obrázku č. ' + g.obrazek + ' je uvedeno ‚' + g.text + '‘; v údajích nabídky tuto značku nenajdete.', g.behy.size);
+    add('D', g.obrazek, 'Na obrázku č. ' + shown(g.obrazek) + ' je uvedeno ‚' + g.text + '‘; v údajích nabídky tuto značku nenajdete.', g.behy.size);
   });
+  // C (obrázky ukazují jiný předmět) je jen úsudek modelu a tři běhy téhož požadavku nejsou nezávislé: střední závažnost má jen tehdy,
+// když tentýž obrázek strojově potvrdí číslo na fotce proti nabídce (A) nebo cizí značka (D).
+  tvrzeni.forEach((t) => { t.potvrzeno = t.kod === 'C' && tvrzeni.some((o) => (o.kod === 'A' || o.kod === 'D') && o.pozice === t.pozice); });
   return { tvrzeni, hlavniUrl };
 }
 
@@ -240,7 +250,7 @@ const IMG_FINDINGS = {
     otazka: 'Můžete poslat fotku samotného nabízeného kusu?',
   },
   C: {
-    id: 'obrazek_jiny_predmet', severity: 'medium', title: 'Obrázky ukazují jiný předmět než nabídka',
+    id: 'obrazek_jiny_predmet', severity: 'low', title: 'Obrázky ukazují jiný předmět než nabídka',
     vysvetleni: 'Obrázky v nabídce podle čtení modelu nezobrazují předmět, který nabídka popisuje. Může jít o fotky jiné varianty nebo o reklamní snímek, proto ověřte, co přesně dostanete.',
     otazka: 'Ukazují obrázky přesně nabízený výrobek? Můžete poslat fotku nabízeného kusu?',
   },
@@ -261,7 +271,7 @@ function imagesSignals(consolidated) {
     const citace = imgStr(t.citace, 500);
     if (!f || !citace || imgBad(citace) || imgBad(imgStr(t.text, 500))) return null;
     return signal({
-      id: f.id, module: 'images', severity: f.severity, title: f.title, evidence: citace, source: 'analýza obrázků', druh: 'rozpor',
+      id: f.id, module: 'images', severity: t.kod === 'C' && t.potvrzeno === true ? 'medium' : f.severity, title: f.title, evidence: citace, source: 'analýza obrázků', druh: 'rozpor',
       citace, vysvetleni: f.vysvetleni, otazka: f.otazka, jistota: imgPick(t.jistota, IMG_CONFIDENCE, 'stredni'), odkazy,
     });
   }).filter(Boolean);

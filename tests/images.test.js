@@ -161,11 +161,11 @@ test('imagesSignals: A je low rozpor s odkazy na vyhledání hlavní fotky', () 
   assert.ok(s.vysvetleni && s.otazka);
 });
 
-test('imagesSignals: závažnosti B low, C medium, D low', () => {
+test('imagesSignals: závažnosti B low, C low (medium jen potvrzené), D low', () => {
   const t = (kod) => ({ kod, obrazek: 1, text: 'text ' + kod, citace: 'citace ' + kod });
   const sev = (kod) => imagesSignals({ tvrzeni: [t(kod)], hlavniUrl: 'https://x.cz/a.jpg' })[0];
   assert.equal(sev('B').severity, 'low');
-  assert.equal(sev('C').severity, 'medium');
+  assert.equal(sev('C').severity, 'low');
   assert.equal(sev('D').severity, 'low');
   assert.ok(['B', 'C', 'D'].every((k) => sev(k).druh === 'rozpor' && sev(k).odkazy.length === 2));
 });
@@ -303,4 +303,56 @@ test('imagesSignals: modul je klíč images, který zná MODULE_NAMES, takže od
   const r = buildResponse({ verdict: { semafor: 'oranžová', score: 1, confidence: 'střední', unchecked: [], skipped: [] }, signals: sigs });
   assert.equal(r.nalezy[0].modul, 'obrázky');
   assert.equal(r.signaly[0].modul, 'obrázky');
+});
+
+// Nález 3 z code review: C (jiný předmět) je střední jen s nezávislým potvrzením a čísluje podle původního pořadí v dossieru.
+const dossier3 = () => { const d = cyklo(); d.obrazky.push({ url: 'https://x.cz/treti.jpg' }); return d; };
+
+test('C bez potvrzení druhým zdrojem je jen low (3 shodné běhy téhož modelu nejsou nezávislé)', () => {
+  const r = consolidateImages(three(() => run({ produkt: ['ne', 'ano'] })), cyklo());
+  assert.deepEqual(r.tvrzeni.map((t) => t.kod), ['C']);
+  const s = imagesSignals(r);
+  assert.equal(s.length, 1);
+  assert.equal(s[0].id, 'obrazek_jiny_predmet');
+  assert.equal(s[0].severity, 'low');
+});
+
+test('C je střední, když totéž číslo obrázku potvrdí strojová kontrola čísla (A) nebo značky (D)', () => {
+  const d = cyklo();
+  d.specifikace = d.specifikace.filter((r) => !/brand/i.test(r.nazev));
+  d.popis = null;
+  d.aiPrehled = [];
+  const loga = [{ obrazek: 1, text_nebo_logo: 'ZOOMLITE', je_znacka_produktu: 'nejasne' }];
+  const s = imagesSignals(consolidateImages(three(() => run({ produkt: ['ne', 'ano'], loga })), d));
+  assert.deepEqual(s.map((x) => [x.id, x.severity]).sort(), [['obrazek_cizi_znacka', 'low'], ['obrazek_jiny_predmet', 'medium']]);
+  // značka na jiném obrázku než C nepotvrzuje
+  const jina = [{ obrazek: 2, text_nebo_logo: 'ZOOMLITE', je_znacka_produktu: 'nejasne' }];
+  const t = imagesSignals(consolidateImages(three(() => run({ produkt: ['ne', 'ano'], loga: jina })), d));
+  assert.equal(t.find((x) => x.id === 'obrazek_jiny_predmet').severity, 'low');
+});
+
+test('imagesSignals: C bez příznaku potvrzení je low, s příznakem medium', () => {
+  const t = (potvrzeno) => ({ kod: 'C', obrazek: 1, text: 't', citace: 'citace C', potvrzeno });
+  assert.equal(imagesSignals({ tvrzeni: [t(false)], hlavniUrl: null })[0].severity, 'low');
+  assert.equal(imagesSignals({ tvrzeni: [{ kod: 'C', obrazek: 1, text: 't', citace: 'citace C' }], hlavniUrl: null })[0].severity, 'low');
+  assert.equal(imagesSignals({ tvrzeni: [t(true)], hlavniUrl: null })[0].severity, 'medium');
+});
+
+test('původní pořadí: když se první obrázek dossieru nestáhl, první stažený není hlavní fotka (C ani B se z něj nedělá)', () => {
+  const d = dossier3();
+  const poslane = [{ url: d.obrazky[1].url }, { url: d.obrazky[2].url }];
+  assert.deepEqual(consolidateImages(three(() => run({ produkt: ['ne', 'ano'] })), d, poslane).tvrzeni, []);
+  assert.deepEqual(consolidateImages(three(() => run({ produkt: ['jen_jako_soucast_celku', 'ano'] })), d, poslane).tvrzeni, []);
+  // hlavní fotka zůstala první: chování se nemění
+  const celé = [{ url: d.obrazky[0].url }, { url: d.obrazky[2].url }];
+  assert.deepEqual(consolidateImages(three(() => run({ produkt: ['ne', 'ano'] })), d, celé).tvrzeni.map((t) => t.kod), ['C']);
+});
+
+test('původní pořadí: číslo obrázku v citaci je pořadí v nabídce, ne v odeslaném seznamu', () => {
+  const d = dossier3();
+  const poslane = [{ url: d.obrazky[1].url }, { url: d.obrazky[2].url }];
+  const r = consolidateImages(three(() => run({ produkt: ['ano', 'ne', 'ne'] })), d, [...poslane, { url: 'https://x.cz/cizi.jpg' }]);
+  assert.deepEqual(r.tvrzeni.map((t) => t.kod), ['C']);
+  assert.match(r.tvrzeni[0].citace, /Na obrázku č. 3 je podle čtení/);
+  assert.equal(r.tvrzeni[0].obrazek, 3);
 });
