@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { purgeExecutions, parseArgs, WORKFLOW_IDS } = require('../tools/purge-executions');
+const { purgeExecutions, parseArgs, resolveWorkflowIds, main, WORKFLOW_IDS, WORKFLOW_NAMES } = require('../tools/purge-executions');
 
 const KEY = 'tajny-klic-n8n-12345';
 const BASE = 'http://127.0.0.1:5678';
@@ -172,4 +172,104 @@ test('parseArgs: --yes a --older-than-hours', () => {
   for (const bad of [['--older-than-hours'], ['--older-than-hours', 'x'], ['--older-than-hours', '-3'], ['--nesmysl'], ['--api-key', 'abc']]) {
     assert.throws(() => parseArgs(bad), Error, bad.join(' '));
   }
+});
+
+// --- nález 23: ID workflow nemusí v dané instanci n8n existovat ---
+
+// Falešné n8n s workflow: `workflows` je { id: název }; GET /workflows/:id vrací 404 pro neznámé ID, GET /workflows seznam (stránkovaný po 2).
+function fakeWorkflows({ workflows, executions = {}, status = 200 }) {
+  const calls = [];
+  const exec = fakeN8n({ executions });
+  const fetchImpl = async (url, opts = {}) => {
+    const u = new URL(url);
+    const method = opts.method || 'GET';
+    if (method === 'GET' && u.pathname.startsWith('/api/v1/workflows')) {
+      calls.push(url);
+      if (status !== 200) return resp(status, { message: `klíč ${KEY}` });
+      const id = u.pathname.split('/')[4];
+      if (id) return workflows[id] ? resp(200, { id, name: workflows[id] }) : resp(404, { message: 'not found' });
+      const all = Object.entries(workflows).map(([wid, name]) => ({ id: wid, name }));
+      const start = Number(u.searchParams.get('cursor') || 0);
+      return resp(200, { data: all.slice(start, start + 2), nextCursor: start + 2 < all.length ? String(start + 2) : null });
+    }
+    return exec.fetchImpl(url, opts);
+  };
+  return { fetchImpl, calls, execCalls: exec.calls };
+}
+
+test('konstanty: názvy workflow odpovídají sestavení', () => {
+  assert.deepEqual(WORKFLOW_NAMES, ['Nákupní kontrola', 'Nákupní kontrola – web']);
+});
+
+test('resolveWorkflowIds: existující ID zůstanou beze změny a seznam podle názvu se nevolá', async () => {
+  const { fetchImpl, calls } = fakeWorkflows({ workflows: { a: 'Nákupní kontrola', b: 'Nákupní kontrola – web' } });
+  const r = await resolveWorkflowIds({ apiKey: KEY, workflowIds: ['a', 'b'], fetchImpl });
+  assert.deepEqual(r, { ids: ['a', 'b'], chybejici: [], podleNazvu: false });
+  assert.ok(calls.every((u) => new URL(u).pathname.split('/')[4]), 'jen dotazy na konkrétní ID');
+});
+
+test('resolveWorkflowIds: některé ID chybí, ostatní se použijí a chybějící se vrátí', async () => {
+  const { fetchImpl } = fakeWorkflows({ workflows: { b: 'Nákupní kontrola – web' } });
+  const r = await resolveWorkflowIds({ apiKey: KEY, workflowIds: ['a', 'b'], fetchImpl });
+  assert.deepEqual(r, { ids: ['b'], chybejici: ['a'], podleNazvu: false });
+});
+
+test('resolveWorkflowIds: žádné ID neexistuje, workflow se najdou podle názvu (i na druhé stránce seznamu)', async () => {
+  const { fetchImpl } = fakeWorkflows({ workflows: { x1: 'Jiné', x2: 'Jiné 2', x3: 'Nákupní kontrola', x4: 'Nákupní kontrola – web', x5: 'Nákupní kontrola kopie' } });
+  const r = await resolveWorkflowIds({ apiKey: KEY, workflowIds: ['a', 'b'], fetchImpl });
+  assert.deepEqual(r, { ids: ['x3', 'x4'], chybejici: ['a', 'b'], podleNazvu: true });
+});
+
+test('resolveWorkflowIds: nic nenalezeno ani podle ID, ani podle názvu vyhodí srozumitelnou chybu bez klíče', async () => {
+  const { fetchImpl } = fakeWorkflows({ workflows: { x1: 'Jiné' } });
+  await assert.rejects(resolveWorkflowIds({ apiKey: KEY, workflowIds: ['a', 'b'], fetchImpl }), (e) => {
+    assert.match(e.message, /nenalezen|neexistuj/i);
+    assert.ok(e.message.includes('a') && e.message.includes('Nákupní kontrola'));
+    assert.ok(!e.message.includes(KEY));
+    return true;
+  });
+});
+
+test('resolveWorkflowIds: jiná chyba než 404 (např. 401) skončí chybou bez klíče, ne „nenalezeno“', async () => {
+  const { fetchImpl } = fakeWorkflows({ workflows: {}, status: 401 });
+  await assert.rejects(resolveWorkflowIds({ apiKey: KEY, workflowIds: ['a'], fetchImpl }), (e) => {
+    assert.match(e.message, /401/);
+    assert.ok(!e.message.includes(KEY));
+    return true;
+  });
+});
+
+function spustMain(argv, fw) {
+  const out = []; const err = [];
+  const log = console.log; const error = console.error; const warn = console.warn;
+  console.log = (...a) => out.push(a.join(' ')); console.error = (...a) => err.push(a.join(' ')); console.warn = (...a) => err.push(a.join(' '));
+  return main(argv, { N8N_API_KEY: KEY }, { fetchImpl: fw.fetchImpl }).then((code) => ({ code, out: out.join('\n'), err: err.join('\n') }))
+    .finally(() => { console.log = log; console.error = error; console.warn = warn; });
+}
+
+test('main: když žádné workflow neexistuje, řekne to nahlas (ne „Nalezeno 0“), skončí kódem 1 a nic nemaže', async () => {
+  const fw = fakeWorkflows({ workflows: { x1: 'Jiné' } });
+  const r = await spustMain(['--yes'], fw);
+  assert.equal(r.code, 1);
+  assert.doesNotMatch(r.out, /Nalezeno 0/);
+  assert.match(r.err, /nenalezen|neexistuj/i);
+  assert.ok(!(r.out + r.err).includes(KEY));
+  assert.equal(fw.execCalls.length, 0, 'výpis ani mazání průběhů se nevolá');
+});
+
+test('main: ID neexistují, ale workflow jsou podle názvu; vypíše, že se použila nalezená, a smaže jejich průběhy', async () => {
+  const fw = fakeWorkflows({ workflows: { x3: 'Nákupní kontrola', x4: 'Nákupní kontrola – web' }, executions: { x3: makeExecs(2, 1), x4: makeExecs(1, 10) } });
+  const r = await spustMain(['--yes'], fw);
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out + r.err, /podle názvu/);
+  assert.match(r.out, /Nalezeno 3 průběhů, smazáno 3/);
+  assert.deepEqual(deleted(fw.execCalls).sort(), ['1', '10', '2']);
+});
+
+test('main: jedno z ID chybí, vypíše varování a pokračuje s ostatními', async () => {
+  const fw = fakeWorkflows({ workflows: { [WORKFLOW_IDS[1]]: 'Nákupní kontrola – web' }, executions: { [WORKFLOW_IDS[1]]: makeExecs(2) } });
+  const r = await spustMain([], fw);
+  assert.equal(r.code, 0, r.err);
+  assert.ok(r.err.includes(WORKFLOW_IDS[0]), r.err);
+  assert.match(r.out, /Nalezeno 2 průběhů/);
 });

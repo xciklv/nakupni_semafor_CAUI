@@ -18,7 +18,10 @@
 // Klíč se vytvoří v n8n (Settings → n8n API) a čte se jen z proměnné prostředí N8N_API_KEY; repo ho nikdy nečte ani
 // neukládá a skript ho nikam nevypisuje. Skript mluví jen s 127.0.0.1 nebo localhost (výchozí http://127.0.0.1:5678).
 // Při --older-than-hours se průběh bez čitelného času startu nemaže.
+// ID workflow platí, jen když se workflow importovala podle README. Skript proto nejdřív ověří, že existují; když žádné z nich ne, najde workflow
+// podle názvu, a když ani to nevyjde, řekne to nahlas (jinak by „smazáno 0“ vypadalo jako úspěch).
 const WORKFLOW_IDS = ['mHufaoyMTJDT3vQG', 'nkWebStrankaV1x7q']; // „Nákupní kontrola“ (API), „Nákupní kontrola – web“
+const WORKFLOW_NAMES = ['Nákupní kontrola', 'Nákupní kontrola – web']; // názvy z build/build-workflow.js
 const DEFAULT_BASE_URL = 'http://127.0.0.1:5678';
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 1000;
@@ -64,6 +67,53 @@ async function listExecutions({ origin, apiKey, workflowId, fetchImpl }) {
     cursor = next;
   }
   throw new Error('stránkování přesáhlo bezpečný počet stránek');
+}
+
+async function apiGet({ origin, apiKey, path, fetchImpl, co }) {
+  try {
+    return await fetchImpl(`${origin}${path}`, { headers: { 'X-N8N-API-KEY': apiKey, Accept: 'application/json' } });
+  } catch (e) {
+    throw new Error(`${co} selhalo: ${redact(e && e.message, apiKey)}`);
+  }
+}
+
+// Ověří, že workflow s danými ID v n8n existují. Chybějící ID se vrátí; když neexistuje žádné, hledá se podle názvu (jen čtení, použije se
+// jen id a název). Když nenajde nic, vyhodí chybu. Vrací { ids, chybejici, podleNazvu }.
+async function resolveWorkflowIds({ baseUrl = DEFAULT_BASE_URL, apiKey, workflowIds, fetchImpl = fetch } = {}) {
+  if (typeof apiKey !== 'string' || !apiKey.trim()) throw new Error('chybí apiKey (proměnná prostředí N8N_API_KEY)');
+  if (!Array.isArray(workflowIds) || !workflowIds.length) throw new Error('chybí seznam workflow (workflowIds)');
+  const origin = checkBaseUrl(baseUrl);
+  const ids = [];
+  const chybejici = [];
+  for (const id of workflowIds) {
+    const res = await apiGet({ origin, apiKey, path: `/api/v1/workflows/${encodeURIComponent(id)}`, fetchImpl, co: 'ověření workflow' });
+    if (res.ok) ids.push(id);
+    else if (res.status === 404) chybejici.push(id);
+    else throw new Error(`ověření workflow selhalo: HTTP ${res.status}`);
+  }
+  if (ids.length) return { ids, chybejici, podleNazvu: false };
+
+  const nalezena = [];
+  const seen = new Set();
+  let cursor = null;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await apiGet({ origin, apiKey, path: `/api/v1/workflows?limit=${PAGE_LIMIT}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, fetchImpl, co: 'výpis workflow' });
+    if (!res.ok) throw new Error(`výpis workflow selhal: HTTP ${res.status}`);
+    let body;
+    try { body = await res.json(); } catch (e) { throw new Error('výpis workflow selhal: odpověď není JSON'); }
+    for (const w of body && Array.isArray(body.data) ? body.data : []) {
+      if (w && w.id !== undefined && w.id !== null && WORKFLOW_NAMES.includes(w.name)) nalezena.push(String(w.id));
+    }
+    const next = body && body.nextCursor;
+    if (!next) break;
+    if (seen.has(next)) throw new Error('stránkování workflow se zacyklilo (kurzor se opakuje)');
+    seen.add(next);
+    cursor = next;
+  }
+  if (!nalezena.length) {
+    throw new Error(`workflow Nákupní kontroly v n8n (${origin}) nenalezena: ID ${workflowIds.join(', ')} neexistují a podle názvu (${WORKFLOW_NAMES.map((n) => `„${n}“`).join(', ')}) se také nic nenašlo. Nic se nesmazalo. Je to ta správná instance n8n a jsou workflow naimportovaná?`);
+  }
+  return { ids: nalezena, chybejici, podleNazvu: true };
 }
 
 async function purgeExecutions({ baseUrl = DEFAULT_BASE_URL, apiKey, workflowIds, olderThanHours = 0, dryRun = true, fetchImpl = fetch } = {}) {
@@ -116,7 +166,7 @@ function parseArgs(argv) {
   return out;
 }
 
-async function main(argv, env) {
+async function main(argv, env, { fetchImpl } = {}) {
   const apiKey = env.N8N_API_KEY;
   if (!apiKey || !apiKey.trim()) {
     console.error('Chybí proměnná prostředí N8N_API_KEY (klíč k API n8n, Settings → n8n API). Klíč se nikam neukládá.');
@@ -126,7 +176,10 @@ async function main(argv, env) {
   try { args = parseArgs(argv); } catch (e) { console.error(e.message); return 1; }
   const kdy = args.olderThanHours > 0 ? ` starších než ${args.olderThanHours} h` : '';
   try {
-    const r = await purgeExecutions({ apiKey, workflowIds: WORKFLOW_IDS, olderThanHours: args.olderThanHours, dryRun: !args.yes });
+    const w = await resolveWorkflowIds({ apiKey, workflowIds: WORKFLOW_IDS, fetchImpl });
+    for (const id of w.chybejici) console.error(`Varování: workflow s ID ${id} v n8n neexistuje, přeskakuji ho.`);
+    if (w.podleNazvu) console.log(`ID z README v n8n neexistují; použila se workflow nalezená podle názvu (${w.ids.join(', ')}).`);
+    const r = await purgeExecutions({ apiKey, workflowIds: w.ids, olderThanHours: args.olderThanHours, dryRun: !args.yes, fetchImpl });
     if (!args.yes) {
       console.log(`Nalezeno ${r.nalezeno} průběhů${kdy}. Nic se nesmazalo; pro smazání přidej --yes.`);
       return 0;
@@ -140,6 +193,6 @@ async function main(argv, env) {
   }
 }
 
-module.exports = { purgeExecutions, parseArgs, WORKFLOW_IDS };
+module.exports = { purgeExecutions, resolveWorkflowIds, parseArgs, main, WORKFLOW_IDS, WORKFLOW_NAMES };
 
 if (require.main === module) main(process.argv.slice(2), process.env).then((code) => { process.exitCode = code; });
