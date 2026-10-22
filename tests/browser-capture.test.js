@@ -31,8 +31,8 @@ test('cleanUrl: každý ze jmenovaných parametrů i utm_* a _gl a share_token',
   assert.equal(cap.cleanUrl('https://shop.cz/p?' + names.map((n) => n + '=1').join('&')), 'https://shop.cz/p');
 });
 
-test('cleanUrl: ostatní parametry zůstávají beze změny kódování, fragment a přihlašovací údaje se zahodí', () => {
-  assert.equal(cap.cleanUrl('https://shop.cz/p?q=a%20b+c&gclid=1#recenze'), 'https://shop.cz/p?q=a%20b+c');
+test('cleanUrl: povolený parametr zůstává beze změny kódování, fragment a přihlašovací údaje se zahodí', () => {
+  assert.equal(cap.cleanUrl('https://shop.cz/p?id=a%20b+c&gclid=1#recenze'), 'https://shop.cz/p?id=a%20b+c');
   assert.equal(cap.cleanUrl('https://uzivatel:heslo@shop.cz/p'), 'https://shop.cz/p');
 });
 
@@ -40,6 +40,27 @@ test('cleanUrl: neplatný vstup nespadne', () => {
   assert.equal(cap.cleanUrl('není adresa'), 'není adresa');
   assert.equal(cap.cleanUrl(''), '');
   assert.equal(cap.cleanUrl(undefined), '');
+});
+
+// Nález 15: allowlist. Zůstane jen to, co určuje nabídku; vše ostatní (i neznámé a osobní parametry) se zahodí.
+test('cleanUrl allowlist: Allegro, AliExpress a Temu ponechají jen identifikátor nabídky', () => {
+  assert.equal(
+    cap.cleanUrl('https://allegro.cz/nabidka/powerbanka-18724176560?offerId=18724176560&fbclid=IwAR0&msclkid=1&token=abc&sid=xyz&email=jana%40example.cz&mc_eid=9&yclid=1&igshid=2&utm_medium=x'),
+    'https://allegro.cz/nabidka/powerbanka-18724176560?offerId=18724176560');
+  assert.equal(
+    cap.cleanUrl('https://www.aliexpress.com/item/1005011759581041.html?sku_id=12000052&spm=a2g0o&aff_fcid=abc&aff_platform=link-c-tool&sk=_oXYZ&aff_trace_key=zz&terminal_id=t&afSmartRedirect=y&sourceType=620'),
+    'https://www.aliexpress.com/item/1005011759581041.html?sku_id=12000052');
+  assert.equal(
+    cap.cleanUrl('https://www.temu.com/cz/powerbanka-g-601099512345678.html?goods_id=601099512345678&_x_sessn_id=abc&refer_page_name=home&_oak_gallery_order=1&share_token=t&email=a@b.cz'),
+    'https://www.temu.com/cz/powerbanka-g-601099512345678.html?goods_id=601099512345678');
+  assert.equal(cap.cleanUrl('https://eshop.cz/index.php?route=product/product&product_id=40&session_id=ab12&ref=newsletter'), 'https://eshop.cz/index.php?route=product/product&product_id=40');
+});
+
+test('cleanUrl allowlist: neznámý parametr se zahodí, identifikátor v cestě zůstane, bez povolených parametrů nezbude ani otazník', () => {
+  assert.equal(cap.cleanUrl('https://shop.cz/dp/B0ABC12345/?foo=bar&Fbclid=1&PHPSESSID=s'), 'https://shop.cz/dp/B0ABC12345/');
+  assert.equal(cap.cleanUrl('https://shop.cz/produkt/123-powerbanka.html?novy_parametr=1'), 'https://shop.cz/produkt/123-powerbanka.html');
+  assert.equal(cap.cleanUrl('https://shop.cz/p?offerid=5&OFFERID=6'), 'https://shop.cz/p?offerid=5&OFFERID=6', 'názvy se porovnávají bez ohledu na velikost písmen');
+  assert.equal(cap.cleanUrl('https://shop.cz/p?token&sid=&id=7'), 'https://shop.cz/p?id=7');
 });
 
 // --- trimToSentences ---

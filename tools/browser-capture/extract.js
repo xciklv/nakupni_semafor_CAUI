@@ -2,14 +2,16 @@
 // (`const`/`let` na nejvyšší úrovni by při druhém vložení do téže karty spadly na „already declared“). Jen čte DOM, nic neklikne ani nerozbaluje.
 // Čisté funkce cleanUrl, trimToSentences a dropPageChrome se testují v tests/browser-capture.test.js (module.exports na konci).
 
-// Odstraní sledovací a reklamní parametry, fragment a přihlašovací údaje; parametry identifikující nabídku (např. Allegro offerId) zůstanou.
+// Allowlist: z adresy zůstane jen host, cesta a parametry, které určují nabídku nebo variantu (např. Allegro offerId, Temu goods_id).
+// Všechno ostatní se zahodí, i neznámé parametry: sledovací (fbclid, msclkid, gclid, utm_*), relace a osobní (token, sid, e-mail), fragment
+// a přihlašovací údaje. Identifikátory v cestě (/item/123.html, /dp/ASIN) zůstávají. Používá se i pro adresy obrázků.
 function cleanUrl(url) {
   const raw = String(url == null ? '' : url).trim();
   let u;
   try { u = new URL(raw); } catch (e) { return raw; }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') return raw;
-  const tracking = /^(gclid|wbraid|gbraid|pvid|scm|spm|algo_pvid|algo_exp_id|pdp_ext_f|pdp_npi|curPageLogUid|_gl|share_token|utm_.*)$/i;
-  const kept = u.search.replace(/^\?/, '').split('&').filter((p) => p && !tracking.test(p.split('=')[0]));
+  const allowed = /^(offerId|id|product_id|productId|id_product|goods_id|item_id|itemId|sku_id|variant|route)$/i;
+  const kept = u.search.replace(/^\?/, '').split('&').filter((p) => p && allowed.test(p.split('=')[0]));
   return u.origin + u.pathname + (kept.length ? '?' + kept.join('&') : '');
 }
 

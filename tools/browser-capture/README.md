@@ -21,9 +21,9 @@ Víc stránek najednou: po kliknutí na ikonu přejděte třeba na stránku prod
 
 ## Co se odesílá a co ne
 
-- `odkaz`: adresa karty bez sledovacích parametrů (`gclid`, `wbraid`, `gbraid`, `pvid`, `scm`, `spm`, `algo_pvid`, `algo_exp_id`, `pdp_ext_f`, `pdp_npi`, `curPageLogUid`, `utm_*`, `_gl`, `share_token`), bez `#fragmentu` a přihlašovacích údajů; `offerId` (Allegro) zůstává.
+- `odkaz`: adresa karty jen s parametry, které určují nabídku (allowlist: `offerId`, `id`, `product_id`, `productId`, `id_product`, `goods_id`, `item_id`, `itemId`, `sku_id`, `variant`, `route`). Všechny ostatní parametry (sledovací jako `fbclid`, `gclid`, `utm_*`, relační a osobní jako `token`, `sid`, e-mail, i neznámé), `#fragment` a přihlašovací údaje se zahodí; identifikátory v cestě (`/item/123.html`) zůstávají.
 - `text`: viditelný text stránky bez hlavičky a menu (vše před titulkem nabídky a řádky typu „Můj účet“, „Košík“, pozdrav se jménem), ořezaný na celé věty, nejvýše 20 000 znaků.
-- `obrazky`: nejvýše 8 adres `https://` (každá do 500 znaků, bez sledovacích parametrů). Jen adresy, obrázky se nestahují z prohlížeče.
+- `obrazky`: nejvýše 8 adres `https://` (každá do 500 znaků, očištěná stejným allowlistem, tedy zpravidla bez parametrů). Jen adresy, obrázky se nestahují z prohlížeče.
 - `jsonld`: strukturovaná data stránky (cena, hodnocení, recenze), nejvýše 4 000 znaků.
 - Nečte se: cookies, `localStorage`, hesla, formuláře, jiné karty. Oprávnění `activeTab` platí jen pro kartu, na kterou kliknete; `host_permissions` jen pro lokální n8n.
 - Stránky ve sbírce jsou v `chrome.storage.session` (jen v paměti prohlížeče, zmizí při zavření).
