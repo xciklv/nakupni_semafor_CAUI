@@ -713,10 +713,47 @@ const PRVNI_POMOC = {
       ],
     },
   ],
+  // Záloha, když si uživatel nevybere žádný ze čtyř případů: obecné kroky složené ze stejných zdrojů jako případy výše.
+  jina: {
+    id: 'jina-situace',
+    nazev: 'Jiná situace',
+    popis: 'Obecné první kroky, když se tvůj případ nehodí k žádnému z předchozích. Postup pro tvou konkrétní situaci jsme nezpracovali.',
+    otazky: [{
+      id: 'prozradil',
+      label: 'Už jsem někomu prozradil(a) údaje karty, přihlášení do banky nebo kód z SMS, nebo jsem schválil(a) platbu v aplikaci.',
+      krok: {
+        text: 'Zavolej hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo ze zprávy ani od volajícího). Nech zablokovat kartu a případně přístup do bankovnictví.',
+        proc: 'Banka může zastavit platby, které ještě neodešly; čím dřív se ozveš, tím víc se dá omezit.',
+        zdroje: ['kb_podvod', 'air_zadali', 'cnb_faq'],
+      },
+    }],
+    kroky: [
+      { kdy: 'hned', obecna: true, text: 'Nic dalšího neplať a nesděluj žádné další údaje.', proc: 'Na výzvy k „doplatku“ nebo „odblokování“ nereaguj.' },
+      { kdy: 'hned', text: 'Přestaň komunikovat s druhou stranou a nic dalšího nezadávej ani neinstaluj.', proc: 'Podvodník může zkoušet další pokusy. Policie radí zachovat klid a jednat rychle.', zdroje: ['policie_pomoc', 'air_zadali'] },
+      { kdy: 'hned', text: 'Ulož důkazy, než zmizí (zprávy, e-maily, výpisy hovorů, screenshoty, adresu stránky, výpis plateb).', proc: 'Budou potřeba pro banku i pro policii.', zdroje: ['policie_pomoc', 'air_kam'] },
+      { kdy: 'hned', text: 'Platil(a) jsi? Zavolej do své banky a zeptej se, co se s platbou dá dělat.', proc: 'Podle Air Bank čím dřív zavoláš, tím větší je šance omezit škody. U už odeslaného převodu banka vrácení peněz zaručit nemůže.', zdroje: ['air_kam', 'csas_spatny_ucet'] },
+      { kdy: 'dny', text: 'Oznam věc Policii ČR.', proc: 'Jde to ústně na kterémkoli oddělení nebo písemně. Popiš, co se stalo, kdy, kde a jak, přilož důkazy a uveď výši škody.', zdroje: ['policie_oznameni', 'policie_pomoc'] },
+      { kdy: 'dny', text: 'Platil(a) jsi kartou? Požádej banku o reklamaci platby.', proc: 'Banka může peníze vyžádat zpět (chargeback), ale nárok na to nemáš a výsledek nelze zaručit. Zeptej se své banky, jaké má podmínky.', zdroje: ['esc_podvody', 'air_stornovat', 'kb_reklamace'] },
+      { kdy: 'dny', text: 'Sleduj účet a kartu, i drobné zkušební částky a nezaúčtované transakce.', proc: 'Platby se mohou objevit s odstupem.', zdroje: ['air_zadali', 'kb_podvod'] },
+      { kdy: 'pozdeji', text: 'Banka reklamaci neuznala? ČNB spory o vrácení peněz neřeší; příslušný je finanční arbitr nebo soud.', proc: 'Nejdřív je třeba písemně požádat banku o nápravu.', zdroje: ['cnb_faq', 'finarbitr_uvod'] },
+    ],
+    podklady: [
+      { nazev: 'Komunikace s druhou stranou (zprávy, e-maily, chat)', proc: 'Dokládá, co ti bylo slíbeno a kdy; banka i policie ji chtějí.', jak: 'Screenshoty celého vlákna s daty, e-maily nemaž.', nemam: 'Využij notifikace v e-mailu nebo telefonu a popiš, co si pamatuješ.' },
+      { nazev: 'Doklad o platbě (datum, částka, příjemce)', proc: 'Prokazuje, že platba proběhla a kam šla.', jak: 'Internetové bankovnictví: potvrzení o transakci nebo výpis.', nemam: 'Vyžádej si výpis nebo potvrzení v bance.' },
+      { nazev: 'Identifikace druhé strany (adresa webu, profil, telefon, číslo účtu)', proc: 'Policie i platforma podle toho mohou případ dohledávat.', jak: 'Screenshot webu nebo profilu, zkopírovaný odkaz, číslo z potvrzení o platbě.', nemam: 'Ulož aspoň to, co víš, a datum; stránky se mohou smazat.' },
+      { nazev: 'Screenshoty toho, co jsi viděl(a) a zadal(a)', proc: 'Ukážou, jak všechno vypadalo.', jak: 'Snímek obrazovky.', nemam: 'Popiš vlastními slovy, co jsi viděl(a) a zadal(a).' },
+      { nazev: 'Zápis časové osy', proc: 'Policie a banka se ptají, kdy co proběhlo a jaká vznikla škoda.', jak: 'Poznamenej si pár vět: kdy to začalo, kdy jsi platil(a) a kdy jsi to zjistil(a).', nemam: 'Doplň podle konverzace a výpisu.' },
+    ],
+    neoverene: [
+      'Jde o obecný postup složený z kroků ostatních případů; pro tvou situaci nemusí sedět všechno.',
+      'Postup specifický pro tvůj případ jsme nezpracovali ani neověřili.',
+      'Čísla linek bank neuvádíme, vždy je ověř na oficiálním webu nebo na kartě.',
+    ],
+  },
 };
 
 const PP_SKUPINY = [['hned', 'Hned'], ['dny', 'V nejbližších dnech'], ['pozdeji', 'Později']];
-const PP_ID_PRIPADU = PRVNI_POMOC.pripady.map((p) => p.id);
+const PP_ID_PRIPADU = PRVNI_POMOC.pripady.map((p) => p.id).concat(PRVNI_POMOC.jina.id);
 const tabKontrola = document.getElementById('tab-kontrola');
 const tabPomoc = document.getElementById('tab-pomoc');
 const panelKontrola = document.getElementById('panel-kontrola');
@@ -787,8 +824,12 @@ function ppUvod() {
 
 function ppVyber() {
   const c = el('div', null, 'card');
-  c.append(el('h2', 'Co se stalo?'));
-  const popisLabel = el('label', 'Popiš, co se stalo (nepovinné)');
+  c.append(el('h2', 'Co se stalo?'), el('p', 'Vyber, co se nejvíc podobá tvé situaci:'));
+  const karty = el('div', null, 'karty');
+  PRVNI_POMOC.pripady.forEach((p) => karty.append(ppPripadKarta(p)));
+  c.append(karty);
+  // Záloha, když nic nesedí: vlastní popis a obecné první kroky.
+  const popisLabel = el('label', 'Nic z toho nesedí? Popiš, co se stalo (nepovinné)');
   popisLabel.setAttribute('for', 'popis-situace');
   const pole = el('textarea', null, 'pole-popis');
   pole.setAttribute('id', 'popis-situace');
@@ -797,11 +838,10 @@ function ppVyber() {
   pole.setAttribute('placeholder', 'Např. co ti kdo napsal, kolik a čím jsi platil(a), kdy to bylo…');
   pole.value = ppPopis;
   pole.addEventListener('input', () => { ppPopis = pole.value; });
-  c.append(popisLabel, pole, el('p', 'Je to tvoje poznámka, nikam se neodesílá. V dalším kroku se ti zobrazí a půjde zkopírovat.', 'hint'));
-  c.append(el('p', 'Teď vyber, co se nejvíc podobá tvé situaci:'));
-  const karty = el('div', null, 'karty');
-  PRVNI_POMOC.pripady.forEach((p) => karty.append(ppPripadKarta(p)));
-  c.append(karty);
+  const obecne = el('button', 'Zobrazit obecné první kroky', 'sekundarni');
+  obecne.setAttribute('type', 'button');
+  obecne.addEventListener('click', () => vykreslitPomoc(PRVNI_POMOC.jina.id));
+  c.append(popisLabel, pole, el('p', 'Je to tvoje poznámka, nikam se neodesílá. V dalším kroku se ti zobrazí a půjde zkopírovat.', 'hint'), obecne);
   const zpet = el('button', 'Zkontrolovat nabídku, než zaplatíte', 'sekundarni');
   zpet.setAttribute('type', 'button');
   zpet.addEventListener('click', () => prepnoutZalozku(false));
@@ -915,7 +955,7 @@ function ppDetail(p) {
 
 // Vykreslí první pomoc: bez id výběr případu, s platným id jeho detail. Nic se neukládá ani neodesílá.
 function vykreslitPomoc(idPripadu) {
-  const p = PRVNI_POMOC.pripady.find((x) => x.id === idPripadu);
+  const p = PRVNI_POMOC.pripady.concat(PRVNI_POMOC.jina).find((x) => x.id === idPripadu);
   panelPomoc.replaceChildren(ppUvod(), p ? ppDetail(p) : ppVyber());
   ppVykresleno = true;
   if (p && typeof panelPomoc.scrollIntoView === 'function') panelPomoc.scrollIntoView({ block: 'start' });

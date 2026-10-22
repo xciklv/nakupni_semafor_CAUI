@@ -354,3 +354,38 @@ test('popis situace: bez popisu se karta „Tvůj popis“ nezobrazí; kód prvn
   const src = /const PRVNI_POMOC[\s\S]*$/.exec(pageHtml())[0];
   assert.equal(/fetch\(|XMLHttpRequest|sendBeacon/.test(src), false, 'první pomoc nevolá server');
 });
+
+test('popis situace je pod kartami případů jako záloha, když nic nesedí; tlačítko otevře obecné první kroky', () => {
+  const p = nahled();
+  const panel = out(p);
+  const poradi = [];
+  walk(panel, (n) => { if (n.className === 'karty') poradi.push('karty'); if (n.tagName === 'TEXTAREA') poradi.push('pole'); });
+  assert.deepEqual(poradi, ['karty', 'pole'], 'pole je až pod kartami');
+  assert.ok(find(panel, (n) => n.tagName === 'LABEL' && /^Nic z toho nesedí\? Popiš, co se stalo/.test(n.textContent)));
+  const pole = find(panel, (n) => n.tagName === 'TEXTAREA');
+  pole.value = 'Poslal jsem peníze na účet kamaráda, kterému někdo hacknul profil.'; pole.listeners.input();
+  const b = find(panel, (n) => n.tagName === 'BUTTON' && n.textContent === 'Zobrazit obecné první kroky');
+  assert.ok(b, 'chybí tlačítko');
+  b.click();
+  const t = texts(out(p));
+  assert.ok(t.includes('Jiná situace'));
+  assert.ok(t.includes('Tvůj popis'));
+  assert.ok(t.includes(pole.value));
+  assert.ok(t.includes('Hned') && t.includes('V nejbližších dnech') && t.includes('Později'));
+  assert.equal(findAll(out(p), (n) => n.tagName === 'INPUT' && n.className === 'podklad').length, p.PP.jina.podklady.length);
+});
+
+test('obecná situace: každý krok má zdroj z katalogu (nebo je obecná rada), odkazy jen https, bez slibů', () => {
+  const { PP } = loadPage();
+  const j = PP.jina;
+  assert.ok(j && j.id === 'jina-situace');
+  assert.equal(j.otazky.length >= 1, true);
+  assert.deepEqual([...new Set(j.kroky.map((k) => k.kdy))].sort(), ['dny', 'hned', 'pozdeji']);
+  for (const k of j.kroky.concat(j.otazky.map((o) => o.krok))) {
+    if (k.obecna) continue;
+    assert.ok(k.zdroje && k.zdroje.length >= 1, 'krok bez zdroje: ' + k.text);
+    for (const z of k.zdroje) assert.ok(PP.zdroje[z], 'neznámý zdroj ' + z);
+  }
+  assert.equal(ZAKAZANE.test(JSON.stringify(j)), false);
+  assert.ok(j.podklady.length >= 4 && j.neoverene.length >= 2);
+});
