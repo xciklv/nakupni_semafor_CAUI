@@ -113,19 +113,58 @@ test('13místný kód z pole model, který projde kontrolou GTIN a Icecat ho nez
   assert.deepEqual(r.signals.map((s) => [s.id, s.druh, s.severity]), [['ean_nenalezen', 'nelze_overit', 'info']]);
 });
 
-test('Icecat zná kód, značka se v nabídce neobjevuje: rozpor identifikator_nesedi s oběma hodnotami', async () => {
+test('Icecat zná kód, značka se v nabídce neobjevuje a nabídka žádnou jinou značku neuvádí: jen low rozpor identifikator_nesedi', async () => {
   const r = await identitySignals({ dossier: dossier({ identifikatory: [ean('8710103997122')] }), fetchers: recorder(ICECAT_PHILIPS).fetchers });
   assert.equal(r.status, 'ok');
   assert.equal(r.signals.length, 1);
   const s = r.signals[0];
   assert.equal(s.id, 'identifikator_nesedi');
-  assert.equal(s.severity, 'medium');
+  assert.equal(s.severity, 'low');
   assert.equal(s.druh, 'rozpor');
   assert.match(s.citace, /Philips/);
   assert.match(s.citace, /Břit pro holicí strojek OneBlade/);
   assert.match(s.citace, /8710103997122/);
   assert.ok(s.otazka && s.otazka.length <= 200);
   assert.ok(s.vysvetleni);
+});
+
+test('medium jen když nabídka výslovně uvádí jinou značku než Icecat a kód je výslovně označený EAN', async () => {
+  const d = dossier({ specifikace: [{ nazev: 'Značka', hodnota: 'Braun' }], identifikatory: [ean('8710103997122')] });
+  const r = await identitySignals({ dossier: d, fetchers: recorder(ICECAT_PHILIPS).fetchers });
+  assert.deepEqual(r.signals.map((s) => [s.id, s.severity]), [['identifikator_nesedi', 'medium']]);
+});
+
+test('jiná značka v nabídce, ale kód pochází z pole model (ne výslovný EAN): jen low', async () => {
+  const d = dossier({ specifikace: [{ nazev: 'Značka', hodnota: 'Braun' }], identifikatory: [ean('8710103997122', 'model')] });
+  const r = await identitySignals({ dossier: d, fetchers: recorder(ICECAT_PHILIPS).fetchers });
+  assert.deepEqual(r.signals.map((s) => [s.id, s.severity]), [['identifikator_nesedi', 'low']]);
+});
+
+test('aliasy značek: model nebo řada z nabídky odpovídá značce z Icecatu, žádný nález', async () => {
+  const cases = [
+    ['iPhone 15 Pro 256 GB', 'Apple'], ['Samsung Galaxy S24', 'Samsung'], ['Galaxy S24 Ultra', 'Samsung'], ['Redmi Note 13', 'Xiaomi'],
+    ['PlayStation 5 Slim', 'Sony'], ['ThinkPad T14 Gen 4', 'Lenovo'], ['HP Pavilion 15', 'Hewlett-Packard'], ['Hewlett-Packard LaserJet', 'HP'],
+    ['Pixel 8 Pro', 'Google'], ['Xbox Series X', 'Microsoft'],
+  ];
+  for (const [nazev, brand] of cases) {
+    const body = { msg: 'OK', data: { GeneralInfo: { Brand: brand, BrandPartCode: 'ZZ-1', Title: brand + ' produkt' } } };
+    const r = await identitySignals({ dossier: dossier({ nazev, identifikatory: [ean('8710103997122')] }), fetchers: recorder(body).fetchers });
+    assert.deepEqual(r.signals, [], nazev + ' / ' + brand);
+  }
+});
+
+test('alias nepomůže, když nabídka výslovně uvádí jinou značku: stále medium', async () => {
+  const body = { msg: 'OK', data: { GeneralInfo: { Brand: 'Apple', BrandPartCode: 'MTV', Title: 'Apple iPhone' } } };
+  const d = dossier({ nazev: 'Kabel pro telefon', specifikace: [{ nazev: 'Brand', hodnota: 'Anker' }], identifikatory: [ean('8710103997122')] });
+  const r = await identitySignals({ dossier: d, fetchers: recorder(body).fetchers });
+  assert.deepEqual(r.signals.map((s) => [s.id, s.severity]), [['identifikator_nesedi', 'medium']]);
+});
+
+test('značka ve specifikaci je alias značky z Icecatu (Galaxy = Samsung): žádný nález', async () => {
+  const body = { msg: 'OK', data: { GeneralInfo: { Brand: 'Samsung', BrandPartCode: 'SM-1', Title: 'Samsung' } } };
+  const d = dossier({ nazev: 'Telefon', specifikace: [{ nazev: 'Značka', hodnota: 'Galaxy' }], identifikatory: [ean('8710103997122')] });
+  const r = await identitySignals({ dossier: d, fetchers: recorder(body).fetchers });
+  assert.deepEqual(r.signals, []);
 });
 
 test('shoda značky v názvu, ve specifikaci nebo přes kód výrobce: žádný nález', async () => {
@@ -144,6 +183,7 @@ test('shoda značky v názvu, ve specifikaci nebo přes kód výrobce: žádný 
 test('značka je celé slovo: Philipsen není Philips', async () => {
   const r = await identitySignals({ dossier: dossier({ nazev: 'Philipsen holicí břit', identifikatory: [ean('8710103997122')] }), fetchers: recorder(ICECAT_PHILIPS).fetchers });
   assert.equal(r.signals[0].id, 'identifikator_nesedi');
+  assert.equal(r.signals[0].severity, 'low');
 });
 
 test('bez názvu a bez značky v dossieru se nic neporovnává', async () => {

@@ -7,6 +7,26 @@ const IDN_NAME_CITE_MAX = 100;
 const IDN_ICECAT_URL = 'https://live.icecat.biz/api?shopname=openIcecat-live&lang=cz&GTIN=';
 const IDN_ICECAT_SOURCE = 'Icecat (otevřený katalog výrobců)';
 const IDN_BRAND_ROW_RE = /^(brand|brand name|značka|znacka|model|model number|číslo modelu|cislo modelu)$/i;
+const IDN_BRAND_ONLY_RE = /^(brand|brand name|značka|znacka)$/i;
+
+// Skupiny názvů téhož výrobce: značka z katalogu se v nabídce uznává i pod názvem řady nebo staršího jména (iPhone pro Apple, Galaxy pro Samsung).
+const IDN_BRAND_GROUPS = [
+  ['apple', 'iphone', 'ipad', 'macbook', 'airpods', 'imac', 'apple watch'],
+  ['samsung', 'galaxy', 'samsung electronics'],
+  ['xiaomi', 'redmi', 'poco', 'mi', 'xiaomi redmi'],
+  ['sony', 'playstation', 'xperia', 'bravia', 'sony interactive entertainment'],
+  ['lenovo', 'thinkpad', 'ideapad', 'thinkbook', 'legion', 'yoga'],
+  ['hp', 'hewlett packard', 'hewlett-packard', 'hp inc', 'hp inc.'],
+  ['microsoft', 'xbox', 'surface'],
+  ['google', 'pixel', 'nest', 'chromecast'],
+  ['asus', 'asustek', 'rog', 'zenbook', 'vivobook'],
+  ['acer', 'predator', 'aspire', 'nitro'],
+  ['dell', 'alienware', 'dell technologies'],
+  ['huawei', 'honor'],
+  ['oneplus', 'one plus'],
+  ['philips', 'koninklijke philips', 'norelco'],
+  ['amazon', 'kindle', 'echo', 'fire tv'],
+];
 
 // Prefixy GS1 (první tři číslice 13místného kódu): země, která prefix přidělila; neurčují zemi původu výrobku.
 const IDN_GS1_COUNTRIES = [
@@ -75,19 +95,38 @@ function idnOfferTokens(d) {
 }
 
 // Kódy k ověření: EAN podle označení nabídky (neplatné se jen nahlásí) a 12 až 14místné číselné kódy z jiných polí (model, kód výrobce), pokud projdou kontrolou.
+// explicit = kódy, které nabídka výslovně označuje jako EAN; jen u nich může mít nesoulad značky střední závažnost.
 function idnCandidates(d) {
   const ids = (Array.isArray(d.identifikatory) ? d.identifikatory : []).filter((i) => i && typeof i.hodnota === 'string');
-  const invalid = [], lookup = [];
+  const invalid = [], lookup = [], explicit = [];
   const add = (list, v) => { if (!list.includes(v) && !invalid.includes(v) && !lookup.includes(v)) list.push(v); };
   for (const i of ids.filter((x) => x.druh === 'ean')) {
     const v = i.hodnota.trim();
     add(checkGtin(v).ok ? lookup : invalid, v);
+    if (checkGtin(v).ok && !explicit.includes(v)) explicit.push(v);
   }
   for (const i of ids.filter((x) => x.druh !== 'ean')) {
     const v = i.hodnota.trim();
     if (/^\d{12,14}$/.test(v) && checkGtin(v).ok) add(lookup, v);
   }
-  return { invalid, lookup: lookup.slice(0, IDN_LOOKUP_MAX) };
+  return { invalid, lookup: lookup.slice(0, IDN_LOOKUP_MAX), explicit };
+}
+
+// Tvary značky, které v nabídce platí za její uvedení: sama značka a názvy ze skupiny téhož výrobce.
+function idnBrandForms(brand) {
+  const own = idnTokens(brand);
+  const forms = [own];
+  for (const group of IDN_BRAND_GROUPS) {
+    const g = group.map(idnTokens);
+    if (g.some((t) => t.join(' ') === own.join(' '))) g.forEach((t) => forms.push(t));
+  }
+  return forms.filter((f) => f.length);
+}
+
+// Značka, kterou nabídka sama výslovně uvádí (řádek Značka / Brand ve specifikaci), nebo null.
+function idnOfferBrand(d) {
+  const row = (Array.isArray(d.specifikace) ? d.specifikace : []).find((r) => r && typeof r.nazev === 'string' && IDN_BRAND_ONLY_RE.test(r.nazev.trim()) && idnStr(r.hodnota));
+  return row ? row.hodnota.trim() : null;
 }
 
 function idnInvalidSignal(codes, checks) {
@@ -112,13 +151,14 @@ function idnNotFoundSignal(codes) {
   });
 }
 
-function idnMismatchSignal(code, d, ice) {
+// medium jen při strojově ověřeném nesouladu: kód výslovně označený jako EAN a zároveň jiná značka, kterou nabídka sama uvádí ve specifikaci. Pouhé „značka v textu chybí“ je jen low.
+function idnMismatchSignal(code, d, ice, offerBrand) {
   const offer = idnCut(String(d.nazev || ''), IDN_NAME_CITE_MAX);
   const znacka = ice.znacka || ice.nazev;
   return signal({
-    id: 'identifikator_nesedi', module: 'identity', severity: 'medium', druh: 'rozpor', jistota: 'stredni',
+    id: 'identifikator_nesedi', module: 'identity', severity: offerBrand ? 'medium' : 'low', druh: 'rozpor', jistota: 'stredni',
     title: 'Značka u kódu v nabídce nesedí',
-    evidence: 'Podle katalogu Icecat patří kód ' + code + ' značce ' + znacka + ', ale nabídka tuto značku neuvádí.',
+    evidence: 'Podle katalogu Icecat patří kód ' + code + ' značce ' + znacka + ', ale nabídka tuto značku neuvádí' + (offerBrand ? ' (uvádí značku ' + idnCut(offerBrand, 60) + ')' : '') + '.',
     citace: 'Nabídka: „' + offer + '“. Icecat k EAN ' + code + ': ' + idnCut([ice.znacka, ice.nazev].filter(Boolean).join(' – '), IDN_NAME_CITE_MAX) + '.',
     vysvetleni: 'Kód z nabídky katalog výrobců přiřazuje značce ' + znacka + ', která se v nabídce neobjevuje. Může jít o kompatibilní příslušenství s převzatým kódem, o překlep nebo o zaměněný produkt.',
     otazka: 'Patří kód ' + code + ' opravdu k tomuto produktu? Od jaké značky je vyrobený?',
@@ -128,7 +168,7 @@ function idnMismatchSignal(code, d, ice) {
 
 async function identitySignals({ dossier, fetchers }) {
   const d = dossier && typeof dossier === 'object' ? dossier : {};
-  const { invalid, lookup } = idnCandidates(d);
+  const { invalid, lookup, explicit } = idnCandidates(d);
   const signals = [];
   const skipped = [];
   if (invalid.length) signals.push(idnInvalidSignal(invalid, invalid.map(checkGtin)));
@@ -147,9 +187,14 @@ async function identitySignals({ dossier, fetchers }) {
     const i = offer ? lookup.findIndex((c, k) => results[k] && results[k].nalezeno && (results[k].znacka || results[k].kodVyrobce)) : -1;
     if (i >= 0) {
       const ice = results[i];
-      const brandOk = ice.znacka && idnHasSeq(offer, idnTokens(ice.znacka));
+      const forms = ice.znacka ? idnBrandForms(ice.znacka) : [];
+      const brandOk = forms.some((f) => idnHasSeq(offer, f));
       const codeOk = ice.kodVyrobce && idnHasSeq(offer, idnTokens(ice.kodVyrobce));
-      if (!brandOk && !codeOk) signals.push(idnMismatchSignal(lookup[i], d, ice));
+      if (!brandOk && !codeOk) {
+        const stated = idnOfferBrand(d);
+        const differs = stated && forms.length && !forms.some((f) => idnHasSeq(idnTokens(stated), f));
+        signals.push(idnMismatchSignal(lookup[i], d, ice, differs && explicit.includes(lookup[i]) ? stated : null));
+      }
     }
   }
   return { status: signals.length || answered ? 'ok' : 'unchecked', signals, skipped };
