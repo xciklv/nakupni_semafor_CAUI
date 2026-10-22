@@ -110,11 +110,28 @@ const PLA_EN_WORDS = /\b(the|you|your|is|are|can|could|please|which|what|does|th
 const plaEnglish = (t) => !/[ěščřžýáíéúůďťňó]/i.test(t) && new Set((String(t).match(PLA_EN_WORDS) || []).map((w) => w.toLowerCase())).size >= 2;
 const plaCzech = (t) => { const c = plaClean(t); return c && !plaEnglish(c) ? c : null; };
 
-function plausibilitySignals(parsed) {
+// Čísla v textu bez mezer a oddělovačů tisíců („25 500“ a „25500“ jsou totéž), desetinná čárka jako tečka.
+const PLA_NUMBER_RE = /\d+(?:[\s\u00a0]\d{3})*(?:[.,]\d+)?/g;
+const plaNumbers = (t) => (String(t).match(PLA_NUMBER_RE) || []).map((n) => n.replace(/[\s\u00a0]/g, '').replace(',', '.'));
+
+// Tvrzení je podložené, když citace obsahuje aspoň jedno číslo a všechna její čísla stojí v textu, který model dostal (výpočet z vymyšlených čísel nic neprokazuje).
+function plaGrounded(claim, offerNumbers) {
+  const nums = plaNumbers(claim.tvrzeni);
+  return nums.length > 0 && nums.every((n) => offerNumbers.has(n));
+}
+
+// dossier: totéž, z čeho se sestavil požadavek; bez něj nejde citace ověřit a nález je nejvýš low.
+function plausibilitySignals(parsed, dossier) {
   if (!parsed || !parsed.ok || parsed.verdikt === 'v_poradku') return [];
   const claims = Array.isArray(parsed.tvrzeni) ? parsed.tvrzeni : [];
-  const worst = claims.find((t) => t.vysledek === 'nemozne') || claims.find((t) => t.vysledek === 'nadsazene') || claims[0] || null;
-  const strong = parsed.verdikt === 'nesmysl' && parsed.jistota !== 'nizka' && !(worst && worst.typ === 'cena');
+  let worst = claims.find((t) => t.vysledek === 'nemozne') || claims.find((t) => t.vysledek === 'nadsazene') || claims[0] || null;
+  // Střední závažnost (a druh „nesmysl“) jen pro tvrzení „nemožné“ (ne cenu), jehož čísla jsou doložená v textu nabídky; jinak jde o názor modelu a nejvýš low.
+  let strong = false;
+  if (parsed.verdikt === 'nesmysl' && parsed.jistota !== 'nizka' && dossier && typeof dossier === 'object') {
+    const offerNumbers = new Set(plaNumbers(dossierPromptText({ ...dossier, mezery: Array.isArray(dossier.mezery) ? dossier.mezery.slice() : [] }).text));
+    const proven = claims.find((t) => t.vysledek === 'nemozne' && t.typ !== 'cena' && plaGrounded(t, offerNumbers));
+    if (proven) { strong = true; worst = proven; }
+  }
   const citace = worst && worst.tvrzeni ? plaClean(worst.tvrzeni) : null;
   const vypocet = worst && worst.hruba_kontrola ? plaClean(worst.hruba_kontrola) : null;
   const vysvetleni = plaCzech(parsed.vysvetleni);

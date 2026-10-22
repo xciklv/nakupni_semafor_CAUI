@@ -14,7 +14,7 @@ try {
   if (!(prep && prep.bezDat === true)) {
     const pla = ranNode(() => $('LLM – věrohodnost'));
     const parsed = parsePlausibility(pla || {});
-    if (parsed.ok) signals.push(...plausibilitySignals(parsed));
+    if (parsed.ok) signals.push(...plausibilitySignals(parsed, m.dossier));
     else skipped.push('ověření věrohodnosti');
   }
 

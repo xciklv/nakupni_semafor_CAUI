@@ -13,6 +13,8 @@ const sonnet = () => parsePlausibility(fixture('plausibility-response.json'));
 // Odpověď Messages API s daným tělem JSON.
 const apiWith = (body, extra = {}) => ({ type: 'message', stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(body) }], ...extra });
 const claim = (over = {}) => ({ tvrzeni: 'Výdrž 6 h', typ: 'fyzika', hruba_kontrola: '50 Wh ÷ 55 W ≈ 0,9 h', vysledek: 'nemozne', ...over });
+// Dossier cyklosvítilny rozšířený o řádek specifikace, aby citace „Výdrž 6 h“ měla oporu v textu, který model dostal.
+const cykloVydrz = () => { const d = cyklo(); d.specifikace.push({ nazev: 'Výdrž', hodnota: '6 h' }); return d; };
 const parsed = (over = {}) => ({
   ok: true, verdikt: 'nesmysl', jistota: 'vysoka', tvrzeni: [claim()],
   vysvetleni: 'Baterie vydrží asi hodinu, ne šest.', otazka: 'What is the real runtime at maximum brightness?', ...over,
@@ -33,7 +35,7 @@ test('fixture ze spiku (cyklosvítilna, Sonnet): nesmysl, vysoká jistota, čty�
 });
 
 test('plausibilitySignals: nesmysl s vysokou jistotou dá jeden nález medium/nesmysl s citací, výpočtem, vysvětlením a otázkou', () => {
-  const s = plausibilitySignals(sonnet());
+  const s = plausibilitySignals(sonnet(), cyklo());
   assert.equal(s.length, 1);
   assert.equal(s[0].id, 'nesmysl_v_nabidce');
   assert.equal(s[0].module, 'plausibility');
@@ -51,7 +53,7 @@ test('plausibilitySignals: nesmysl s vysokou jistotou dá jeden nález medium/ne
 });
 
 test('plausibilitySignals: střední jistota zůstává medium, nízká jistota nebo „nepravděpodobné“ je low/rozpor', () => {
-  assert.equal(plausibilitySignals(parsed({ jistota: 'stredni' }))[0].severity, 'medium');
+  assert.equal(plausibilitySignals(parsed({ jistota: 'stredni' }), cykloVydrz())[0].severity, 'medium');
   const nizka = plausibilitySignals(parsed({ jistota: 'nizka' }));
   assert.equal(nizka.length, 1);
   assert.equal(nizka[0].severity, 'low');
@@ -76,7 +78,7 @@ test('plausibilitySignals: samotný cenový argument dá nejvýš low', () => {
   assert.equal(s[0].severity, 'low');
   assert.equal(s[0].druh, 'rozpor');
   // fyzikální tvrzení vedle ceny strop nesnižuje: nejhorší je první „nemožné“ a to je fyzika
-  const m = plausibilitySignals(parsed({ tvrzeni: [claim({ typ: 'cena', vysledek: 'nadsazene' }), claim({ typ: 'fyzika', vysledek: 'nemozne' })] }));
+  const m = plausibilitySignals(parsed({ tvrzeni: [claim({ typ: 'cena', vysledek: 'nadsazene' }), claim({ typ: 'fyzika', vysledek: 'nemozne' })] }), cykloVydrz());
   assert.equal(m[0].severity, 'medium');
 });
 
@@ -188,7 +190,7 @@ test('prompt: citace jsou doslovně z nabídky, výpočet, vysvětlení i otázk
 });
 
 test('plausibilitySignals: anglická otázka nebo vysvětlení se zahodí, nález zůstává; česká (i bez diakritiky) projde', () => {
-  const en = plausibilitySignals(parsed({ vysvetleni: 'The claim is not possible with this battery, it lasts about one hour.', otazka: 'Could you please confirm the real runtime of the lamp?' }));
+  const en = plausibilitySignals(parsed({ vysvetleni: 'The claim is not possible with this battery, it lasts about one hour.', otazka: 'Could you please confirm the real runtime of the lamp?' }), cykloVydrz());
   assert.equal(en.length, 1);
   assert.equal(en[0].otazka, null);
   assert.equal(en[0].vysvetleni, null);
@@ -198,4 +200,53 @@ test('plausibilitySignals: anglická otázka nebo vysvětlení se zahodí, nále
   assert.equal(cs[0].vysvetleni, 'Baterie vydrží asi hodinu, ne šest.');
   // jediné anglické slovo (značka, jednotka, název modelu) nestačí
   assert.equal(plausibilitySignals(parsed({ otazka: 'Jaká je výdrž baterie na režim Turbo u modelu Pro?' }))[0].otazka, 'Jaká je výdrž baterie na režim Turbo u modelu Pro?');
+});
+
+test('nesmysl bez tvrzení s výsledkem „nemožné“ je jen low (všechna tvrzení sedí, model verdikt přehnal)', () => {
+  const s = plausibilitySignals(parsed({ jistota: 'stredni', tvrzeni: [claim({ vysledek: 'sedi' }), claim({ tvrzeni: 'Výdrž 8 h', vysledek: 'nadsazene' })] }), cykloVydrz());
+  assert.equal(s.length, 1);
+  assert.equal(s[0].severity, 'low');
+  assert.equal(s[0].druh, 'rozpor');
+  assert.equal(plausibilitySignals(parsed({ tvrzeni: [] }), cykloVydrz())[0].severity, 'low');
+});
+
+test('nemožné tvrzení, jehož čísla v textu nabídky nejsou (model si je vymyslel): jen low', () => {
+  const s = plausibilitySignals(parsed({ tvrzeni: [claim({ tvrzeni: 'Kapacita 99 999 mAh' })] }), cykloVydrz());
+  assert.equal(s[0].severity, 'low');
+  assert.equal(s[0].druh, 'rozpor');
+});
+
+test('nemožné tvrzení bez čísla v citaci: jen low', () => {
+  assert.equal(plausibilitySignals(parsed({ tvrzeni: [claim({ tvrzeni: 'Svítilna svítí nesmírně' })] }), cykloVydrz())[0].severity, 'low');
+});
+
+test('bez dossieru, z něhož by se citace ověřila, je nesmysl nejvýš low', () => {
+  assert.equal(plausibilitySignals(parsed())[0].severity, 'low');
+  assert.equal(plausibilitySignals(sonnet())[0].severity, 'low');
+});
+
+test('čísla v citaci se hledají bez ohledu na mezery a oddělovače tisíců (25 500 vs 25500Lumen, 2 000-3 000)', () => {
+  const p = parsed({ tvrzeni: [claim({ tvrzeni: 'Titulek 25 500 lumenů, varianta 2 000–3 000 lumenů' })] });
+  assert.equal(plausibilitySignals(p, cyklo())[0].severity, 'medium');
+});
+
+test('živý případ cyklosvítilny (25 500 lm v titulku, varianta 2 000–3 000 lm) zůstává medium + nesmysl', () => {
+  const d = cyklo();
+  const p = parsed({
+    verdikt: 'nesmysl', jistota: 'vysoka',
+    tvrzeni: [
+      claim({ tvrzeni: 'Svítivost 25500Lumen (titulek)', vysledek: 'nemozne' }),
+      claim({ tvrzeni: 'Varianta 2000-3000 Lumen', typ: 'rozpor_textu', vysledek: 'nemozne' }),
+    ],
+  });
+  const s = plausibilitySignals(p, d);
+  assert.equal(s[0].severity, 'medium');
+  assert.equal(s[0].druh, 'nesmysl');
+  const real = plausibilitySignals(sonnet(), d);
+  assert.equal(real[0].severity, 'medium');
+  assert.equal(real[0].druh, 'nesmysl');
+});
+
+test('cena jako jediné nemožné tvrzení se nepočítá, i když je v textu', () => {
+  assert.equal(plausibilitySignals(parsed({ tvrzeni: [claim({ typ: 'cena', tvrzeni: 'Cena 6 h' })] }), cykloVydrz())[0].severity, 'low');
 });
