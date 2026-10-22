@@ -180,7 +180,7 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
         else if (typeof body.datumZaniku === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.datumZaniku)) add('subjekt_zanikl', 'high', 'Uvedený subjekt zanikl', (body.obchodniJmeno || s.ico) + ' zanikl dne ' + body.datumZaniku + '.', 'ARES');
         else {
           const age = sellerCompanyAgeDays(body.datumVzniku, nowMs);
-          if (age !== null && age < 180) add('firma_nova', 'medium', 'Firma vznikla nedávno', (body.obchodniJmeno || s.ico) + ' vznikla dne ' + body.datumVzniku.slice(0, 10) + ' (' + sellerAgo(age) + ').', 'ARES');
+          if (age !== null && age < 180) add('firma_nova', 'low','Firma vznikla nedávno', (body.obchodniJmeno || s.ico) + ' vznikla dne ' + body.datumVzniku.slice(0, 10) + ' (' + sellerAgo(age) + ').', 'ARES');
         }
       } else skipped.push('ARES');
     }
@@ -192,7 +192,7 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
       checks++;
       external = true;
       const shown = vat.cc + vat.cislo;
-      if (!v.isValid) add('dic_neplatne', 'medium', 'DIČ není platné', 'DIČ ' + shown + ' není ve VIES vedeno jako platné.', 'VIES');
+      if (!v.isValid) add('dic_neplatne', 'low', 'DIČ není platné', 'DIČ ' + shown + ' není ve VIES vedeno jako platné (neplátci DPH tam vedeni nejsou; DIČ mohlo být přečteno z vloženého textu).', 'VIES');
       else {
         const seen = sellerWords(v.name);
         const own = sellerWords(s.nazev);

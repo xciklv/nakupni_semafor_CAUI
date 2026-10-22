@@ -388,11 +388,11 @@ test('VIES: DIČ s mezerami a malými písmeny se před dotazem upraví', async 
   assert.deepEqual(calls, [['CZ', '45274649']]);
 });
 
-test('VIES: isValid:false → dic_neplatne (medium), ale zdroj se počítá jako externí kontrola', async () => {
+test('VIES: isValid:false → dic_neplatne (low: neplátce DPH je normální, DIČ z textu je neověřené), zdroj se počítá jako externí kontrola', async () => {
   const r = await runVies({ nazev: 'Firma', dic: 'CZ12345678' }, { fetchers: { vies: async () => ({ isValid: false, userError: 'INVALID' }) } });
   const s = r.signals.find((x) => x.id === 'dic_neplatne');
   assert.ok(s);
-  assert.equal(s.severity, 'medium');
+  assert.equal(s.severity, 'low');
   assert.equal(s.source, 'VIES');
   assert.match(s.evidence, /CZ12345678/);
   assert.equal(r.external, true);
@@ -473,12 +473,12 @@ test('VIES: běží souběžně s RDAP a ARES', async () => {
   assert.deepEqual((await p).skipped, []);
 });
 
-test('ARES: datumVzniku před 30 dny → firma_nova (medium); od 180 dní výš ne', async () => {
+test('ARES: datumVzniku před 30 dny → firma_nova (low: mladá firma nic nedokazuje); od 180 dní výš ne', async () => {
   const day = (n) => new Date(NOW - n * 86400000).toISOString().slice(0, 10);
   const run1 = (datumVzniku) => run({ ico: '27082440' }, { fetchers: { rdap: OLD, ares: async () => ({ obchodniJmeno: 'Nová s.r.o.', datumVzniku }) } });
   const s = (await run1(day(30))).signals.find((x) => x.id === 'firma_nova');
   assert.ok(s);
-  assert.equal(s.severity, 'medium');
+  assert.equal(s.severity, 'low');
   assert.equal(s.source, 'ARES');
   assert.match(s.evidence, /30 dn/);
   assert.ok(ids(await run1(day(179))).includes('firma_nova'));
