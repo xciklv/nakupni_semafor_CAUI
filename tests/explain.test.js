@@ -406,3 +406,33 @@ test('buildResponse: přeskočené zdroje mimo prodejce (věrohodnost, obrázky,
   const r = buildResponse({ verdict: v, signals: [], explanation: null });
   assert.deepEqual(r.nezkontrolovano, ['prodejce: seznam ČOI', 'ověření věrohodnosti', 'analýza obrázků', 'identita produktu: Icecat', 'prodejce: VIES']);
 });
+
+// Nález 18 z code review: filtr tvrzení o bezpečnosti a prompt si nesmí odporovat u věrohodného prodejce.
+const oranzova = () => computeVerdict([sg('m', 'medium', { druh: 'nesmysl' })], OK3);
+const vysvetleni = (shrnuti) => ({ ok: true, shrnuti, co_delat: ['Zeptejte se prodejce.'] });
+const pouzito = (shrnuti, ctx) => buildResponse({ verdict: oranzova(), signals: [sg('m', 'medium', { druh: 'nesmysl' })], explanation: vysvetleni(shrnuti), ...ctx }).shrnuti === shrnuti;
+
+test('prodejce_duveryhodny: věta z promptu i synonymum „důvěryhodně“ o prodejci projdou filtrem', () => {
+  assert.ok(pouzito('Prodejce působí věrohodně, text nabídky ale obsahuje rozpor.', { prodejceDuveryhodny: true }));
+  assert.ok(pouzito('Prodejce působí důvěryhodně, text nabídky ale obsahuje rozpor.', { prodejceDuveryhodny: true }));
+  assert.ok(pouzito('Prodejce je důvěryhodný, ale nabídka obsahuje rozpor.', { prodejceDuveryhodny: true }));
+});
+
+test('bez prodejce_duveryhodny se „důvěryhodně“ stále zahazuje; „věrohodně“ z promptu projde vždy', () => {
+  assert.equal(pouzito('Prodejce působí důvěryhodně, text nabídky ale obsahuje rozpor.', {}), false);
+  assert.equal(pouzito('Prodejce působí důvěryhodně, text nabídky ale obsahuje rozpor.', { prodejceDuveryhodny: false }), false);
+  assert.ok(pouzito('Prodejce působí věrohodně, text nabídky ale obsahuje rozpor.', {}));
+});
+
+test('prodejce_duveryhodny nepovolí tvrzení o bezpečnosti ani o důvěryhodnosti samotné nabídky', () => {
+  for (const t of ['Nabídka je důvěryhodná.', 'Zboží je bezpečné, můžete koupit.', 'Prodejce působí důvěryhodně, nabídka je v pořádku.', 'Je to bez obav.']) {
+    assert.equal(pouzito(t, { prodejceDuveryhodny: true }), false, t);
+  }
+});
+
+test('prompt a filtr jsou sladěné: věta, kterou prompt doporučuje, filtr nezahodí', () => {
+  const m = SYSTEM_EXPLAIN.match(/shrnutí řekne, že (prodejce působí \S+),/);
+  assert.ok(m, 'prompt obsahuje doporučenou větu');
+  assert.ok(pouzito(m[1][0].toUpperCase() + m[1].slice(1) + ', text nabídky ale obsahuje rozpor.', { prodejceDuveryhodny: true }));
+  assert.ok(pouzito(m[1][0].toUpperCase() + m[1].slice(1) + ', text nabídky ale obsahuje rozpor.', {}));
+});

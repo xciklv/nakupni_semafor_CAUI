@@ -75,11 +75,14 @@ function explainUnsafeWording(x) {
   return explainTexts(x).some((t) => EXPLAIN_PODVOD.test(explainNorm(t)));
 }
 
-function explainContradicts(semafor, x) {
+// Věta o prodejci („prodejce působí věrohodně / důvěryhodně“) je povolená, jen když ji dovoluje prodejce_duveryhodny (prompt ji pak výslovně žádá).
+const EXPLAIN_PRODEJCE_DUVERYHODNY = /prodejce\W+(?:\w+\W+){0,2}?duveryhodn\w*/g;
+
+function explainContradicts(semafor, x, ctx) {
   const text = explainTexts(x).map(explainNorm).join(' ');
   if (semafor === 'zelená') return EXPLAIN_ZELENA_VAROVANI.test(text);
   // Strip negated safety phrases first ('nebezpecn*' before 'neni ... bezpecn*', so 'nebezpecne' is not read as 'bezpecn').
-  const cleaned = text
+  const cleaned = (ctx && ctx.prodejceDuveryhodny === true ? text.replace(EXPLAIN_PRODEJCE_DUVERYHODNY, '') : text)
     .replace(/nebezpecn\w*/g, '')
     .replace(/neni (zcela |uplne )?bezpecn\w*/g, '')
     .replace(/neni (uplne |zcela )?v poradku/g, '');
@@ -116,14 +119,15 @@ function fallbackAdvice(verdict) {
   return { shrnuti, co_delat: t[1] };
 }
 
-function buildResponse({ verdict, signals = [], explanation } = {}) {
+// prodejceDuveryhodny: stejný údaj, jaký dostal prompt vysvětlení (Souhrn ho posílá dál); povoluje větu o věrohodném prodejci.
+function buildResponse({ verdict, signals = [], explanation, prodejceDuveryhodny = false } = {}) {
   const weightOf = (s) => (s && Object.hasOwn(WEIGHT, s.severity) ? WEIGHT[s.severity] : 0);
   const list = (Array.isArray(signals) ? signals : []).filter((s) => s && typeof s === 'object');
   const sorted = list.slice().sort((a, b) => weightOf(b) - weightOf(a));
   const fb = fallbackAdvice(verdict);
   let text = fb;
   const useLlm = explanation && typeof explanation === 'object' && explanation.ok === true
-    && !explainContradicts(verdict.semafor, explanation) && !explainUnsafeWording(explanation);
+    && !explainContradicts(verdict.semafor, explanation, { prodejceDuveryhodny }) && !explainUnsafeWording(explanation);
   if (useLlm && typeof explanation.shrnuti === 'string' && explanation.shrnuti.trim()) {
     const rady = (Array.isArray(explanation.co_delat) ? explanation.co_delat : [])
       .filter((x) => typeof x === 'string' && x.trim())
