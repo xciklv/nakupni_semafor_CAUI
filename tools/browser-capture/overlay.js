@@ -1,15 +1,20 @@
-// Spouští se ve stránce: vykreslí překryv ve Shadow DOM (stránka na něj nedosáhne a on nedědí její CSS).
+// Spouští se ve stránce: vykreslí překryv ve Shadow DOM (nedědí CSS stránky). Kořen je 'closed' a drží se v globální proměnné izolovaného světa
+// rozšíření, takže stránka na okno nedosáhne přes host.shadowRoot. Není to hranice proti škodlivé stránce: ta vidí, že hostitel existuje,
+// a může ho odstranit nebo překrýt; jde o to, aby běžný skript stránky nepřečetl sebraný text.
 // Argument je stav { faze: 'nahled'|'odesilam'|'vysledek'|'chyba', ... }. Tlačítka posílají zprávy backgroundu.
 function nakupniKontrolaOverlay(stav) {
+  // Skript se vkládá znovu před každým vykreslením, proto se kořen nedrží v closure, ale v globálu izolovaného světa (stránka ho nevidí).
+  // U closed kořene nejde z hostitele kořen znovu získat; když ho svět ztratil, hostitel se zahodí a vytvoří se nový.
   let host = document.getElementById('nakupni-kontrola-host');
+  if (host && !globalThis.nakupniKontrolaKoren) { host.remove(); host = null; }
   if (!host) {
     host = document.createElement('div');
     host.id = 'nakupni-kontrola-host';
     host.style.cssText = 'all:initial;position:fixed;top:12px;right:12px;z-index:2147483647;';
     document.documentElement.appendChild(host);
-    host.attachShadow({ mode: 'open' });
+    globalThis.nakupniKontrolaKoren = host.attachShadow({ mode: 'closed' });
   }
-  const root = host.shadowRoot;
+  const root = globalThis.nakupniKontrolaKoren;
   root.replaceChildren();
   const css = document.createElement('style');
   css.textContent = ':host{all:initial}.box{font:14px/1.45 system-ui,sans-serif;color:#1a1a1a;background:#fff;border:1px solid #bbb;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.3);width:420px;max-height:80vh;overflow:auto;padding:12px 14px}h3{margin:0 0 6px;font-size:15px}p{margin:6px 0}small{color:#666}button{font:inherit;margin:6px 6px 0 0;padding:5px 10px;border:1px solid #888;border-radius:6px;background:#f4f4f4;cursor:pointer}button.p{background:#1b5e20;color:#fff;border-color:#1b5e20}.x{float:right;margin:0}.l{display:inline-block;padding:2px 10px;border-radius:10px;color:#fff;font-weight:600}.zelená{background:#2e7d32}.oranžová{background:#e65100}.červená{background:#c62828}.šedá{background:#616161}li{margin:2px 0}.sig{border-left:3px solid #999;padding-left:8px;margin:6px 0}h4{margin:10px 0 2px;font-size:13px}pre{font:12px/1.4 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto;background:#f6f6f6;border:1px solid #ddd;border-radius:6px;padding:6px;margin:2px 0}';

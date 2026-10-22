@@ -42,7 +42,7 @@ Víc stránek najednou: po kliknutí na ikonu přejděte třeba na stránku prod
 - `manifest.json`: MV3, oprávnění `activeTab`, `scripting`, `storage`, `host_permissions` jen pro `http://127.0.0.1:5678/*`.
 - `background.js`: service worker: ikona, vkládání skriptů, sbírka v `chrome.storage.session`, odeslání z workeru (nevztahuje se na něj CSP stránky). Při dlouhé kontrole se worker udržuje při životě (`getPlatformInfo` každých 20 s) a čekání má limit 180 s.
 - `extract.js`: čtení stránky a čisté funkce `cleanUrl`, `trimToSentences`, `dropPageChrome` (testy: `tests/browser-capture.test.js`).
-- `overlay.js`: okno ve Shadow DOM (stránka na něj nedosáhne a on nedědí její CSS), jen `textContent`, žádné `innerHTML`.
+- `overlay.js`: okno ve Shadow DOM (nedědí CSS stránky; kořen je `closed`, takže ho skript stránky nepřečte přes `shadowRoot`; škodlivá stránka ho ale může odstranit nebo překrýt), jen `textContent`, žádné `innerHTML`.
 - `bookmarklet.html`: sonda ze spiku (zdarma, posílá `{}` a čeká 400). Bookmarklet není podporovaná cesta: Chrome blokuje přístup z webu do místní sítě.
 
 ## Omezení

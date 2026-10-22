@@ -325,20 +325,32 @@ class El {
   append(...c) { this.children.push(...c); }
   appendChild(c) { this.children.push(c); return c; }
   replaceChildren() { this.children = []; }
-  attachShadow() { this.shadowRoot = new El('#shadow'); return this.shadowRoot; }
-  remove() {}
+  // Jako prohlížeč: shadowRoot je z vnějšku vidět jen u mode 'open'; u 'closed' je null a kořen má jen ten, kdo ho dostal z attachShadow.
+  attachShadow({ mode }) { this.mode = mode; this.koren = new El('#shadow'); return this.koren; }
+  get shadowRoot() { return this.mode === 'open' ? this.koren : null; }
+  remove() { this.removed = true; }
 }
-function renderOverlay(stav) {
+// Jeden „svět“ stránky (document + izolovaný kontext skriptu); overlay.js se do něj vkládá znovu před každým vykreslením, jako to dělá background.js.
+function overlayWorld() {
   const documentElement = new El('html');
-  const document = { getElementById: () => null, createElement: (t) => new El(t), documentElement };
+  const document = {
+    documentElement,
+    createElement: (t) => new El(t),
+    getElementById: (id) => documentElement.children.find((c) => c.id === id && !c.removed) || null,
+  };
   const ctx = vm.createContext({ document, chrome: { runtime: { sendMessage: () => {} } } });
-  vm.runInContext(read('overlay.js'), ctx);
-  vm.runInContext('nakupniKontrolaOverlay', ctx)(stav);
-  const texts = [];
-  const walk = (e) => { if (e.textContent) texts.push(e.textContent); e.children.forEach(walk); };
-  walk(documentElement.children[0].shadowRoot);
-  return texts;
+  const texts = (e, out = []) => { if (e.textContent) out.push(e.textContent); e.children.forEach((c) => texts(c, out)); return out; };
+  return {
+    document,
+    host: () => documentElement.children.find((c) => c.id === 'nakupni-kontrola-host' && !c.removed),
+    render(stav) {
+      vm.runInContext(read('overlay.js'), ctx);
+      vm.runInContext('nakupniKontrolaOverlay', ctx)(stav);
+      return texts(this.host().koren);
+    },
+  };
 }
+function renderOverlay(stav) { return overlayWorld().render(stav); }
 
 test('overlay: náhled ukáže celý odesílaný text, adresy obrázků i JSON-LD', () => {
   const payload = { odkaz: NABIDKA.odkaz, text: NABIDKA.text, obrazky: ['https://a.cz/1.jpg', 'https://a.cz/2.jpg'], jsonld: '{"@type":"Product","name":"X"}' };
@@ -408,4 +420,35 @@ test('dossier z textu: hodnocení a počet prodejů stačí na zkontrolovaný mo
   const x = dossierToExtraction(d);
   const r = await sellerSignals({ x, rezim: 'marketplace', host: 'allegro.cz', fetchers: {}, coiList: null, nowMs: Date.now() });
   assert.notEqual(r.status, 'unchecked');
+});
+
+// --- nález 10: překryv nesmí jít přečíst ze stránky ---
+
+test('overlay: kořen okna je closed, stránka na něj přes host.shadowRoot nedosáhne a další vykreslení ho znovu použije', () => {
+  const w = overlayWorld();
+  w.render({ faze: 'prazdno' });
+  const host = w.host();
+  assert.equal(host.mode, 'closed');
+  assert.equal(host.shadowRoot, null, 'z pohledu stránky žádný shadowRoot');
+  const texts = w.render({ faze: 'nahled', sbirka: [{ odkaz: NABIDKA.odkaz, titulek: 'P', znaku: 90 }], diagnostika: NABIDKA.diagnostika, payload: { odkaz: NABIDKA.odkaz, text: 'Tajný text sběru', obrazky: [], jsonld: '' } });
+  assert.ok(texts.includes('Tajný text sběru'));
+  assert.equal(w.host(), host, 'okno se nevytváří znovu');
+  assert.equal(host.shadowRoot, null);
+  assert.equal(host.children.length, 0, 'okno není vidět jako potomek hostitele');
+});
+
+test('overlay: když se izolovaný svět ztratí a hostitel zůstane, okno se vytvoří znovu a text starého okna nezůstane', () => {
+  const w = overlayWorld();
+  w.render({ faze: 'nahled', sbirka: [{ odkaz: NABIDKA.odkaz, titulek: 'P', znaku: 9 }], diagnostika: NABIDKA.diagnostika, payload: { odkaz: NABIDKA.odkaz, text: 'Starý sběr', obrazky: [], jsonld: '' } });
+  const stary = w.host();
+  const ctx2 = vm.createContext({ document: w.document, chrome: { runtime: { sendMessage: () => {} } } }); // jiný kontext = bez zapamatovaného kořene
+  vm.runInContext(read('overlay.js'), ctx2);
+  vm.runInContext('nakupniKontrolaOverlay', ctx2)({ faze: 'prazdno' });
+  assert.ok(stary.removed, 'osiřelý hostitel se odstraní');
+  assert.notEqual(w.host(), stary);
+});
+
+test('overlay: komentář ani README netvrdí, že stránka na okno nedosáhne bez výhrady', () => {
+  assert.doesNotMatch(read('overlay.js').split('\n').slice(0, 2).join(' '), /stránka na něj nedosáhne/);
+  assert.doesNotMatch(read('README.md'), /stránka na něj nedosáhne/);
 });
