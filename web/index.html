@@ -82,6 +82,7 @@
   textarea.pole-popis { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; resize:vertical; }
   textarea.pole-popis:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
   .popis-text { white-space:pre-wrap; }
+  label.podklad-radek.hotovo span { color:var(--muted); text-decoration:line-through; }
   .nav-pomoc { display:flex; flex-wrap:wrap; gap:8px; }
 </style>
 </head>
@@ -207,7 +208,7 @@ function bezpecnyOdkaz(v) {
 }
 
 // Tlačítko Kopírovat: při selhání (bez schránky, zakázáno) ukáže pokyn, jak text zkopírovat ručně.
-function kopirovat(text) {
+function kopirovat(zdrojTextu) {
   const wrap = el('div');
   const b = el('button', KOPIROVAT, 'sekundarni');
   const zprava = el('span', '', 'hint');
@@ -216,7 +217,7 @@ function kopirovat(text) {
   b.addEventListener('click', async () => {
     try {
       if (typeof navigator === 'undefined' || !navigator || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') throw new Error('schránka');
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(typeof zdrojTextu === 'function' ? zdrojTextu() : zdrojTextu);
       b.textContent = 'Zkopírováno';
       zprava.textContent = '';
     } catch (e) {
@@ -911,7 +912,29 @@ function ppDetail(p) {
   pocitadlo.setAttribute('id', 'pocitadlo');
   pocitadlo.setAttribute('aria-live', 'polite');
   const boxy = [];
-  const prepocitat = () => { pocitadlo.textContent = 'Máte ' + boxy.filter((b) => b.checked).length + ' z ' + p.podklady.length + '.'; };
+  const radky = [];
+  const detaily = [];
+  const souhrnText = el('p', '', 'popis-text');
+  souhrnText.setAttribute('id', 'souhrn-text');
+  // Souhrn ke zkopírování (bance, policii): případ, popis, co už mám a co ještě chybí.
+  const NL = String.fromCharCode(10);
+  const sestavitSouhrn = () => {
+    const mam = p.podklady.filter((d, i) => boxy[i].checked).map((d) => '- ' + d.nazev);
+    const chybi = p.podklady.filter((d, i) => !boxy[i].checked).map((d) => '- ' + d.nazev);
+    return ['Případ: ' + p.nazev, ppPopis.trim() ? 'Popis: ' + ppPopis.trim() : '', mam.length ? 'Mám:' + NL + mam.join(NL) : '', chybi.length ? 'Ještě chybí:' + NL + chybi.join(NL) : '']
+      .filter(Boolean).join(NL + NL);
+  };
+  const prepocitat = () => {
+    const zbyva = p.podklady.filter((d, i) => !boxy[i].checked).map((d) => d.nazev);
+    boxy.forEach((b, i) => {
+      detaily[i].hidden = b.checked;
+      if (b.checked) radky[i].classList.add('hotovo'); else radky[i].classList.remove('hotovo');
+    });
+    pocitadlo.textContent = zbyva.length
+      ? 'Máte ' + (p.podklady.length - zbyva.length) + ' z ' + p.podklady.length + '. Zbývá: ' + zbyva.join(', ') + '.'
+      : 'Máte všech ' + p.podklady.length + '. Podklady jsou pohromadě, můžeš postupovat podle kroků výše.';
+    souhrnText.textContent = sestavitSouhrn();
+  };
   pod.append(pocitadlo);
   p.podklady.forEach((d) => {
     const l = el('label', null, 'podklad-radek');
@@ -919,12 +942,19 @@ function ppDetail(p) {
     cb.type = 'checkbox';
     cb.addEventListener('change', prepocitat);
     boxy.push(cb);
+    radky.push(l);
     l.append(cb, el('span', d.nazev));
     const det = el('div', null, 'podklad-detail');
     det.append(el('b', 'Proč na tom záleží'), el('p', d.proc), el('b', 'Jak to získat'), el('p', d.jak), el('b', 'Když to nemáš'), el('p', d.nemam));
+    detaily.push(det);
     pod.append(l, det);
   });
+  prepocitat();
+  pocitadlo.textContent = 'Máte 0 z ' + p.podklady.length + '. Zbývá: ' + p.podklady.map((d) => d.nazev).join(', ') + '.';
   wrap.append(pod);
+  const souhrn = el('div', null, 'card souhrn');
+  souhrn.append(el('h3', 'Souhrn ke zkopírování'), el('p', 'Hodí se do zprávy bance nebo do oznámení na policii. Mění se podle toho, co odškrtneš.', 'hint'), souhrnText, kopirovat(sestavitSouhrn));
+  wrap.append(souhrn);
 
   const ids = [];
   p.kroky.concat(p.otazky.map((o) => o.krok), p.nalehave ? [p.nalehave] : []).forEach((k) => (k.zdroje || []).forEach((id) => { if (!ids.includes(id)) ids.push(id); }));

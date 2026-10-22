@@ -302,7 +302,7 @@ test('CSS: záložky a první pomoc používají tokeny motivu, mají focus a ne
   const p = nahled();
   tlacitkoPripadu(p, p.PP.pripady[2].nazev).click();
   const POVOLENE = new Set(['', 'card', 'hint', 'sekundarni', 'pripad', 'kroky', 'skupina-kroku', 'krok', 'proc', 'zdroje-kroku', 'podklad', 'podklad-radek', 'jak', 'nalehave', 'otazka-box',
-    'upozorneni', 'poznamka', 'odkazy', 'stitek', 'obecna', 'seznam-bez', 'zdroje', 'sbalene', 'volba', 'volba-label', 'karty', 'err', 'lead', 'hned', 'dny', 'pozdeji', 'podklady', 'podklad-detail', 'nav-pomoc', 'nadpis', 'popis', 'pole-popis', 'popis-text']);
+    'upozorneni', 'poznamka', 'odkazy', 'stitek', 'obecna', 'seznam-bez', 'zdroje', 'sbalene', 'volba', 'volba-label', 'karty', 'err', 'lead', 'hned', 'dny', 'pozdeji', 'podklady', 'podklad-detail', 'nav-pomoc', 'nadpis', 'popis', 'pole-popis', 'popis-text', 'souhrn', 'hotovo']);
   for (const n of p.dom.all) for (const c of n.className.split(' ')) assert.ok(POVOLENE.has(c), 'nepovolená třída: ' + c);
 });
 
@@ -388,4 +388,51 @@ test('obecná situace: každý krok má zdroj z katalogu (nebo je obecná rada),
   }
   assert.equal(ZAKAZANE.test(JSON.stringify(j)), false);
   assert.ok(j.podklady.length >= 4 && j.neoverene.length >= 2);
+});
+
+test('odškrtnutí podkladu: řádek se označí jako hotový, detail se sbalí, počítadlo ukáže co zbývá a souhrn se přepíše', () => {
+  const p = nahled();
+  const pr = p.PP.pripady[0];
+  const pole = find(out(p), (n) => n.tagName === 'TEXTAREA');
+  pole.value = 'Sluchátka za 1 290 Kč nedorazila.'; pole.listeners.input();
+  tlacitkoPripadu(p, pr.nazev).click();
+  const boxy = findAll(out(p), (n) => n.tagName === 'INPUT' && n.className === 'podklad');
+  const radky = findAll(out(p), (n) => n.tagName === 'LABEL' && /podklad-radek/.test(n.className));
+  const detaily = findAll(out(p), (n) => /podklad-detail/.test(n.className));
+  const souhrn = find(out(p), (n) => n.attrs.id === 'souhrn-text');
+  const pocitadlo = find(out(p), (n) => n.attrs.id === 'pocitadlo');
+  assert.ok(souhrn, 'chybí souhrn');
+  assert.ok(souhrn.textContent.includes('Případ: ' + pr.nazev));
+  assert.ok(souhrn.textContent.includes('Popis: Sluchátka za 1 290 Kč nedorazila.'));
+  assert.equal(souhrn.textContent.includes('Mám:'), false, 'zatím nic nemám');
+  assert.ok(souhrn.textContent.includes('Ještě chybí:') && souhrn.textContent.includes(pr.podklady[0].nazev));
+  boxy[0].checked = true; boxy[0].listeners.change();
+  assert.equal(detaily[0].hidden, true, 'detail hotového podkladu je sbalený');
+  assert.equal(detaily[1].hidden, false);
+  assert.ok(/hotovo/.test(radky[0].className));
+  assert.match(pocitadlo.textContent, /^Máte 1 z \d+\. Zbývá: /);
+  assert.ok(pocitadlo.textContent.includes(pr.podklady[1].nazev));
+  assert.ok(souhrn.textContent.includes('Mám:\n- ' + pr.podklady[0].nazev));
+  assert.ok(souhrn.textContent.includes('Ještě chybí:\n- ' + pr.podklady[1].nazev));
+  boxy.forEach((b) => { b.checked = true; b.listeners.change(); });
+  assert.match(pocitadlo.textContent, new RegExp('^Máte všech ' + pr.podklady.length));
+  assert.equal(souhrn.textContent.includes('Ještě chybí:'), false);
+  boxy[0].checked = false; boxy[0].listeners.change();
+  assert.equal(detaily[0].hidden, false);
+  assert.equal(/hotovo/.test(radky[0].className), false);
+});
+
+test('souhrn: tlačítko Kopírovat bere aktuální text souhrnu', async () => {
+  const p = loadPage();
+  p.ctx.navigator = { clipboard: { writeText: async (t) => { p.ctx.__zkopirovano = t; } } };
+  p.dom.byId['tab-pomoc'].click();
+  const pr = p.PP.pripady[2];
+  tlacitkoPripadu(p, pr.nazev).click();
+  const boxy = findAll(out(p), (n) => n.tagName === 'INPUT' && n.className === 'podklad');
+  boxy[1].checked = true; boxy[1].listeners.change();
+  const karta = find(out(p), (n) => /souhrn/.test(n.className));
+  const kopie = find(karta, (n) => n.tagName === 'BUTTON' && n.textContent === 'Kopírovat');
+  assert.ok(kopie);
+  await kopie.listeners.click();
+  assert.ok(String(p.ctx.__zkopirovano).includes('Mám:\n- ' + pr.podklady[1].nazev));
 });
