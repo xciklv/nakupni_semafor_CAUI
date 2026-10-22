@@ -17,7 +17,7 @@ function nakupniKontrolaOverlay(stav) {
   const root = globalThis.nakupniKontrolaKoren;
   root.replaceChildren();
   const css = document.createElement('style');
-  css.textContent = ':host{all:initial}.box{font:14px/1.45 system-ui,sans-serif;color:#1a1a1a;background:#fff;border:1px solid #bbb;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.3);width:420px;max-height:80vh;overflow:auto;padding:12px 14px}h3{margin:0 0 6px;font-size:15px}p{margin:6px 0}small{color:#666}button{font:inherit;margin:6px 6px 0 0;padding:5px 10px;border:1px solid #888;border-radius:6px;background:#f4f4f4;cursor:pointer}button.p{background:#1b5e20;color:#fff;border-color:#1b5e20}.x{float:right;margin:0}.l{display:inline-block;padding:2px 10px;border-radius:10px;color:#fff;font-weight:600}.zelená{background:#2e7d32}.oranžová{background:#e65100}.červená{background:#c62828}.šedá{background:#616161}li{margin:2px 0}.sig{border-left:3px solid #999;padding-left:8px;margin:6px 0}h4{margin:10px 0 2px;font-size:13px}pre{font:12px/1.4 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto;background:#f6f6f6;border:1px solid #ddd;border-radius:6px;padding:6px;margin:2px 0}';
+  css.textContent = ':host{all:initial}.box{font:14px/1.45 system-ui,sans-serif;color:#1a1a1a;background:#fff;border:1px solid #bbb;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.3);width:420px;max-height:80vh;overflow:auto;padding:12px 14px}h3{margin:0 0 6px;font-size:15px}p{margin:6px 0}small{color:#666}button{font:inherit;margin:6px 6px 0 0;padding:5px 10px;border:1px solid #888;border-radius:6px;background:#f4f4f4;cursor:pointer}button.p{background:#1b5e20;color:#fff;border-color:#1b5e20}.x{float:right;margin:0}.l{display:inline-block;padding:2px 10px;border-radius:10px;color:#fff;font-weight:600}.zelená{background:#2e7d32}.oranžová{background:#e65100}.červená{background:#c62828}.šedá{background:#616161}li{margin:2px 0}.sig{border-left:3px solid #999;padding-left:8px;margin:6px 0}.sig.high{border-color:#c62828}.sig.medium{border-color:#e65100}.sig.low{border-color:#f9a825}.sev{display:inline-block;margin-right:6px;padding:0 6px;border-radius:8px;background:#eee;color:#444;font-size:12px}.sig.high .sev{background:#c62828;color:#fff}.sig.medium .sev{background:#e65100;color:#fff}.sig.low .sev{background:#f9a825;color:#1a1a1a}summary{cursor:pointer;font-weight:600;margin:10px 0 2px}.pozn{color:#555;margin:4px 0}h4{margin:10px 0 2px;font-size:13px}pre{font:12px/1.4 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto;background:#f6f6f6;border:1px solid #ddd;border-radius:6px;padding:6px;margin:2px 0}';
   const box = document.createElement('div');
   box.className = 'box';
   const el = (t, txt, cls) => { const e = document.createElement(t); if (txt != null) e.textContent = txt; if (cls) e.className = cls; return e; };
@@ -25,6 +25,38 @@ function nakupniKontrolaOverlay(stav) {
   zavrit.onclick = () => host.remove();
   box.append(zavrit, el('h3', 'Nákupní kontrola'));
   const tlacitko = (txt, akce, cls) => { const b = el('button', txt, cls); b.onclick = () => chrome.runtime.sendMessage({ akce }); return b; };
+
+  const SEVERITY = ['info', 'low', 'medium', 'high'];
+  const STITEK = { info: 'Informace', low: 'Nízká', medium: 'Střední', high: 'Vysoká' };
+  // Karta nálezu: štítek závažnosti, titul a důkaz. Co se nepodařilo ověřit (nelze_overit) nemá štítek ani barvu varování.
+  const karta = (n, nelze) => {
+    const zav = nelze ? 'info' : (SEVERITY.includes(n.zavaznost) ? n.zavaznost : 'low');
+    const d = el('div', null, 'sig ' + zav);
+    const hlavicka = el('div');
+    if (!nelze) hlavicka.append(el('span', STITEK[zav], 'sev'));
+    hlavicka.append(el('b', String(n.titul || '')));
+    d.append(hlavicka);
+    if (n.dukaz) d.append(el('div', String(n.dukaz)));
+    return d;
+  };
+  // Stejné skupiny jako webovka: tvrzení, která nesedí; rizika; nepodařilo se ověřit (sbalené). Starší odpověď bez `nalezy` se ukáže ze `signaly`.
+  const vykresliNalezy = (r) => {
+    const signaly = (Array.isArray(r.signaly) ? r.signaly : []).filter((s) => s && typeof s === 'object');
+    const nalezy = (Array.isArray(r.nalezy) ? r.nalezy : []).filter((n) => n && typeof n === 'object' && (n.titul || n.dukaz));
+    const skupina = (nadpis, seznam) => { if (!seznam.length) return; const g = el('div', null, 'skupina'); g.append(el('h4', nadpis), ...seznam.slice(0, 6).map((n) => karta(n, false))); box.append(g); };
+    if (Array.isArray(r.nalezy) && (nalezy.length || !signaly.length)) {
+      skupina('Tvrzení, která nesedí', nalezy.filter((n) => n.druh === 'nesmysl' || n.druh === 'rozpor'));
+      skupina('Rizika', nalezy.filter((n) => n.druh !== 'nesmysl' && n.druh !== 'rozpor' && n.druh !== 'nelze_overit'));
+      const nelze = nalezy.filter((n) => n.druh === 'nelze_overit');
+      if (nelze.length) {
+        const det = el('details');
+        det.append(el('summary', 'Nepodařilo se ověřit (' + nelze.length + ')'), el('p', 'Nenalezení údaje není podezření na nabídku, jen jsme ho nemohli potvrdit.', 'pozn'), ...nelze.map((n) => karta(n, true)));
+        box.append(det);
+      }
+    } else if (signaly.length) {
+      skupina('Zjištěné signály', signaly);
+    }
+  };
 
   if (stav.faze === 'nahled') {
     const d = stav.diagnostika;
@@ -54,7 +86,7 @@ function nakupniKontrolaOverlay(stav) {
       const sem = ['zelená', 'oranžová', 'červená', 'šedá'].includes(r.semafor) ? r.semafor : 'šedá';
       box.append(el('span', { 'zelená': 'Nízké riziko', 'oranžová': 'Střední riziko', 'červená': 'Vysoké riziko', 'šedá': 'Nelze posoudit' }[sem], 'l ' + sem));
       box.append(el('p', String(r.shrnuti || '')), el('small', 'Jistota kontroly: ' + String(r.jistota || '')));
-      (Array.isArray(r.signaly) ? r.signaly : []).slice(0, 6).forEach((s) => { const d = el('div', null, 'sig'); d.append(el('b', String(s.titul || '')), el('div', String(s.dukaz || ''))); box.append(d); });
+      vykresliNalezy(r);
       const ul = el('ul');
       (Array.isArray(r.co_delat) ? r.co_delat : []).forEach((t) => ul.append(el('li', String(t))));
       box.append(ul);

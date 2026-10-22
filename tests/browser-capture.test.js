@@ -483,3 +483,61 @@ test('overlay: komentář ani README netvrdí, že stránka na okno nedosáhne b
   assert.doesNotMatch(read('overlay.js').split('\n').slice(0, 2).join(' '), /stránka na něj nedosáhne/);
   assert.doesNotMatch(read('README.md'), /stránka na něj nedosáhne/);
 });
+
+// --- nález 14: výsledek se vykreslí z nalezy (druh, závažnost), ne jako samé varování ---
+
+function stromVysledku(odpoved) {
+  const w = overlayWorld();
+  w.render({ faze: 'vysledek', odpoved, stran: 1 });
+  return w.host().koren;
+}
+const vsechny = (e, out = []) => { out.push(e); e.children.forEach((c) => vsechny(c, out)); return out; };
+const textUzlu = (e) => vsechny(e).map((x) => x.textContent).filter(Boolean).join(' | ');
+const naleztKartu = (koren, titul) => vsechny(koren).find((e) => e.className.split(' ').includes('sig') && textUzlu(e).includes(titul));
+const MAM = (druh, zavaznost, titul) => ({ id: titul, modul: 'prodejce', druh, zavaznost, titul, dukaz: 'důkaz ' + titul, zdroj: 'ARES' });
+const ODPOVED = (nalezy) => ({ stav: 'ok', semafor: 'oranžová', shrnuti: 'S', jistota: 'střední', co_delat: [], signaly: nalezy.map((n) => ({ ...n, druh: undefined })), nalezy });
+
+test('overlay: nelze_overit je ve sbalené skupině s poznámkou, bez štítku závažnosti a bez barvy varování', () => {
+  const koren = stromVysledku(ODPOVED([MAM('riziko', 'medium', 'Riziko A'), MAM('nelze_overit', 'medium', 'Neověřeno B'), MAM('riziko', 'info', 'Info C')]));
+  const nelze = naleztKartu(koren, 'Neověřeno B');
+  assert.ok(nelze, 'nález je vidět');
+  const details = vsechny(koren).find((e) => e.tag === 'details' && textUzlu(e).includes('Neověřeno B'));
+  assert.ok(details, 'je ve sbaleném <details>');
+  assert.match(textUzlu(details), /Nepodařilo se ověřit \(1\)/);
+  assert.match(textUzlu(details), /není podezření/);
+  assert.ok(!/(^|\s)(medium|high|low)(\s|$)/.test(nelze.className), 'třída: ' + nelze.className);
+  assert.ok(!/Střední|Vysoká|Nízká/.test(textUzlu(nelze)), 'bez štítku závažnosti');
+  const riziko = naleztKartu(koren, 'Riziko A');
+  assert.match(riziko.className, /medium/);
+  assert.match(textUzlu(riziko), /Střední/);
+  assert.ok(!vsechny(koren).some((e) => e.tag === 'details' && textUzlu(e).includes('Riziko A')), 'riziko není sbalené mezi neověřenými');
+});
+
+test('overlay: info vypadá jako informace (štítek Informace, neutrální třída), tvrzení, která nesedí, mají vlastní skupinu', () => {
+  const koren = stromVysledku(ODPOVED([MAM('info', 'info', 'Jen info'), MAM('nesmysl', 'high', 'Fyzikální nesmysl'), MAM('rozpor', 'medium', 'Rozpor v nabídce')]));
+  const info = naleztKartu(koren, 'Jen info');
+  assert.match(info.className, /info/);
+  assert.ok(!/medium|high|low/.test(info.className));
+  assert.match(textUzlu(info), /Informace/);
+  const hlavicky = vsechny(koren).filter((e) => e.tag === 'h4').map((e) => e.textContent);
+  assert.ok(hlavicky.includes('Tvrzení, která nesedí'), hlavicky.join());
+  assert.ok(hlavicky.includes('Rizika'), hlavicky.join());
+  const skupina = vsechny(koren).find((e) => e.className.split(' ').includes('skupina') && textUzlu(e).includes('Fyzikální nesmysl'));
+  assert.ok(skupina && textUzlu(skupina).includes('Rozpor v nabídce') && !textUzlu(skupina).includes('Jen info'));
+});
+
+test('overlay: stará odpověď bez nalezy se ukáže ze signalu (se závažností), prázdné nalezy při neprázdných signalech také', () => {
+  const sig = [{ titul: 'Starý signál', dukaz: 'd', zavaznost: 'low' }];
+  for (const odpoved of [{ stav: 'ok', semafor: 'zelená', shrnuti: 'S', jistota: 'střední', co_delat: [], signaly: sig }, { stav: 'ok', semafor: 'zelená', shrnuti: 'S', jistota: 'střední', co_delat: [], signaly: sig, nalezy: [] }]) {
+    const koren = stromVysledku(odpoved);
+    const karta = naleztKartu(koren, 'Starý signál');
+    assert.ok(karta);
+    assert.match(textUzlu(karta), /Nízká/);
+  }
+});
+
+test('overlay: bez nálezů a bez signálů se nevykreslí žádná skupina; text nálezu jde jen přes textContent', () => {
+  const koren = stromVysledku({ stav: 'ok', semafor: 'zelená', shrnuti: 'S', jistota: 'střední', co_delat: [], signaly: [], nalezy: [] });
+  assert.equal(vsechny(koren).filter((e) => e.tag === 'h4').length, 0);
+  assert.ok(!read('overlay.js').includes('innerHTML'));
+});
