@@ -4,86 +4,88 @@ const { normalizeExtraction } = require('../engine/llm');
 const { safetySignals, safetyGateQuery, safetyGateSignals } = require('../engine/safety');
 
 const X = (produkt) => normalizeExtraction({ produkt });
+// Úplné čtení stránky čtečkou; vložený text a screenshot jdou bez příznaku (neúplný vstup).
+const full = (x) => safetySignals(x, { uplny: true });
 
 test('bez kategorie a názvu → nezkontrolováno', () => {
-  assert.equal(safetySignals(X({})).status, 'unchecked');
+  assert.equal(full(X({})).status, 'unchecked');
 });
 
 test('elektronika bez zmínky o shodě → low signál', () => {
-  const r = safetySignals(X({ nazev: 'Powerbanka 20000 mAh', kategorie: 'elektronika' }));
+  const r = full(X({ nazev: 'Powerbanka 20000 mAh', kategorie: 'elektronika' }));
   assert.equal(r.status, 'ok');
   assert.equal(r.signals[0].id, 'ce_chybi');
   assert.equal(r.signals[0].severity, 'low');
 });
 
 test('dětské zboží bez zmínky o shodě → low (ce_chybi je vždy low)', () => {
-  const r = safetySignals(X({ nazev: 'Dětská hračka s baterií', kategorie: 'hračky' }));
+  const r = full(X({ nazev: 'Dětská hračka s baterií', kategorie: 'hračky' }));
   assert.equal(r.signals[0].severity, 'low');
 });
 
 test('se zmínkou o CE signál nevzniká', () => {
-  const r = safetySignals(X({ nazev: 'Nabíječka', tvrzeni_certifikace: ['CE'] }));
+  const r = full(X({ nazev: 'Nabíječka', tvrzeni_certifikace: ['CE'] }));
   assert.deepEqual(r.signals, []);
 });
 
 test('zboží bez povinného CE (triko) → bez signálů, ale zkontrolováno', () => {
-  const r = safetySignals(X({ nazev: 'Bavlněné triko', kategorie: 'oblečení' }));
+  const r = full(X({ nazev: 'Bavlněné triko', kategorie: 'oblečení' }));
   assert.equal(r.status, 'ok');
   assert.deepEqual(r.signals, []);
 });
 
 test('názvy bez diakritiky (Nabijecka USB) → ce_chybi', () => {
-  const r = safetySignals(X({ nazev: 'Nabijecka USB' }));
+  const r = full(X({ nazev: 'Nabijecka USB' }));
   assert.equal(r.signals[0].id, 'ce_chybi');
 });
 
 test('dětská hračka bez diakritiky → low', () => {
-  const r = safetySignals(X({ nazev: 'Detska hracka', kategorie: 'hracky' }));
+  const r = full(X({ nazev: 'Detska hracka', kategorie: 'hracky' }));
   assert.equal(r.signals[0].severity, 'low');
 });
 
 test('jen nesouvisející tvrzení (100% bavlna na nabíječce) → ce_chybi', () => {
-  const r = safetySignals(X({ nazev: 'Nabíječka', tvrzeni_certifikace: ['100% bavlna'] }));
+  const r = full(X({ nazev: 'Nabíječka', tvrzeni_certifikace: ['100% bavlna'] }));
   assert.equal(r.signals[0].id, 'ce_chybi');
 });
 
 test('EU conformity / prohlášení o shodě se počítá jako shoda', () => {
-  assert.deepEqual(safetySignals(X({ nazev: 'Nabíječka', tvrzeni_certifikace: ['EU conformity'] })).signals, []);
-  assert.deepEqual(safetySignals(X({ nazev: 'Nabíječka', tvrzeni_certifikace: ['Prohlášení o shodě'] })).signals, []);
+  assert.deepEqual(full(X({ nazev: 'Nabíječka', tvrzeni_certifikace: ['EU conformity'] })).signals, []);
+  assert.deepEqual(full(X({ nazev: 'Nabíječka', tvrzeni_certifikace: ['Prohlášení o shodě'] })).signals, []);
 });
 
 test('dětské oblečení → bez signálů (detsk není spouštěč CE)', () => {
-  const r = safetySignals(X({ nazev: 'Dětské oblečení', kategorie: 'oblečení' }));
+  const r = full(X({ nazev: 'Dětské oblečení', kategorie: 'oblečení' }));
   assert.equal(r.status, 'ok');
   assert.deepEqual(r.signals, []);
 });
 
 test('dětská postýlka → bez signálu', () => {
-  assert.deepEqual(safetySignals(X({ nazev: 'Dětská postýlka' })).signals, []);
+  assert.deepEqual(full(X({ nazev: 'Dětská postýlka' })).signals, []);
 });
 
 test('dětská hračka s baterií → low a text o hračkách', () => {
-  const s = safetySignals(X({ nazev: 'Dětská hračka s baterií', kategorie: 'hračky' })).signals[0];
+  const s = full(X({ nazev: 'Dětská hračka s baterií', kategorie: 'hračky' })).signals[0];
   assert.equal(s.severity, 'low');
   assert.match(s.evidence, /U hraček je označení CE povinné/);
 });
 
 test('Toy car → low se zněním o hračkách', () => {
-  const s = safetySignals(X({ nazev: 'Toy car' })).signals[0];
+  const s = full(X({ nazev: 'Toy car' })).signals[0];
   assert.equal(s.severity, 'low');
   assert.match(s.evidence, /U hraček je označení CE povinné/);
 });
 
 test('ce_chybi je low u všech kategorií (žádný medium ani high)', () => {
   for (const nazev of ['Toy car', 'Hračka', 'Nabíječka', 'USB kabel', 'LED pásek', 'Dron DJI Mini', 'Mobilní telefon']) {
-    const r = safetySignals(X({ nazev }));
+    const r = full(X({ nazev }));
     assert.equal(r.signals.length, 1, nazev);
     assert.equal(r.signals[0].id, 'ce_chybi', nazev);
     assert.equal(r.signals[0].severity, 'low', nazev);
   }
 });
 
-const ceChybi = (nazev, kategorie) => safetySignals(X({ nazev, kategorie })).signals.some((s) => s.id === 'ce_chybi');
+const ceChybi = (nazev, kategorie) => full(X({ nazev, kategorie })).signals.some((s) => s.id === 'ce_chybi');
 
 test('slovní kotvy: automobil, mobiliář a lampion nejsou spouštěč CE', () => {
   assert.equal(ceChybi('Automobil Škoda Octavia'), false);
@@ -111,7 +113,7 @@ test('slovní kotva: androns není dron', () => {
 
 test('hračka v ohýbaných tvarech (hračku, hračkou, hračkám, hraček) se pozná', () => {
   for (const nazev of ['Koupím hračku', 'Hra s hračkou', 'Dárek pro hračkám', 'Sada hraček', 'Plyšová hračka', 'Autíčka na hračky', 'Toys set']) {
-    const s = safetySignals(X({ nazev })).signals;
+    const s = full(X({ nazev })).signals;
     assert.equal(s.length, 1, nazev);
     assert.match(s[0].evidence, /U hraček je označení CE povinné/, nazev);
   }
@@ -119,53 +121,53 @@ test('hračka v ohýbaných tvarech (hračku, hračkou, hračkám, hraček) se p
 });
 
 test('Nabíječka bez tvrzení → low', () => {
-  const s = safetySignals(X({ nazev: 'Nabíječka' })).signals[0];
+  const s = full(X({ nazev: 'Nabíječka' })).signals[0];
   assert.equal(s.severity, 'low');
   assert.match(s.evidence, /obvykle povinné/);
 });
 
 test('Kabelka dámská → bez signálu (kabel nesmí chytat kabelku)', () => {
-  assert.deepEqual(safetySignals(X({ nazev: 'Kabelka dámská', kategorie: 'kabelky' })).signals, []);
+  assert.deepEqual(full(X({ nazev: 'Kabelka dámská', kategorie: 'kabelky' })).signals, []);
 });
 
 test('USB kabel → low ce_chybi', () => {
-  const s = safetySignals(X({ nazev: 'USB kabel' })).signals[0];
+  const s = full(X({ nazev: 'USB kabel' })).signals[0];
   assert.equal(s.id, 'ce_chybi');
   assert.equal(s.severity, 'low');
 });
 
 test('Kabely → low ce_chybi', () => {
-  assert.equal(safetySignals(X({ nazev: 'Kabely' })).signals[0].severity, 'low');
+  assert.equal(full(X({ nazev: 'Kabely' })).signals[0].severity, 'low');
 });
 
 test('Forma na led (led ve smyslu ledu) → bez signálu', () => {
-  assert.deepEqual(safetySignals(X({ nazev: 'Forma na led' })).signals, []);
+  assert.deepEqual(full(X({ nazev: 'Forma na led' })).signals, []);
 });
 
 test('LED pásek → low ce_chybi', () => {
-  const s = safetySignals(X({ nazev: 'LED pásek' })).signals[0];
+  const s = full(X({ nazev: 'LED pásek' })).signals[0];
   assert.equal(s.id, 'ce_chybi');
   assert.equal(s.severity, 'low');
 });
 
 test('Baterie do koupelny (baterie jako baterie na vodu) → bez signálu', () => {
-  assert.deepEqual(safetySignals(X({ nazev: 'Baterie do koupelny' })).signals, []);
+  assert.deepEqual(full(X({ nazev: 'Baterie do koupelny' })).signals, []);
 });
 
 test('Wireless headphones → low ce_chybi', () => {
-  assert.equal(safetySignals(X({ nazev: 'Wireless headphones' })).signals[0].severity, 'low');
+  assert.equal(full(X({ nazev: 'Wireless headphones' })).signals[0].severity, 'low');
 });
 
 test('Smartwatch → low ce_chybi', () => {
-  assert.equal(safetySignals(X({ nazev: 'Smartwatch' })).signals[0].severity, 'low');
+  assert.equal(full(X({ nazev: 'Smartwatch' })).signals[0].severity, 'low');
 });
 
 test('Charger 65W → low ce_chybi', () => {
-  assert.equal(safetySignals(X({ nazev: 'Charger 65W' })).signals[0].severity, 'low');
+  assert.equal(full(X({ nazev: 'Charger 65W' })).signals[0].severity, 'low');
 });
 
 test('Charger s CE v tvrzeních → bez signálu', () => {
-  assert.deepEqual(safetySignals(X({ nazev: 'Charger 65W', tvrzeni_certifikace: ['CE'] })).signals, []);
+  assert.deepEqual(full(X({ nazev: 'Charger 65W', tvrzeni_certifikace: ['CE'] })).signals, []);
 });
 
 // --- Safety Gate (slabý signál gated značkou) ---
@@ -261,7 +263,7 @@ test('safetyGateSignals: podivné tvary -> [] bez výjimky', () => {
 });
 
 test('safetySignals: status a ce_chybi beze změny, nezávisí na značce', () => {
-  const r = safetySignals(XB('Anker', 'A1263'));
+  const r = full(XB('Anker', 'A1263'));
   assert.equal(r.status, 'ok');
   assert.equal(r.signals[0].id, 'ce_chybi');
 });
@@ -330,7 +332,7 @@ test('"&" se v dotazu i při porovnání chová stejně (mezera)', () => {
 const XG = (gpsr, produkt = { nazev: 'Bavlněné triko' }) => normalizeExtraction({ produkt, gpsr });
 
 test('gpsr_chybi: jednou, i když chybí všechna tři pole; low riziko', () => {
-  const r = safetySignals(XG({ vyrobce_uveden: 'ne', adresa_vyrobce: 'ne', odpovedna_osoba_eu: 'ne' }));
+  const r = full(XG({ vyrobce_uveden: 'ne', adresa_vyrobce: 'ne', odpovedna_osoba_eu: 'ne' }));
   const g = r.signals.filter((s) => s.id === 'gpsr_chybi');
   assert.equal(g.length, 1);
   assert.equal(g[0].severity, 'low');
@@ -340,22 +342,53 @@ test('gpsr_chybi: jednou, i když chybí všechna tři pole; low riziko', () => 
 });
 
 test('gpsr_chybi: stačí jedno pole "ne"', () => {
-  assert.equal(safetySignals(XG({ vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ne' })).signals.filter((s) => s.id === 'gpsr_chybi').length, 1);
+  assert.equal(full(XG({ vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ne' })).signals.filter((s) => s.id === 'gpsr_chybi').length, 1);
 });
 
 test('gpsr: ano a neuvedeno (nelze posoudit) nález nevyvolají', () => {
-  assert.deepEqual(safetySignals(XG({ vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' })).signals, []);
-  assert.deepEqual(safetySignals(XG({ vyrobce_uveden: 'neuvedeno', adresa_vyrobce: 'neuvedeno', odpovedna_osoba_eu: 'neuvedeno' })).signals, []);
-  assert.deepEqual(safetySignals(normalizeExtraction({ produkt: { nazev: 'Bavlněné triko' } })).signals, []);
+  assert.deepEqual(full(XG({ vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' })).signals, []);
+  assert.deepEqual(full(XG({ vyrobce_uveden: 'neuvedeno', adresa_vyrobce: 'neuvedeno', odpovedna_osoba_eu: 'neuvedeno' })).signals, []);
+  assert.deepEqual(full(normalizeExtraction({ produkt: { nazev: 'Bavlněné triko' } })).signals, []);
 });
 
 test('gpsr_chybi se přidá vedle ce_chybi', () => {
-  const r = safetySignals(XG({ vyrobce_uveden: 'ne' }, { nazev: 'Nabíječka USB' }));
+  const r = full(XG({ vyrobce_uveden: 'ne' }, { nazev: 'Nabíječka USB' }));
   assert.deepEqual(r.signals.map((s) => s.id), ['ce_chybi', 'gpsr_chybi']);
 });
 
 test('safetySignals bez pole gpsr (ruční objekt) funguje', () => {
   const x = X({ nazev: 'Nabíječka USB' });
   delete x.gpsr;
-  assert.deepEqual(safetySignals(x).signals.map((s) => s.id), ['ce_chybi']);
+  assert.deepEqual(full(x).signals.map((s) => s.id), ['ce_chybi']);
+});
+
+// Nález 5 z code review (rozhodnutí D2): chybějící údaje jsou u neúplného vstupu jen info.
+test('neúplný vstup (text, screenshot, rozšíření): ce_chybi je info/nelze_ověřit a nepočítá se do skóre', () => {
+  for (const opts of [undefined, {}, { uplny: false }]) {
+    const s = safetySignals(X({ nazev: 'Powerbanka 20000 mAh', kategorie: 'elektronika' }), opts).signals;
+    assert.equal(s.length, 1);
+    assert.equal(s[0].id, 'ce_chybi');
+    assert.equal(s[0].severity, 'info');
+    assert.equal(s[0].druh, 'nelze_overit');
+    assert.match(s[0].evidence, /nemus|nemuselo|nemusí/);
+  }
+});
+
+test('neúplný vstup: gpsr_chybi je info/nelze_ověřit', () => {
+  const s = safetySignals(XG({ vyrobce_uveden: 'ne', adresa_vyrobce: 'ne', odpovedna_osoba_eu: 'ne' })).signals.filter((x) => x.id === 'gpsr_chybi');
+  assert.equal(s.length, 1);
+  assert.equal(s[0].severity, 'info');
+  assert.equal(s[0].druh, 'nelze_overit');
+});
+
+test('úplné čtení stránky čtečkou: ce_chybi a gpsr_chybi zůstávají low', () => {
+  const r = safetySignals(normalizeExtraction({ produkt: { nazev: 'Nabíječka' }, gpsr: { vyrobce_uveden: 'ne' } }), { uplny: true });
+  assert.deepEqual(r.signals.map((s) => [s.id, s.severity]), [['ce_chybi', 'low'], ['gpsr_chybi', 'low']]);
+});
+
+test('neúplný vstup: chybějící údaje spolu neudělají oranžovou (skóre 0)', () => {
+  const { computeVerdict } = require('../engine/scoring');
+  const r = safetySignals(normalizeExtraction({ produkt: { nazev: 'Nabíječka' }, gpsr: { vyrobce_uveden: 'ne' } }));
+  assert.equal(r.signals.length, 2);
+  assert.equal(computeVerdict(r.signals, { offer: 'ok', seller: 'ok', safety: 'ok' }).score, 0);
 });

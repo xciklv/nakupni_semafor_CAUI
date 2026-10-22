@@ -21,7 +21,11 @@ function safetyApplies(hay) {
 
 const SAFETY_GPSR_FIELDS = ['vyrobce_uveden', 'adresa_vyrobce', 'odpovedna_osoba_eu'];
 
-function safetySignals(x) {
+// opts.uplny: true jen u úplného čtení stránky čtečkou. U vloženého textu, screenshotu nebo rozšíření vidíme jen část nabídky, takže „nic nenalezeno“
+// je jen informace (info, do skóre se nepočítá), ne nízké riziko.
+function safetySignals(x, opts) {
+  const uplny = !!(opts && typeof opts === 'object' && opts.uplny === true);
+  const severity = uplny ? 'low' : 'info';
   const p = x.produkt;
   if (!p.kategorie && !p.nazev) return { status: 'unchecked', signals: [] };
   const hay = safetyNorm((p.kategorie || '') + ' ' + (p.nazev || ''));
@@ -30,20 +34,22 @@ function safetySignals(x) {
   if (safetyApplies(hay) && !claimsCe) {
     const toy = SAFETY_TOY_RE.test(hay);
     signals.push(signal({
-      id: 'ce_chybi', module: 'safety', severity: 'low',
+      id: 'ce_chybi', module: 'safety', severity, druh: uplny ? 'riziko' : 'nelze_overit',
       title: 'Nabídka nezmiňuje shodu s předpisy EU',
-      evidence: toy
+      evidence: (toy
         ? 'U hraček je označení CE povinné, nabídka o něm mlčí.'
-        : 'U této kategorie zboží je obvykle povinné označení CE, nabídka o něm mlčí.',
+        : 'U této kategorie zboží je obvykle povinné označení CE, nabídka o něm mlčí.')
+        + (uplny ? '' : ' Máme jen část nabídky, takže údaj nemusí chybět; ověřte ho na stránce nabídky.'),
       source: 'analýza nabídky',
     }));
   }
   const g = x.gpsr && typeof x.gpsr === 'object' ? x.gpsr : {};
   if (SAFETY_GPSR_FIELDS.some((k) => g[k] === 'ne')) {
     signals.push(signal({
-      id: 'gpsr_chybi', module: 'safety', severity: 'low', druh: 'riziko',
+      id: 'gpsr_chybi', module: 'safety', severity, druh: uplny ? 'riziko' : 'nelze_overit',
       title: 'Nabídka neuvádí údaje o výrobci požadované nařízením GPSR',
-      evidence: 'Nařízení EU o bezpečnosti výrobků (GPSR) vyžaduje u zboží uvést výrobce, jeho adresu a odpovědnou osobu v EU; nabídka některý z těchto údajů neuvádí.',
+      evidence: 'Nařízení EU o bezpečnosti výrobků (GPSR) vyžaduje u zboží uvést výrobce, jeho adresu a odpovědnou osobu v EU; nabídka některý z těchto údajů neuvádí.'
+        + (uplny ? '' : ' Máme jen část nabídky, takže údaj nemusí chybět; ověřte ho na stránce nabídky.'),
       source: 'analýza nabídky',
     }));
   }

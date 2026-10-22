@@ -91,7 +91,8 @@ try {
 
   // Bez extrakce je x prázdné: nabídka a bezpečnost vrátí 'unchecked' samy, prodejce stále provede kontroly hostitele (eshop).
   const offer = offerSignals(x);
-  const safety = safetySignals(x);
+  // Chybějící údaje (CE, GPSR) se počítají do skóre jen při úplném čtení stránky čtečkou; vložený text a screenshot vidí jen část nabídky.
+  const safety = safetySignals(x, { uplny: !!fromReader });
   const gateQuery = safetyGateQuery(x);
   const [seller, gate, identity] = await Promise.all([
     sellerSignals({ x, rezim: ctx.rezim, host: ctx.host, fetchers, coiList, nowMs }),
