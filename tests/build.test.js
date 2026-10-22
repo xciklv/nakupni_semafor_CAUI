@@ -1669,7 +1669,8 @@ test('stránka volá API na adrese odvozené z location (včetně lomítka na ko
 
 test('stránka: poznámka o soukromí zmiňuje odeslání službě Anthropic, lokální ukládání průběhu a zdroje dat; bez odkazů', () => {
   const html = pageHtml();
-  assert.ok(html.includes('Pro vyhodnocení se screenshoty a odkazy odesílají službě Anthropic, která je může podle svých podmínek po omezenou dobu uchovávat; průběh kontroly se pro ladění ukládá lokálně v n8n.'));
+  assert.ok(html.includes('Pro vyhodnocení se službě Anthropic odesílá odkaz, text stránky včetně recenzí, screenshoty a obrázky z nabídky; Anthropic je může podle svých podmínek po omezenou dobu uchovávat.')); // úplné znění hlídá tests/web-privacy.test.js
+  assert.ok(html.includes('Průběh kontroly se pro ladění ukládá lokálně v n8n.'));
   assert.equal(/OpenAI|neukládáme/.test(html), false);
   assert.ok(html.includes('Zdroje dat: seznam rizikových e-shopů ČOI, ARES, RDAP (CZ.NIC), EU Safety Gate © Evropská unie (CC BY 4.0).'));
   assert.equal(/https?:\/\//.test(html), false);

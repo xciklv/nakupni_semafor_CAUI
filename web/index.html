@@ -109,7 +109,7 @@
     </div>
     <button id="go" type="submit">Zkontrolovat</button>
     <p id="cekani" class="hint">Kontrola může trvat až 30 sekund.</p>
-    <p class="hint">Pro vyhodnocení se screenshoty a odkazy odesílají službě Anthropic, která je může podle svých podmínek po omezenou dobu uchovávat; průběh kontroly se pro ladění ukládá lokálně v n8n. Smazat ho jde skriptem „npm run purge“ (popis v README); ukládání vypíná volba SAVE_EXECUTIONS=none při sestavení workflow. Výsledek je pomůcka, ne právní verdikt.</p>
+    <p class="hint">Pro vyhodnocení se službě Anthropic odesílá odkaz, text stránky včetně recenzí, screenshoty a obrázky z nabídky; Anthropic je může podle svých podmínek po omezenou dobu uchovávat. Ostatním službám (ARES, VIES, RDAP, Icecat, EU Safety Gate) jdou jen veřejné identifikátory, ne vaše texty. Průběh kontroly se pro ladění ukládá lokálně v n8n. Smazat ho jde skriptem „npm run purge“ (popis v README); ukládání vypíná volba SAVE_EXECUTIONS=none při sestavení workflow. Výsledek je pomůcka, ne právní verdikt.</p>
     <p class="hint zdroje">Zdroje dat: seznam rizikových e-shopů ČOI, ARES, RDAP (CZ.NIC), EU Safety Gate © Evropská unie (CC BY 4.0).</p>
   </form>
   <div id="out" aria-live="polite"></div>
