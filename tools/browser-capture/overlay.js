@@ -26,6 +26,8 @@ function nakupniKontrolaOverlay(stav) {
   box.append(zavrit, el('h3', 'Nákupní kontrola'));
   const tlacitko = (txt, akce, cls) => { const b = el('button', txt, cls); b.onclick = () => chrome.runtime.sendMessage({ akce }); return b; };
 
+  const MAX_KARET = 6; // zbytek skupiny je pod „+N dalších“, nic se neořezává
+  const sbalene = (nadpis, obsah) => { const d = el('details'); d.append(el('summary', nadpis), ...obsah); return d; };
   const SEVERITY = ['info', 'low', 'medium', 'high'];
   const STITEK = { info: 'Informace', low: 'Nízká', medium: 'Střední', high: 'Vysoká' };
   // Karta nálezu: štítek závažnosti, titul a důkaz. Co se nepodařilo ověřit (nelze_overit) nemá štítek ani barvu varování.
@@ -43,7 +45,7 @@ function nakupniKontrolaOverlay(stav) {
   const vykresliNalezy = (r) => {
     const signaly = (Array.isArray(r.signaly) ? r.signaly : []).filter((s) => s && typeof s === 'object');
     const nalezy = (Array.isArray(r.nalezy) ? r.nalezy : []).filter((n) => n && typeof n === 'object' && (n.titul || n.dukaz));
-    const skupina = (nadpis, seznam) => { if (!seznam.length) return; const g = el('div', null, 'skupina'); g.append(el('h4', nadpis), ...seznam.slice(0, 6).map((n) => karta(n, false))); box.append(g); };
+    const skupina = (nadpis, seznam) => { if (!seznam.length) return; const g = el('div', null, 'skupina'); g.append(el('h4', nadpis), ...seznam.slice(0, MAX_KARET).map((n) => karta(n, false))); if (seznam.length > MAX_KARET) g.append(sbalene('+' + (seznam.length - MAX_KARET) + ' dalších', seznam.slice(MAX_KARET).map((n) => karta(n, false)))); box.append(g); };
     if (Array.isArray(r.nalezy) && (nalezy.length || !signaly.length)) {
       skupina('Tvrzení, která nesedí', nalezy.filter((n) => n.druh === 'nesmysl' || n.druh === 'rozpor'));
       skupina('Rizika', nalezy.filter((n) => n.druh !== 'nesmysl' && n.druh !== 'rozpor' && n.druh !== 'nelze_overit'));
@@ -86,6 +88,8 @@ function nakupniKontrolaOverlay(stav) {
       const sem = ['zelená', 'oranžová', 'červená', 'šedá'].includes(r.semafor) ? r.semafor : 'šedá';
       box.append(el('span', { 'zelená': 'Nízké riziko', 'oranžová': 'Střední riziko', 'červená': 'Vysoké riziko', 'šedá': 'Nelze posoudit' }[sem], 'l ' + sem));
       box.append(el('p', String(r.shrnuti || '')), el('small', 'Jistota kontroly: ' + String(r.jistota || '')));
+      const nezkontrolovano = (Array.isArray(r.nezkontrolovano) ? r.nezkontrolovano : []).filter((x) => typeof x === 'string' && x.trim());
+      if (nezkontrolovano.length) box.append(el('p', 'Nezkontrolováno: ' + nezkontrolovano.join(', '), 'pozn'));
       vykresliNalezy(r);
       const ul = el('ul');
       (Array.isArray(r.co_delat) ? r.co_delat : []).forEach((t) => ul.append(el('li', String(t))));

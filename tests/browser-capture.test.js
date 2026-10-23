@@ -589,3 +589,33 @@ test('extract: obrázky na CDN si podpis a rozměry nechají a dva různé ?file
   assert.equal(r.odkaz, 'https://shop.cz/p?p=5');
   assert.deepEqual(r.obrazky.slice().sort(), ['https://cdn.example/img.php?file=a.jpg', 'https://cdn.example/img.php?file=b.jpg', 'https://cdn.shopify.com/x.jpg?v=9&width=800']);
 });
+
+// --- nález 8 (2. kolo): nezkontrolováno a žádné tiché ořezávání ---
+
+test('overlay: ukáže „Nezkontrolováno: …“ jako webovka, i u šedé bez jediného nálezu', () => {
+  const koren = stromVysledku({ stav: 'ok', semafor: 'šedá', shrnuti: 'S', jistota: 'nízká', co_delat: [], signaly: [], nalezy: [], nezkontrolovano: ['věrohodnost', 'obrázky'] });
+  assert.match(textUzlu(koren), /Nezkontrolováno: věrohodnost, obrázky/);
+});
+
+test('overlay: bez nezkontrolovano (nebo prázdné/nesmyslné) se řádek neukáže', () => {
+  for (const nezkontrolovano of [undefined, [], 'text', [5, null]]) {
+    const koren = stromVysledku({ stav: 'ok', semafor: 'zelená', shrnuti: 'S', jistota: 'vysoká', co_delat: [], signaly: [], nalezy: [], nezkontrolovano });
+    assert.doesNotMatch(textUzlu(koren), /Nezkontrolováno/);
+  }
+});
+
+test('overlay: víc než 6 nálezů ve skupině se neořízne, zbytek je pod „+N dalších“', () => {
+  const nalezy = Array.from({ length: 9 }, (_, i) => MAM('riziko', 'low', 'Riziko ' + i));
+  const koren = stromVysledku(ODPOVED(nalezy));
+  for (let i = 0; i < 9; i++) assert.ok(naleztKartu(koren, 'Riziko ' + i), 'chybí Riziko ' + i);
+  const det = vsechny(koren).find((e) => e.tag === 'details' && /\+3 dalších/.test(textUzlu(e)));
+  assert.ok(det, 'rozbalení se zbytkem');
+  assert.ok(textUzlu(det).includes('Riziko 8') && !textUzlu(det).includes('Riziko 0'));
+});
+
+test('overlay: i starší odpověď ze signalu se neořezává tiše', () => {
+  const signaly = Array.from({ length: 8 }, (_, i) => ({ titul: 'Signál ' + i, dukaz: 'd', zavaznost: 'low' }));
+  const koren = stromVysledku({ stav: 'ok', semafor: 'oranžová', shrnuti: 'S', jistota: 'střední', co_delat: [], signaly });
+  for (let i = 0; i < 8; i++) assert.ok(naleztKartu(koren, 'Signál ' + i));
+  assert.ok(vsechny(koren).some((e) => e.tag === 'details' && /\+2 dalších/.test(textUzlu(e))));
+});
