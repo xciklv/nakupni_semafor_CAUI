@@ -29,5 +29,8 @@ test('soukromí: průběh se ukládá lokálně v n8n, jde smazat a ukládání 
 
 test('soukromí: ostatním službám jdou jen veřejné identifikátory a výsledek není právní verdikt', () => {
   assert.match(upozorneni, /jen veřejné identifikátory/);
+  assert.ok(upozorneni.includes('Do veřejných registrů (ARES, VIES, RDAP, Icecat, EU Safety Gate)'));
+  assert.match(upozorneni, /značka či model z nabídky/);
+  assert.match(upozorneni, /nikdy vaše texty ani screenshoty/);
   assert.match(upozorneni, /ne právní verdikt/);
 });
