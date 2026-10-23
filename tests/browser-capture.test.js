@@ -562,3 +562,30 @@ test('overlay: bez nálezů a bez signálů se nevykreslí žádná skupina; tex
   assert.equal(vsechny(koren).filter((e) => e.tag === 'h4').length, 0);
   assert.ok(!read('overlay.js').includes('innerHTML'));
 });
+
+// --- nález 7 (2. kolo): odkaz přes allowlist, adresy obrázků jen bez sledovacích parametrů ---
+
+test('cleanUrl: identita produktu v běžných parametrech (p, pid, product, sku, item) zůstává, osobní parametry ne', () => {
+  for (const n of ['p', 'pid', 'product', 'sku', 'item', 'id', 'offerId']) {
+    assert.equal(cap.cleanUrl('https://shop.cz/index.php?' + n + '=123&fbclid=1&email=a%40b.cz&token=t&sid=s'), 'https://shop.cz/index.php?' + n + '=123', n);
+  }
+});
+
+test('cleanImageUrl: odstraní jen známé sledovací parametry, podepsané a rozměrové parametry CDN zůstanou', () => {
+  assert.equal(cap.cleanImageUrl('https://cdn.shopify.com/s/files/1/a.jpg?v=1699&width=800&utm_source=x&fbclid=1#x'), 'https://cdn.shopify.com/s/files/1/a.jpg?v=1699&width=800');
+  assert.equal(cap.cleanImageUrl('https://img.example.imgix.net/a.jpg?w=500&s=3f9a1c&gclid=1&msclkid=2'), 'https://img.example.imgix.net/a.jpg?w=500&s=3f9a1c');
+  assert.equal(cap.cleanImageUrl('https://img.kwcdn.com/product/a.jpg?imageView2/2/w/800/q/70&spm=a&share_token=t'), 'https://img.kwcdn.com/product/a.jpg?imageView2/2/w/800/q/70');
+  assert.equal(cap.cleanImageUrl('https://cdn.example/img.php?file=a.jpg&yclid=1&igshid=2&mc_eid=3&_gl=4'), 'https://cdn.example/img.php?file=a.jpg');
+  assert.equal(cap.cleanImageUrl('https://a.cz/1.jpg?spm=1&algo_pvid=2'), 'https://a.cz/1.jpg');
+  assert.equal(cap.cleanImageUrl('https://u:h@a.cz/1.jpg?Sig=abc'), 'https://a.cz/1.jpg?Sig=abc');
+  assert.equal(cap.cleanImageUrl('není adresa'), 'není adresa');
+});
+
+test('extract: obrázky na CDN si podpis a rozměry nechají a dva různé ?file= se nesloučí', () => {
+  const r = runExtract({
+    href: 'https://shop.cz/p?p=5&gclid=1', title: 'T', bodyText: 'Text',
+    meta: ['https://cdn.example/img.php?file=a.jpg&utm_source=x', 'https://cdn.example/img.php?file=b.jpg', 'https://cdn.shopify.com/x.jpg?v=9&width=800'],
+  });
+  assert.equal(r.odkaz, 'https://shop.cz/p?p=5');
+  assert.deepEqual(r.obrazky.slice().sort(), ['https://cdn.example/img.php?file=a.jpg', 'https://cdn.example/img.php?file=b.jpg', 'https://cdn.shopify.com/x.jpg?v=9&width=800']);
+});

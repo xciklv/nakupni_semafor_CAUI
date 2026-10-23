@@ -1,17 +1,29 @@
 // Čtení stránky: vkládá se do stránky (chrome.scripting.executeScript, svět ISOLATED) před každým čtením, proto je tu jen `function`
 // (`const`/`let` na nejvyšší úrovni by při druhém vložení do téže karty spadly na „already declared“). Jen čte DOM, nic neklikne ani nerozbaluje.
-// Čisté funkce cleanUrl, trimToSentences a dropPageChrome se testují v tests/browser-capture.test.js (module.exports na konci).
+// Čisté funkce cleanUrl, cleanImageUrl, trimToSentences a dropPageChrome se testují v tests/browser-capture.test.js (module.exports na konci).
 
 // Allowlist: z adresy zůstane jen host, cesta a parametry, které určují nabídku nebo variantu (např. Allegro offerId, Temu goods_id).
 // Všechno ostatní se zahodí, i neznámé parametry: sledovací (fbclid, msclkid, gclid, utm_*), relace a osobní (token, sid, e-mail), fragment
-// a přihlašovací údaje. Identifikátory v cestě (/item/123.html, /dp/ASIN) zůstávají. Používá se i pro adresy obrázků.
+// a přihlašovací údaje. Identifikátory v cestě (/item/123.html, /dp/ASIN) zůstávají. Jen pro odkaz na nabídku; adresy obrázků viz cleanImageUrl.
 function cleanUrl(url) {
   const raw = String(url == null ? '' : url).trim();
   let u;
   try { u = new URL(raw); } catch (e) { return raw; }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') return raw;
-  const allowed = /^(offerId|id|product_id|productId|id_product|goods_id|item_id|itemId|sku_id|variant|route)$/i;
+  const allowed = /^(offerId|id|p|pid|product|sku|item|product_id|productId|id_product|goods_id|item_id|itemId|sku_id|variant|route)$/i;
   const kept = u.search.replace(/^\?/, '').split('&').filter((p) => p && allowed.test(p.split('=')[0]));
+  return u.origin + u.pathname + (kept.length ? '?' + kept.join('&') : '');
+}
+
+// Adresa obrázku: odstraní jen známé sledovací parametry, fragment a přihlašovací údaje. Ostatní zůstane, protože u CDN je v query podpis,
+// rozměr nebo samotný obrázek (?v=, ?w=&s=, imageView2/…, ?file=a.jpg); allowlist by obrázky rozbil nebo sloučil.
+function cleanImageUrl(url) {
+  const raw = String(url == null ? '' : url).trim();
+  let u;
+  try { u = new URL(raw); } catch (e) { return raw; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return raw;
+  const tracking = /^(utm_.*|gclid|dclid|gbraid|wbraid|gad_source|fbclid|msclkid|yclid|igshid|mc_eid|mc_cid|_gl|pvid|scm|spm|algo_pvid|algo_exp_id|pdp_ext_f|pdp_npi|curPageLogUid|share_token)$/i;
+  const kept = u.search.replace(/^\?/, '').split('&').filter((p) => p && !tracking.test(p.split('=')[0]));
   return u.origin + u.pathname + (kept.length ? '?' + kept.join('&') : '');
 }
 
@@ -121,7 +133,7 @@ function nakupniKontrolaExtract() {
     if (!u || /^data:|\.svg(\?|$)|sprite|logo|icon|avatar|pixel|1x1/i.test(u)) return;
     try { u = new URL(u, location.href).href; } catch (e) { return; }
     if (!/^https:/.test(u)) return;
-    u = cleanUrl(u.replace(/_\d+x\d+[^/]*$/, '')); // AliExpress: varianty téhož obrázku (…jpg_960x960q75.jpg_.avif) sloučit na originál
+    u = cleanImageUrl(u.replace(/_\d+x\d+[^/]*$/, '')); // AliExpress: varianty téhož obrázku (…jpg_960x960q75.jpg_.avif) sloučit na originál
     if (u.length > MAX_OBRAZEK_URL) return;
     if (!kandidati.has(u) || kandidati.get(u) < skore) kandidati.set(u, skore);
   };
@@ -146,4 +158,4 @@ function nakupniKontrolaExtract() {
   return { odkaz, titulek, text: trimToSentences(text, LIMIT), obrazky, jsonld, vlozena, diagnostika: diag };
 }
 
-if (typeof module !== 'undefined') module.exports = { cleanUrl, trimToSentences, dropPageChrome, nakupniKontrolaExtract };
+if (typeof module !== 'undefined') module.exports = { cleanUrl, cleanImageUrl, trimToSentences, dropPageChrome, nakupniKontrolaExtract };
