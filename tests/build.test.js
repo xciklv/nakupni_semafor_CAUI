@@ -1133,11 +1133,11 @@ test('glue 03 kalibrace (g): ČOI, RDAP a ARES se požadují souběžně (všech
   const stub = (o) => {
     if (o.url.startsWith('https://coi.gov.cz/')) { started.push('coi'); return gate.then(() => coiHtml(150)); }
     if (o.url.startsWith('https://rdap.')) { started.push('rdap'); return gate.then(() => rdapIso(2005)); }
-    if (o.url.startsWith('https://ares.gov.cz/')) { started.push('ares'); return gate.then(() => ({ statusCode: 404, body: {} })); }
+    if (o.url.startsWith('https://ares.gov.cz/')) { started.push('ares'); return gate.then(() => ({ statusCode: 200, body: { obchodniJmeno: 'Alza.cz a.s.' } })); }
     throw new Error('neočekávaný požadavek ' + o.url);
   };
   const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'example.cz' };
-  const extract = NOTEBOOK({ prodejce: { ico: '27082440', kontakt_uveden: true } });
+  const extract = NOTEBOOK({ prodejce: { nazev: 'Alza.cz a.s.', ico: '27082440', kontakt_uveden: true } });
   const p = runGlue('03-moduly.js', { json: extract, nodes: { 'Vstup a načtení': ctx }, state: {}, httpStub: stub });
   const t0 = Date.now();
   while (started.length < 3 && Date.now() - t0 < 1000) await new Promise((r) => setTimeout(r, 5));

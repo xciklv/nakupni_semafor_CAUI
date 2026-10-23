@@ -112,6 +112,15 @@ function sellerWords(name) {
   return String(name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3);
 }
 
+// Shoda jména prodejce s jménem v registru: true, false, nebo null, když se nedá porovnat (jedno jméno chybí nebo nemá slovo delší než 3 znaky).
+// Tolerantní: bez diakritiky a velikosti písmen, právní forma a krátká slova nerozhodují, stačí slovo jednoho jména obsažené ve slově druhého.
+function sellerNameMatch(own, seen) {
+  const a = sellerWords(own);
+  const b = sellerWords(seen);
+  if (!a.length || !b.length) return null;
+  return a.some((w) => b.some((v) => v.includes(w) || w.includes(v)));
+}
+
 // Odpověď VIES je použitelná, má-li boolean isValid a nehlásí chybu členského státu (userError jiné než VALID/INVALID, např. MS_UNAVAILABLE).
 function sellerViesUsable(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v) || typeof v.isValid !== 'boolean') return false;
@@ -125,14 +134,18 @@ function sellerCompanyAgeDays(datumVzniku, nowMs) {
   return age !== null && age >= 0 ? age : null;
 }
 
-// Vrací { status, signals, external, skipped }: external = uspěl aspoň jeden externí zdroj (RDAP, ČOI, ARES, VIES),
+// Vrací { status, signals, external, skipped }: external = externí zdroj prodejce kladně potvrdil (ARES našel subjekt a jméno sedí, VIES isValid:true bez rozporu jména,
+// RDAP doména aspoň 180 dní stará, ČOI web na seznamu není) a žádný zdroj neřekl opak (ARES 404, zaniklý nebo nový subjekt, nesedící jméno, neplatné DIČ, mladá doména, seznam ČOI).
+// Odpověď, která nic nepotvrdí, je jen odpověď (modul prodejce je pak zkontrolovaný), ale external zůstává false.
 // skipped = zdroje, které se zkusily, ale nebyly dostupné. coiList smí být i promise (seznam ČOI se stahuje souběžně).
 // fetchers.vies(cc, cislo) vrací { isValid, name?, address? } (DIČ z x.prodejce.dic).
 async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
   const out = [];
   const skipped = [];
   let checks = 0;
-  let external = false;
+  let answered = false; // aspoň jeden externí zdroj odpověděl použitelně
+  let confirmed = false; // aspoň jeden externí zdroj prodejce kladně potvrdil
+  let contradicted = false; // některý externí zdroj řekl opak nebo nález nepotvrdil
   const add = (id, severity, title, evidence, source, hard = false) => out.push(signal({ id, module: 'seller', severity, title, evidence, source, hard }));
   const s = x.prodejce;
   const eshopHost = rezim === 'eshop' && !!host;
@@ -153,7 +166,8 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
     const age = rdapRes.ok ? rdapAgeDays(rdapRes.value, nowMs) : null;
     if (age != null) {
       checks++;
-      external = true;
+      answered = true;
+      if (age >= 180) confirmed = true; else contradicted = true;
       if (age < 30) add('domena_nova', 'high', 'Doména e-shopu je velmi nová', 'Doména ' + registrable(host) + ' byla zaregistrována ' + sellerAgo(age) + '.', 'RDAP');
       else if (age < 180) add('domena_mlada', 'medium', 'Doména e-shopu je mladá', 'Doména ' + registrable(host) + ' byla zaregistrována ' + sellerAgo(age) + '.', 'RDAP');
     } else skipped.push('RDAP (stáří domény)');
@@ -162,9 +176,9 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
     const list = coiRes.ok ? coiRes.value : null;
     if (list) {
       checks++;
-      external = true;
+      answered = true;
       const key = [host.toLowerCase().replace(/^www\./, ''), registrable(host)].find((k) => Object.prototype.hasOwnProperty.call(list, k));
-      if (key) add('coi_seznam', 'high', 'E-shop je na seznamu rizikových webů ČOI', list[key] || 'Web je uveden na seznamu České obchodní inspekce.', 'ČOI', true);
+      if (key) { contradicted = true; add('coi_seznam', 'high', 'E-shop je na seznamu rizikových webů ČOI', list[key] || 'Web je uveden na seznamu České obchodní inspekce.', 'ČOI', true); } else confirmed = true;
     } else skipped.push('seznam ČOI');
   }
 
@@ -175,12 +189,25 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
       // použitelná odpověď: null (404 = nenalezeno) nebo objekt; cokoli jiného (chyba, text, pole) je nedostupný zdroj
       if (aresRes.ok && (body === null || (typeof body === 'object' && !Array.isArray(body)))) {
         checks++;
-        external = true;
-        if (body === null) add('ico_neexistuje', 'low', 'IČO nenalezeno v českém registru ARES', 'IČO nebylo nalezeno v českém registru ARES; u zahraničních (např. slovenských) firem je to běžné.', 'ARES');
-        else if (typeof body.datumZaniku === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.datumZaniku)) add('subjekt_zanikl', 'high', 'Uvedený subjekt zanikl', (body.obchodniJmeno || s.ico) + ' zanikl dne ' + body.datumZaniku + '.', 'ARES');
+        answered = true;
+        if (body === null) { contradicted = true; add('ico_neexistuje', 'low', 'IČO nenalezeno v českém registru ARES', 'IČO nebylo nalezeno v českém registru ARES; u zahraničních (např. slovenských) firem je to běžné.', 'ARES'); }
+        else if (typeof body.datumZaniku === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.datumZaniku)) { contradicted = true; add('subjekt_zanikl', 'high', 'Uvedený subjekt zanikl', (body.obchodniJmeno || s.ico) + ' zanikl dne ' + body.datumZaniku + '.', 'ARES'); }
         else {
           const age = sellerCompanyAgeDays(body.datumVzniku, nowMs);
-          if (age !== null && age < 180) add('firma_nova', 'low','Firma vznikla nedávno', (body.obchodniJmeno || s.ico) + ' vznikla dne ' + body.datumVzniku.slice(0, 10) + ' (' + sellerAgo(age) + ').', 'ARES');
+          const young = age !== null && age < 180;
+          const same = sellerNameMatch(s.nazev, body.obchodniJmeno);
+          if (young) { contradicted = true; add('firma_nova', 'low', 'Firma vznikla nedávno', (body.obchodniJmeno || s.ico) + ' vznikla dne ' + body.datumVzniku.slice(0, 10) + ' (' + sellerAgo(age) + ').', 'ARES'); }
+          // Jakékoli existující IČO nic nedokazuje: kladné ověření vyžaduje, aby jméno v ARES sedělo s prodejcem.
+          if (same === false) {
+            contradicted = true;
+            out.push(signal({
+              id: 'ares_jmeno_nesedi', module: 'seller', severity: 'low', title: 'Jméno u IČO nesedí s prodejcem',
+              evidence: 'IČO ' + s.ico + ' patří podle ARES firmě ' + body.obchodniJmeno + ', prodejce se jmenuje ' + s.nazev + '.', source: 'ARES',
+              druh: 'rozpor', citace: s.nazev,
+              vysvetleni: 'Jméno firmy u uvedeného IČO se liší od jména prodejce. Může jít o jinou obchodní značku téže firmy, ale také o cizí IČO.',
+              otazka: 'Pod jakou firmou prodáváte a jaké je její IČO?',
+            }));
+          } else if (same === true && !young) confirmed = true;
         }
       } else skipped.push('ARES');
     }
@@ -190,13 +217,14 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
     const v = viesRes.ok ? viesRes.value : null;
     if (sellerViesUsable(v)) {
       checks++;
-      external = true;
+      answered = true;
       const shown = vat.cc + vat.cislo;
+      if (!v.isValid) contradicted = true;
       if (!v.isValid) add('dic_neplatne', 'low', 'DIČ není platné', 'DIČ ' + shown + ' není ve VIES vedeno jako platné (neplátci DPH tam vedeni nejsou; DIČ mohlo být přečteno z vloženého textu).', 'VIES');
       else {
-        const seen = sellerWords(v.name);
-        const own = sellerWords(s.nazev);
-        if (seen.length && own.length && !seen.some((w) => own.includes(w))) {
+        const same = sellerNameMatch(s.nazev, v.name);
+        if (same === false) contradicted = true; else confirmed = true;
+        if (same === false) {
           out.push(signal({
             id: 'dic_jmeno_nesedi', module: 'seller', severity: 'low', title: 'Jméno u DIČ nesedí s prodejcem',
             evidence: 'DIČ ' + shown + ' patří podle VIES firmě ' + v.name + ', prodejce se jmenuje ' + s.nazev + '.', source: 'VIES',
@@ -230,8 +258,8 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs }) {
   }
   // Bez externí kontroly (RDAP, ČOI, ARES) stojí verdikt jen na tom, co model vyčetl z nabídky. Marketplace a screenshoty externí zdroj nemají,
   // proto modul prodejce platí za zkontrolovaný (a verdikt smí být zelený) až při aspoň SELLER_MIN_CHECKS údajích o prodejci; s jedním údajem je nezkontrolovaný.
-  const enough = external || checks >= SELLER_MIN_CHECKS;
-  return { status: checks > 0 && enough ? 'ok' : 'unchecked', signals: out, external, skipped };
+  const enough = answered || checks >= SELLER_MIN_CHECKS;
+  return { status: checks > 0 && enough ? 'ok' : 'unchecked', signals: out, external: confirmed && !contradicted, skipped };
 }
 
 if (typeof module !== 'undefined') module.exports = { SELLER_EU, SELLER_SLD, registrable, parseCoi, rdapAgeDays, isValidIco, rdapUrl, sellerSignals };

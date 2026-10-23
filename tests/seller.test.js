@@ -106,7 +106,7 @@ test('IČO neexistuje v ARES → low s neutrálním zněním; neplatné IČO →
   assert.equal(ne.severity, 'low');
   assert.equal(ne.hard, false);
   assert.equal(ne.evidence, 'IČO nebylo nalezeno v českém registru ARES; u zahraničních (např. slovenských) firem je to běžné.');
-  assert.equal(a.external, true);
+  assert.equal(a.external, false, 'záporná odpověď registru ověření nepotvrzuje, ani když jiný zdroj (RDAP) vyšel dobře');
   assert.deepEqual(a.skipped, []);
   const b = await sellerSignals({ x: X({ ico: '12345678' }), rezim: 'eshop', host: 'x.cz', nowMs: NOW, fetchers: f, coiList: {} });
   assert.equal(b.signals.find((s) => s.id === 'ico_neplatne').severity, 'low');
@@ -242,7 +242,7 @@ const run = (prodejce, o = {}) => sellerSignals({ x: X(prodejce), rezim: 'eshop'
 test('external: RDAP, ČOI i ARES samostatně stačí; marketplace bez externích zdrojů je external:false', async () => {
   assert.equal((await run({}, { coiList: null })).external, true, 'RDAP');
   assert.equal((await run({}, { fetchers: { rdap: async () => { throw new Error('x'); } } })).external, true, 'ČOI');
-  const ares = await run({ ico: '27082440' }, { coiList: null, fetchers: { rdap: async () => { throw new Error('x'); }, ares: async () => ({}) } });
+  const ares = await run({ nazev: 'Alza.cz', ico: '27082440' }, { coiList: null, fetchers: { rdap: async () => { throw new Error('x'); }, ares: async () => ({ obchodniJmeno: 'Alza.cz a.s.' }) } });
   assert.equal(ares.external, true, 'ARES');
   const mp = await sellerSignals({ x: X({ hodnoceni: 4.8 }), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, fetchers: {}, coiList: null });
   assert.equal(mp.external, false);
@@ -395,8 +395,8 @@ test('VIES: isValid:false → dic_neplatne (low: neplátce DPH je normální, DI
   assert.equal(s.severity, 'low');
   assert.equal(s.source, 'VIES');
   assert.match(s.evidence, /CZ12345678/);
-  assert.equal(r.external, true);
-  assert.equal(r.status, 'ok');
+  assert.equal(r.external, false, 'neplatné DIČ není kladné ověření');
+  assert.equal(r.status, 'ok', 'VIES odpověděl, takže modul prodejce je zkontrolovaný');
 });
 
 test('VIES: platné DIČ, ale jméno nesdílí žádné slovo delší než 3 znaky → dic_jmeno_nesedi (low, rozpor)', async () => {
@@ -498,4 +498,78 @@ test('ARES: zaniklá firma dává subjekt_zanikl, ne firma_nova', async () => {
   const r = await run({ ico: '27082440' }, { fetchers: { rdap: OLD, ares: async () => ({ obchodniJmeno: 'X', datumVzniku: '2026-10-01', datumZaniku: '2026-10-10' }) } });
   assert.ok(ids(r).includes('subjekt_zanikl'));
   assert.ok(!ids(r).includes('firma_nova'));
+});
+
+// --- druhé kolo, nález 1: external platí jen pro kladnou odpověď registru ---
+const ARES_OK = async () => ({ obchodniJmeno: 'Alza.cz a.s.', datumVzniku: '1994-01-01' });
+const runExt = (prodejce, fetchers, o = {}) => sellerSignals({ x: XD(prodejce), rezim: 'marketplace', host: 'temu.com', nowMs: NOW, coiList: null, fetchers, ...o });
+
+test('external: ARES našel subjekt a jméno sedí s prodejcem → true', async () => {
+  const r = await runExt({ nazev: 'Alza.cz', ico: '27082440' }, { ares: ARES_OK });
+  assert.equal(r.external, true);
+  assert.deepEqual(ids(r), []);
+});
+
+test('external: ARES 404 (IČO nenalezeno) je ověření nepotvrzeno → false, modul prodejce ale odpověď dostal (status ok)', async () => {
+  const r = await runExt({ nazev: 'Alza.cz', ico: '27082440' }, { ares: async () => null });
+  assert.ok(ids(r).includes('ico_neexistuje'));
+  assert.equal(r.external, false);
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(r.skipped, []);
+});
+
+test('external: ARES najde cizí subjekt (jméno nesedí) → nález ares_jmeno_nesedi (low, rozpor) a external false', async () => {
+  const r = await runExt({ nazev: 'Super Shop Praha', ico: '27082440' }, { ares: ARES_OK });
+  const s = r.signals.find((x) => x.id === 'ares_jmeno_nesedi');
+  assert.ok(s);
+  assert.equal(s.severity, 'low');
+  assert.equal(s.druh, 'rozpor');
+  assert.equal(s.source, 'ARES');
+  assert.equal(s.citace, 'Super Shop Praha');
+  assert.ok(s.vysvetleni && s.otazka);
+  assert.equal(r.external, false);
+});
+
+test('ARES: jméno se porovnává tolerantně (diakritika, velikost, podřetězec, právní forma)', async () => {
+  for (const [own, ares] of [['ALZA', 'Alza.cz a.s.'], ['Alza.cz a.s.', 'ALZA'], ['Tchibo Praha s.r.o.', 'Tchibo Praha spol. s r.o.'], ['Rohlík', 'Rohlik.cz Finance a.s.'], ['Kosmas.cz', 'KOSMAS s.r.o.']]) {
+    const r = await runExt({ nazev: own, ico: '27082440' }, { ares: async () => ({ obchodniJmeno: ares }) });
+    assert.deepEqual(ids(r), [], own + ' / ' + ares);
+    assert.equal(r.external, true, own + ' / ' + ares);
+  }
+});
+
+test('external: ARES bez porovnatelného jména (prodejce bez názvu, odpověď bez obchodniJmeno) → false, bez nálezu', async () => {
+  for (const [nazev, body] of [[null, { obchodniJmeno: 'Alza.cz a.s.' }], ['Alza.cz', {}], ['ab', { obchodniJmeno: 'Alza.cz a.s.' }]]) {
+    const r = await runExt({ nazev, ico: '27082440' }, { ares: async () => body });
+    assert.equal(r.external, false, String(nazev));
+    assert.ok(!ids(r).includes('ares_jmeno_nesedi'), String(nazev));
+  }
+});
+
+test('external: VIES isValid:false, firma_nova a jméno u DIČ nesedí jsou ověření nepotvrzeno → false', async () => {
+  const bad = await runExt({ nazev: 'Firma Test', dic: 'CZ12345678' }, { vies: async () => ({ isValid: false, userError: 'INVALID' }) });
+  assert.equal(bad.external, false);
+  assert.equal(bad.status, 'ok');
+  const mismatch = await runExt({ nazev: 'Super Shop Praha', dic: 'CZ45274649' }, { vies: async () => ({ isValid: true, name: 'Alfa Beta s.r.o.' }) });
+  assert.equal(mismatch.external, false);
+  const day = (n) => new Date(NOW - n * 86400000).toISOString().slice(0, 10);
+  const nova = await runExt({ nazev: 'Alza.cz', ico: '27082440' }, { ares: async () => ({ obchodniJmeno: 'Alza.cz a.s.', datumVzniku: day(30) }) });
+  assert.ok(ids(nova).includes('firma_nova'));
+  assert.equal(nova.external, false);
+  const zanikl = await runExt({ nazev: 'Alza.cz', ico: '27082440' }, { ares: async () => ({ obchodniJmeno: 'Alza.cz a.s.', datumZaniku: '2020-01-01' }) });
+  assert.equal(zanikl.external, false);
+});
+
+test('external: mladá doména (RDAP) a e-shop na seznamu ČOI externí ověření nedají; stará doména a čistý seznam ano', async () => {
+  const young = await run({}, { coiList: null, fetchers: { rdap: async () => rdap('2026-09-01T00:00:00+00:00') } });
+  assert.equal(young.external, false);
+  const listed = await run({}, { fetchers: { rdap: async () => { throw new Error('x'); } }, coiList: { 'x.cz': 'Rizikový web' } });
+  assert.equal(listed.external, false);
+  assert.equal((await run({}, { coiList: null })).external, true);
+});
+
+test('external: záporná odpověď jednoho registru ruší kladnou odpověď jiného (stará doména + IČO nenalezeno → false)', async () => {
+  const r = await run({ nazev: 'Alza.cz', ico: '27082440' }, { fetchers: { rdap: OLD, ares: async () => null } });
+  assert.ok(ids(r).includes('ico_neexistuje'));
+  assert.equal(r.external, false);
 });

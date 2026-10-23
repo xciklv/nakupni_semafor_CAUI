@@ -106,3 +106,22 @@ test('glue 07: marketplace bez externího zdroje: zelená -> šedá, s externím
   const orange = await semafor({ marketplace: true, external: false, signals: [medium, low('a'), low('b')] });
   assert.equal(orange.verdict.semafor, 'oranžová');
 });
+
+// --- druhé kolo, nález 1: nález z registru (i low) věrohodnost prodejce nepotvrzuje ---
+test('glue 07: low nález ze zdroje ARES, VIES, RDAP nebo ČOI zakazuje větu o věrohodném prodejci; low z textu nabídky ne', async () => {
+  const flag = async (signals) => (await runSouhrn({ Moduly: mod({ external: true, signals }) })).out.prodejceDuveryhodny;
+  const reg = (source, extra = {}) => ({ ...sellerSig('low'), source, ...extra });
+  for (const source of ['ARES', 'VIES', 'RDAP', 'ČOI']) assert.equal(await flag([reg(source)]), false, source);
+  assert.equal(await flag([reg('analýza nabídky')]), true);
+  assert.equal(await flag([reg('ARES', { severity: 'info' })]), true, 'info se nepočítá');
+});
+
+test('glue 03: marketplace s IČO, které ARES nenajde, nebo s neplatným DIČ: external false, šedá, žádná věrohodnost prodejce', async () => {
+  const x = (prodejce) => openai({ produkt: { nazev: 'Powerbanka', kategorie: 'jiné', cena: 500, mena: 'CZK' }, prodejce, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' }, nerealne_parametry: [], nesoulady: [] });
+  const ctx = { zkratka: false, input: { text: 'Powerbanka za 500 Kč', screenshoty: [], url: null }, pageText: '', rezim: 'marketplace', host: 'temu.com', obsah: true };
+  const stub = (o) => (o.url.startsWith('https://ares.gov.cz/') ? { statusCode: 404, body: '' } : { statusCode: 200, body: { isValid: false, userError: 'INVALID' } });
+  const ares = await runModuly(x({ nazev: 'Shop', hodnoceni: 4.8, pocet_prodeju: 1200, ico: '27082440' }), ctx, { httpStub: stub });
+  assert.equal(ares.out.signals.some((s) => s.id === 'ico_neexistuje'), true);
+  assert.equal(ares.out.external, false);
+  assert.equal(ares.out.verdict.semafor, 'šedá');
+});

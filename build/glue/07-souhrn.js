@@ -28,7 +28,9 @@ try {
 
   // Prodejce působí věrohodně: aspoň jeden externí zdroj odpověděl (ARES, VIES, ČOI, RDAP), modul prodejce je zkontrolovaný a žádný jeho nález není střední, vysoký ani tvrdý.
   // Jen z údajů přečtených z nabídky modelem (bez externího zdroje) se věrohodnost prodejce netvrdí.
-  const prodejceDuveryhodny = m.external === true && m.moduly.seller === 'ok' && !m.signals.some((s) => s.module === 'seller' && (s.hard || s.severity === 'medium' || s.severity === 'high'));
+  // m.external je kladné potvrzení registru (viz sellerSignals); nález z registru (ARES, VIES, RDAP, ČOI) věrohodnost nepotvrzuje ani při low.
+  const REGISTRY = ['ARES', 'VIES', 'RDAP', 'ČOI'];
+  const prodejceDuveryhodny = m.external === true && m.moduly.seller === 'ok' && !m.signals.some((s) => s.module === 'seller' && (s.hard || s.severity === 'medium' || s.severity === 'high' || (s.severity !== 'info' && REGISTRY.includes(s.source))));
   const verdict = computeVerdict(signals, m.moduly, { external: m.external, skipped, marketplace: m.marketplace === true });
   return [{ json: { verdict, signals, prodejceDuveryhodny, llmRequest: buildExplainRequest(verdict, signals, MODEL_EXPLAIN, { prodejceDuveryhodny }) } }];
 } catch (e) {
