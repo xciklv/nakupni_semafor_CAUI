@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { normalizeDossier, dossierToExtraction, extractionToDossier, identifierCandidates, dossierPromptText } = require('../engine/dossier');
+const { normalizeDossier, dossierToExtraction, extractionToDossier, identifierCandidates, dossierPromptText, dossierGapsHideSafety } = require('../engine/dossier');
 const { normalizeExtraction } = require('../engine/llm');
 
 const fixture = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', n), 'utf8'));
@@ -192,4 +192,32 @@ test('extractionToDossier toleruje chybějící vstup i neúplnou extrakci', () 
   assert.equal(d.platforma, null);
   assert.deepEqual(d.cena, { castka: null, mena: null });
   assert.equal(extractionToDossier(null, null).nazev, null);
+});
+
+// Druhé kolo, nález 6: zmínka o CE v popisu a AI přehledu se počítá; mezery ve specifikaci a popisu čtení neúplné.
+test('dossierToExtraction: shoda s předpisy EU v popisu a AI přehledu se přenese do tvrzeni_certifikace (jen věta s CE, ne celý popis)', () => {
+  const d = cyklo();
+  d.popis = 'Skvělá svítilna. Výrobek nese označení CE a splňuje směrnice EU. Doprava zdarma.';
+  d.aiPrehled = ['Ultra-bright lamp, CE certified and RoHS compliant.', 'Hliníkové tělo.'];
+  const c = dossierToExtraction(d).produkt.tvrzeni_certifikace;
+  assert.ok(c.some((t) => /označení CE/.test(t)), c.join(' | '));
+  assert.ok(c.some((t) => /CE certified/.test(t)), c.join(' | '));
+  assert.ok(c.every((t) => t.length <= 250));
+  assert.ok(!c.some((t) => /Doprava zdarma|Hliníkové/.test(t)));
+  const bez = cyklo();
+  bez.popis = 'Skvělá svítilna. Doprava zdarma.';
+  bez.aiPrehled = [];
+  assert.ok(!dossierToExtraction(bez).produkt.tvrzeni_certifikace.some((t) => /Skvělá/.test(t)));
+});
+
+test('dossierGapsHideSafety: mezera o specifikaci, popisu, AI přehledu, zkrácení nebo celé stránce znamená neúplné čtení; ostatní mezery ne', () => {
+  const gap = (co, proc = 'x') => ({ mezery: [{ co, proc }] });
+  for (const co of ['Specifications: řádky za „View more“', 'popis prodejce', 'popis', 'specifikace', 'AI přehled', 'celá stránka', 'registrační údaje prodejce']) {
+    assert.equal(dossierGapsHideSafety(gap(co)), true, co);
+  }
+  assert.equal(dossierGapsHideSafety(gap('specifikace', 'zkráceno')), true);
+  for (const co of ['doba existence obchodu', 'Reviews: recenze za „View more“', 'recenze', 'stránka obchodu']) assert.equal(dossierGapsHideSafety(gap(co)), false, co);
+  assert.equal(dossierGapsHideSafety({ mezery: [] }), false);
+  assert.equal(dossierGapsHideSafety(null), false);
+  assert.equal(dossierGapsHideSafety(cyklo()), true, 'fixture má nerozbalené řádky specifikace');
 });

@@ -22,6 +22,9 @@ const DOS_MODEL_ROW_RE = /^(model|model number|číslo modelu|cislo modelu)$/i;
 const DOS_CERT_ROW_RE = /certif|conformity|prohlášení o shodě|prohlaseni o shode/i;
 const DOS_NEGATIVE_RE = /^(none|no|n|ne|nic|-|n\/a)$/i;
 const DOS_CERT_CLAIM_RE = /\bCE\b|RoHS|\bFCC\b/;
+// Mezera, kvůli které nelze o CE a GPSR říct „nabídka o něm mlčí“: chybí nebo je zkrácená specifikace, popis, AI přehled, registrační údaje prodejce nebo celá stránka.
+const DOS_SAFETY_GAP_RE = /specifikac|specification|popis|description|přehled|prehled|registra|celá stránka|cela stranka/i;
+const DOS_CERT_SENTENCE_MAX = 200;
 const DOS_RATING_PER_PERCENT = 20; // 100 % kladných hodnocení = 5 hvězd (škála extrakce 0 až 5)
 
 const dosStr = (v) => {
@@ -133,6 +136,25 @@ function normalizeDossier(raw) {
   return { ok: true, dossier: d };
 }
 
+// true, když dossier hlásí mezeru ve specifikaci, popisu, AI přehledu, registračních údajích nebo na celé stránce (čtení pro bezpečnostní kontrolu není úplné).
+function dossierGapsHideSafety(d) {
+  const gaps = d && typeof d === 'object' && Array.isArray(d.mezery) ? d.mezery : [];
+  return gaps.some((m) => m && typeof m.co === 'string' && DOS_SAFETY_GAP_RE.test(m.co));
+}
+
+// Věty z popisu a AI přehledu, které uvádějí CE (nebo RoHS, FCC): celý popis se do tvrzení o certifikaci nekopíruje.
+function dosCertSentences(d) {
+  const texts = [typeof d.popis === 'string' ? d.popis : ''].concat(dosArr(d.aiPrehled).filter((t) => typeof t === 'string'));
+  const out = [];
+  for (const text of texts) {
+    for (const sentence of text.split(/(?<=[.!?])\s+|\n+/)) {
+      const t = sentence.trim();
+      if (t && DOS_CERT_CLAIM_RE.test(t) && !out.includes(t)) out.push(t.length > DOS_CERT_SENTENCE_MAX ? t.slice(0, DOS_CERT_SENTENCE_MAX - 1) + '…' : t);
+    }
+  }
+  return out.slice(0, 5);
+}
+
 // Dossier -> ExtractionRecord (tvar výstupu normalizeExtraction), aby offer, seller a safety běžely beze změny. Co dossier neví, je null / [].
 function dossierToExtraction(d) {
   const x = dosObj(d);
@@ -147,7 +169,7 @@ function dossierToExtraction(d) {
   return normalizeExtraction({
     produkt: {
       nazev: x.nazev, znacka: rowValue(DOS_BRAND_ROW_RE), model: rowValue(DOS_MODEL_ROW_RE), cena: cena.castka, mena: cena.mena,
-      tvrzene_parametry: tvrzeni, tvrzeni_certifikace: certRows.concat(tvrzeni.filter((t) => DOS_CERT_CLAIM_RE.test(t))),
+      tvrzene_parametry: tvrzeni, tvrzeni_certifikace: certRows.concat(tvrzeni.filter((t) => DOS_CERT_CLAIM_RE.test(t))).concat(dosCertSentences(x)),
     },
     // Z dossieru složeného z textu se předá všechno, co o prodejci opravdu obsahuje (jen vyplněné údaje; nic se nedomýšlí).
     prodejce: { nazev: p.nazev, hodnoceni: proc != null && proc <= 100 ? dosRound(proc / DOS_RATING_PER_PERCENT, 100) : null, pocet_prodeju: dosNonNeg(p.pocetProdeju), ico: dosStr(p.ico), dic: dosStr(p.dic) },
@@ -283,4 +305,4 @@ function dossierPromptText(d, maxChars = DOS_PROMPT_MAX_DEFAULT) {
   return { text: lines.join('\n'), zkraceno };
 }
 
-if (typeof module !== 'undefined') module.exports = { normalizeDossier, dossierToExtraction, extractionToDossier, identifierCandidates, dossierPromptText };
+if (typeof module !== 'undefined') module.exports = { normalizeDossier, dossierGapsHideSafety, dossierToExtraction, extractionToDossier, identifierCandidates, dossierPromptText };

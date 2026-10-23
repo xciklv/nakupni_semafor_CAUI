@@ -22,7 +22,9 @@ test('glue 03: vložený text bez CE a s GPSR „ne“ dá info (nepočítá se 
   assert.equal(sev(text.out, 'ce_chybi'), 'info');
   assert.equal(sev(text.out, 'gpsr_chybi'), 'info');
 
-  const readerCtx = { zkratka: false, input: { text: '', screenshoty: [], url: null }, pageText: '', rezim: 'marketplace', host: 'aliexpress.com', obsah: true, dossier: fixtureJson('dossier-cyklosvitilna.json') };
+  const plny = fixtureJson('dossier-cyklosvitilna.json');
+  plny.gaps = [{ what: 'doba existence obchodu', why: 'na stránce obchodu není uvedena' }];
+  const readerCtx = { zkratka: false, input: { text: '', screenshoty: [], url: null }, pageText: '', rezim: 'marketplace', host: 'aliexpress.com', obsah: true, dossier: plny };
   const reader = await runModuly({}, readerCtx);
   assert.equal(sev(reader.out, 'ce_chybi'), 'low');
 });
@@ -126,4 +128,21 @@ test('glue 03: marketplace s IČO, které ARES nenajde, nebo s neplatným DIČ: 
   assert.equal(ares.out.verdict.semafor, 'šedá');
   assert.equal(ares.out.verdict.sellerUnverified, 'nepotvrzeno', 'registr se zkoušel a prodejce nepotvrdil');
   assert.equal(ares.out.sellerIds, true);
+});
+
+// --- druhé kolo, nález 6: uplny jen bez mezer ve specifikaci a popisu a s hledáním CE i v popisu ---
+test('glue 03: čtečkový dossier s mezerou ve specifikaci nebo popisu: ce_chybi jen info; bez takových mezer low; CE v popisu ho ruší', async () => {
+  const raw = fixtureJson('dossier-cyklosvitilna.json');
+  const sevOf = async (mod) => {
+    const d = JSON.parse(JSON.stringify(raw));
+    mod(d);
+    const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: null }, pageText: '', rezim: 'marketplace', host: 'aliexpress.com', obsah: true, dossier: d };
+    const { out } = await runModuly({}, ctx);
+    return (out.signals.find((s) => s.id === 'ce_chybi') || {}).severity;
+  };
+  const jenObchod = (d) => { d.gaps = [{ what: 'doba existence obchodu', why: 'na stránce obchodu není uvedena' }]; };
+  assert.equal(await sevOf(() => {}), 'info', 'fixture hlásí nerozbalené řádky specifikace');
+  assert.equal(await sevOf(jenObchod), 'low');
+  assert.equal(await sevOf((d) => { jenObchod(d); d.gaps.push({ what: 'popis prodejce', why: 'prázdný' }); }), 'info');
+  assert.equal(await sevOf((d) => { jenObchod(d); d.description = { ...d.description, aiOverview: { bullets: ['Lamp is CE certified.'] } }; }), undefined, 'CE v AI přehledu ce_chybi ruší');
 });
