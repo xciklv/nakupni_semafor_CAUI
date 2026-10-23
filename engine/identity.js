@@ -123,6 +123,18 @@ function idnBrandForms(brand) {
   return forms.filter((f) => f.length);
 }
 
+// Slova, která samotná značku nedělají, takže jako začátek delšího názvu značky se nepoužijí.
+const IDN_BRAND_STOP = ['the', 'a', 'an', 'new', 'pro', 'smart', 'mini', 'max', 'plus', 'home', 'group'];
+
+// Symetrické porovnání: kratší název značky je začátek nebo část delšího („LG“ a „LG Electronics“, „Sony“ a „Sony Mobile Communications“).
+// V textu nabídky stačí začátek názvu značky z katalogu (první slovo nesmí být obecné), uvedená značka může být celá, nebo část názvu z katalogu.
+function idnBrandInText(offerTokens, forms) {
+  return forms.some((f) => idnHasSeq(offerTokens, f) || (!IDN_BRAND_STOP.includes(f[0]) && f.length > 1 && idnHasSeq(offerTokens, f.slice(0, 1))));
+}
+function idnBrandsSame(stated, forms) {
+  return forms.some((f) => idnHasSeq(stated, f) || idnHasSeq(f, stated));
+}
+
 // Značka, kterou nabídka sama výslovně uvádí (řádek Značka / Brand ve specifikaci), nebo null.
 function idnOfferBrand(d) {
   const row = (Array.isArray(d.specifikace) ? d.specifikace : []).find((r) => r && typeof r.nazev === 'string' && IDN_BRAND_ONLY_RE.test(r.nazev.trim()) && idnStr(r.hodnota));
@@ -188,11 +200,11 @@ async function identitySignals({ dossier, fetchers }) {
     if (i >= 0) {
       const ice = results[i];
       const forms = ice.znacka ? idnBrandForms(ice.znacka) : [];
-      const brandOk = forms.some((f) => idnHasSeq(offer, f));
+      const brandOk = idnBrandInText(offer, forms);
       const codeOk = ice.kodVyrobce && idnHasSeq(offer, idnTokens(ice.kodVyrobce));
       if (!brandOk && !codeOk) {
         const stated = idnOfferBrand(d);
-        const differs = stated && forms.length && !forms.some((f) => idnHasSeq(idnTokens(stated), f));
+        const differs = stated && forms.length && !idnBrandsSame(idnTokens(stated), forms);
         signals.push(idnMismatchSignal(lookup[i], d, ice, differs && explicit.includes(lookup[i]) ? stated : null));
       }
     }

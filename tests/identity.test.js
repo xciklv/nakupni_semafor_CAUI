@@ -209,3 +209,28 @@ test('texty nálezů projdou filtrem obviňování', async () => {
   assert.equal(r.signals.length, 2);
   for (const s of r.signals) for (const t of [s.title, s.evidence, s.citace, s.vysvetleni, s.otazka]) assert.ok(!llmAccuses(t || ''), t);
 });
+
+// Druhé kolo, nález 10: porovnání značky je symetrické (kratší tvar je začátek nebo část delšího).
+const iceBrand = (Brand) => ({ msg: 'OK', data: { GeneralInfo: { Brand, BrandPartCode: 'ZZ-1', Title: Brand + ' výrobek' } } });
+
+test('značka v nabídce „LG“ a v Icecatu „LG Electronics“ (i opačně) je shoda: žádný nález, ani při výslovném EAN', async () => {
+  const cases = [
+    ['LG Electronics', { nazev: 'Televize OLED 55', specifikace: [{ nazev: 'Značka', hodnota: 'LG' }] }],
+    ['LG Electronics', { nazev: 'LG televize OLED 55' }],
+    ['Sony Mobile Communications', { nazev: 'Telefon', specifikace: [{ nazev: 'Brand', hodnota: 'Sony' }] }],
+    ['Sony', { nazev: 'Telefon', specifikace: [{ nazev: 'Brand', hodnota: 'Sony Mobile Communications' }] }],
+    ['Samsung Electronics', { nazev: 'Telefon', specifikace: [{ nazev: 'Značka', hodnota: 'SAMSUNG' }] }],
+  ];
+  for (const [brand, over] of cases) {
+    const r = await identitySignals({ dossier: dossier({ ...over, identifikatory: [ean('8710103997122')] }), fetchers: recorder(iceBrand(brand)).fetchers });
+    assert.deepEqual(r.signals, [], brand + ' / ' + JSON.stringify(over));
+  }
+});
+
+test('opravdu jiná značka zůstává rozporem (medium jen s výslovným EAN a značkou v nabídce, jinak low); kratší název je vždy shoda', async () => {
+  const d = (over) => dossier({ identifikatory: [ean('8710103997122')], ...over });
+  const jina = await identitySignals({ dossier: d({ nazev: 'Telefon', specifikace: [{ nazev: 'Značka', hodnota: 'Nokia' }] }), fetchers: recorder(iceBrand('LG Electronics')).fetchers });
+  assert.deepEqual(jina.signals.map((s) => [s.id, s.severity]), [['identifikator_nesedi', 'medium']]);
+  const bezZnacky = await identitySignals({ dossier: d({ nazev: 'Telefon' }), fetchers: recorder(iceBrand('LG Electronics')).fetchers });
+  assert.deepEqual(bezZnacky.signals.map((s) => [s.id, s.severity]), [['identifikator_nesedi', 'low']]);
+});
