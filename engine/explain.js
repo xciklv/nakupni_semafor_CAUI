@@ -27,10 +27,12 @@ const EXPLAIN_ZELENA_VAROVANI = /nekup\w*|nedoporuc\w*|nedokoncuj\w*|nakup radej
 // Nezkontrolované moduly následované nedostupnými zdroji ('prodejce: seznam ČOI'); chybějící/špatné pole se toleruje.
 // Přeskočené zdroje jiných modulů než prodejce (ostatní se píší jako „prodejce: <zdroj>“).
 const EXPLAIN_SKIPPED_OTHER = { 'ověření věrohodnosti': 'ověření věrohodnosti', 'analýza obrázků': 'analýza obrázků', Icecat: MODULE_NAMES.identity + ': Icecat' };
+const EXPLAIN_SELLER_UNVERIFIED = MODULE_NAMES.seller + ': nebyl ověřen v registru';
 function explainUnchecked(verdict) {
   const mods = Array.isArray(verdict.unchecked) ? verdict.unchecked : [];
   const skipped = Array.isArray(verdict.skipped) ? verdict.skipped.filter((x) => typeof x === 'string' && x) : [];
-  return mods.map((k) => MODULE_NAMES[k]).concat(skipped.map((x) => (Object.hasOwn(EXPLAIN_SKIPPED_OTHER, x) ? EXPLAIN_SKIPPED_OTHER[x] : MODULE_NAMES.seller + ': ' + x)));
+  const list = mods.map((k) => MODULE_NAMES[k]).concat(skipped.map((x) => (Object.hasOwn(EXPLAIN_SKIPPED_OTHER, x) ? EXPLAIN_SKIPPED_OTHER[x] : MODULE_NAMES.seller + ': ' + x)));
+  return verdict.sellerUnverified === true ? list.concat([EXPLAIN_SELLER_UNVERIFIED]) : list;
 }
 
 // Výchozí model vysvětlení: Claude Haiku 5.5 (krátký český text z hotového verdiktu). Build ho může přepsat (LLM_MODEL_EXPLAIN).
@@ -117,6 +119,7 @@ function fallbackAdvice(verdict) {
   const nedostupne = Array.isArray(verdict.skipped) && verdict.skipped.length > 0;
   // Přeskočený modul, který bránil zelené (věrohodnost, obrázky, identita), se v šedém textu pojmenuje.
   const blocked = (Array.isArray(verdict.skipped) ? verdict.skipped : []).filter((x) => Object.hasOwn(EXPLAIN_SKIPPED_OTHER, x)).map((x) => (x === 'Icecat' ? MODULE_NAMES.identity : EXPLAIN_SKIPPED_OTHER[x]));
+  if (verdict.sellerUnverified === true) blocked.push('prodejce nebyl ověřen v registru');
   const shrnuti = verdict.semafor === 'šedá' || !table[verdict.semafor]
     ? (blocked.length ? 'Zatím nelze říct, že je riziko nízké: nezkontrolovalo se ' + blocked.join(', ') + '.' : t[0] + (nedostupne ? ' Údaje jsou neúplné, některý zdroj nebyl dostupný.' : ''))
     : t[0];

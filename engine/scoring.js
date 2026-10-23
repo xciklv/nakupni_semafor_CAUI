@@ -5,7 +5,8 @@ const MODULE_KEYS = ['offer', 'seller', 'safety'];
 // Nedostupné zdroje prodejce (ČOI, ARES, VIES, RDAP) zelenou dál nebrání, jen snižují jistotu.
 const GREEN_BLOCKING_SKIPPED = ['ověření věrohodnosti', 'analýza obrázků', 'Icecat'];
 
-// opts: { external: bool (uspěl aspoň jeden externí zdroj), skipped: string[] (zdroje, které se zkusily, ale nebyly dostupné) }
+// opts: { external: bool (uspěl aspoň jeden externí zdroj), skipped: string[] (zdroje, které se zkusily, ale nebyly dostupné),
+//   marketplace: bool (nabídka z tržiště: bez externího ověření prodejce, tj. ARES, VIES, ČOI nebo RDAP, nesmí být zelená) }
 function computeVerdict(signals, modules, opts = {}) {
   const o = opts && typeof opts === 'object' ? opts : {};
   const okCount = MODULE_KEYS.filter((k) => modules[k] === 'ok').length;
@@ -24,8 +25,11 @@ function computeVerdict(signals, modules, opts = {}) {
   if (hard || score >= 6) semafor = 'červená';
   else if (score >= 3 && (elevated || score >= 4)) semafor = 'oranžová';
   else semafor = allOk && !skipped.some((x) => GREEN_BLOCKING_SKIPPED.includes(x)) ? 'zelená' : 'šedá';
+  // Na tržišti prodejce z textových údajů nic neověřuje: zelená jen z nálezů bez externího ověření prodejce se mění na šedou (oranžová a červená zůstávají).
+  const sellerUnverified = semafor === 'zelená' && o.marketplace === true && o.external !== true;
+  if (sellerUnverified) semafor = 'šedá';
   const unchecked = MODULE_KEYS.filter((k) => modules[k] !== 'ok');
-  return { semafor, score, confidence, unchecked, skipped };
+  return { semafor, score, confidence, unchecked, skipped, ...(sellerUnverified ? { sellerUnverified: true } : {}) };
 }
 
 if (typeof module !== 'undefined') module.exports = { computeVerdict, GREEN_BLOCKING_SKIPPED };

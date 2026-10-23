@@ -454,3 +454,14 @@ test('buildResponse: šedá po přeskočené věrohodnosti nese v nezkontrolovan
   assert.deepEqual(r.nezkontrolovano, ['ověření věrohodnosti']);
   assert.match(r.shrnuti, /ověření věrohodnosti/);
 });
+
+// Marketplace bez ověření prodejce: šedá to řekne.
+test('šedá kvůli neověřenému prodejci na marketplace: text i nezkontrolovano to pojmenují', () => {
+  const v = computeVerdict([], OK3, { external: false, marketplace: true });
+  const r = buildResponse({ verdict: v, signals: [] });
+  assert.equal(r.semafor, 'šedá');
+  assert.match(r.shrnuti, /prodejce nebyl ověřen v registru/);
+  assert.ok(r.nezkontrolovano.includes('prodejce: nebyl ověřen v registru'));
+  assert.ok(!/bezpečn|v pořádku/i.test(r.shrnuti));
+  assert.ok(JSON.parse(buildExplainRequest(v, []).messages[0].content).nezkontrolovano.includes('prodejce: nebyl ověřen v registru'));
+});

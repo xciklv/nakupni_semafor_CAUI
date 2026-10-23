@@ -77,3 +77,32 @@ test('glue 07 (D3): věrohodnost bez dat k posouzení (bezDat) zelenou nebrání
   const ok = await runSouhrn({});
   assert.equal(ok.out.verdict.semafor, 'zelená');
 });
+
+// --- marketplace: zelená jen s externím ověřením prodejce ---
+test('glue 03: marketplace + prodejce ok z textových údajů bez externího zdroje: šedá; e-shop beze změny', async () => {
+  const x = openai({ produkt: { nazev: 'Powerbanka', kategorie: 'jiné', cena: 500, mena: 'CZK' }, prodejce: { nazev: 'Shop', hodnoceni: 4.8, pocet_prodeju: 1200 }, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' }, nerealne_parametry: [], nesoulady: [] });
+  const ctx = (rezim, host) => ({ zkratka: false, input: { text: 'Powerbanka za 500 Kč, prodejce Shop 4,8 hvězdy, 1200 prodejů', screenshoty: [], url: null }, pageText: '', rezim, host, obsah: true });
+  const mp = await runModuly(x, ctx('marketplace', null));
+  assert.equal(mp.out.moduly.seller, 'ok');
+  assert.equal(mp.out.external, false);
+  assert.equal(mp.out.verdict.semafor, 'šedá');
+  assert.equal(mp.out.verdict.sellerUnverified, true);
+  assert.equal(mp.out.marketplace, true);
+  const nezn = await runModuly(x, ctx('neznámé', null));
+  assert.equal(nezn.out.verdict.semafor, 'zelená');
+  assert.equal(nezn.out.marketplace, false);
+});
+
+test('glue 07: marketplace bez externího zdroje: zelená -> šedá, s externím zdrojem zelená, oranžová zůstává', async () => {
+  const semafor = async (m, nodes = {}) => (await runSouhrn({ Moduly: mod(m), ...nodes })).out;
+  const bez = await semafor({ marketplace: true, external: false });
+  assert.equal(bez.verdict.semafor, 'šedá');
+  assert.equal(bez.verdict.sellerUnverified, true);
+  assert.deepEqual(payload(bez).nezkontrolovano, ['prodejce: nebyl ověřen v registru']);
+  assert.equal((await semafor({ marketplace: true, external: true })).verdict.semafor, 'zelená');
+  assert.equal((await semafor({ marketplace: false, external: false })).verdict.semafor, 'zelená');
+  const medium = { id: 'm', module: 'offer', severity: 'medium', title: 't', evidence: 'e', source: 'x', hard: false, druh: 'riziko', citace: null, vysvetleni: null, otazka: null, vypocet: null, jistota: null, odkazy: [] };
+  const low = (id) => ({ ...medium, id, severity: 'low' });
+  const orange = await semafor({ marketplace: true, external: false, signals: [medium, low('a'), low('b')] });
+  assert.equal(orange.verdict.semafor, 'oranžová');
+});

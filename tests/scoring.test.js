@@ -202,3 +202,30 @@ test('přeskočený modul nic nemění na oranžové a červené (nálezy mají 
   assert.equal(computeVerdict([s('medium'), s('low'), s('low')], ALL_OK, { skipped }).semafor, 'oranžová');
   assert.equal(computeVerdict([s('high'), s('high')], ALL_OK, { skipped }).semafor, 'červená');
 });
+
+// Marketplace: zelená jen s externím ověřením prodejce (ARES, VIES, ČOI, RDAP); jinak nejvýš šedá.
+test('marketplace bez externího ověření prodejce: zelená se mění na šedou a označí důvod', () => {
+  const v = computeVerdict([], ALL_OK, { external: false, marketplace: true });
+  assert.equal(v.semafor, 'šedá');
+  assert.equal(v.sellerUnverified, true);
+  assert.equal(computeVerdict([s('low')], ALL_OK, { marketplace: true }).semafor, 'šedá');
+});
+
+test('marketplace s externím ověřením prodejce může být zelená', () => {
+  const v = computeVerdict([], ALL_OK, { external: true, marketplace: true });
+  assert.equal(v.semafor, 'zelená');
+  assert.equal(v.sellerUnverified, undefined);
+});
+
+test('e-shop a neurčený režim se nemění: zelená i bez externího zdroje', () => {
+  assert.equal(computeVerdict([], ALL_OK, { external: false, marketplace: false }).semafor, 'zelená');
+  assert.equal(computeVerdict([], ALL_OK, {}).semafor, 'zelená');
+  assert.equal(computeVerdict([], ALL_OK).sellerUnverified, undefined);
+});
+
+test('marketplace bez externího ověření nepřehodí oranžovou ani červenou na šedou', () => {
+  assert.equal(computeVerdict([s('medium'), s('low'), s('low')], ALL_OK, { marketplace: true }).semafor, 'oranžová');
+  assert.equal(computeVerdict([s('high'), s('high')], ALL_OK, { marketplace: true }).semafor, 'červená');
+  assert.equal(computeVerdict([s('low', { hard: true })], ALL_OK, { marketplace: true }).semafor, 'červená');
+  assert.equal(computeVerdict([s('medium'), s('low'), s('low')], ALL_OK, { marketplace: true }).sellerUnverified, undefined);
+});

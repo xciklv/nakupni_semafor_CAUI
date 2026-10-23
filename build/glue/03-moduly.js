@@ -103,9 +103,10 @@ try {
   const signals = [...offer.signals, ...seller.signals, ...identity.signals, ...safety.signals, ...gate];
   const moduly = { offer: offer.status, seller: seller.status, safety: safety.status };
   const skipped = (coiStale ? seller.skipped.concat(['seznam ČOI (neaktuální)']) : seller.skipped).concat(identity.skipped);
-  const verdict = computeVerdict(signals, moduly, { external: seller.external, skipped });
+  const marketplace = ctx.rezim === 'marketplace';
+  const verdict = computeVerdict(signals, moduly, { external: seller.external, skipped, marketplace });
   // Souhrn přepočítá verdikt po věrohodnosti a obrázcích; potřebuje k tomu stavy modulů a zda uspěl externí zdroj.
-  return [{ json: { verdict, signals, dossier, x, moduly, external: seller.external, mameObrazky: Array.isArray(dossier.obrazky) && dossier.obrazky.length > 0 } }];
+  return [{ json: { verdict, signals, dossier, x, moduly, external: seller.external, marketplace, mameObrazky: Array.isArray(dossier.obrazky) && dossier.obrazky.length > 0 } }];
 } catch (e) {
   // Degradace místo pádu: bez dat z modulů vznikne šedý verdikt a běh pokračuje k vysvětlení.
   const moduly = { offer: 'unchecked', seller: 'unchecked', safety: 'unchecked' };
