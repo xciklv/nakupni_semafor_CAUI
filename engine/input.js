@@ -9,6 +9,8 @@ const INP_B64_RE = /^[A-Za-z0-9+/]+={0,2}$/; // čisté base64 bez prefixu a bí
 const SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'cutt.ly', 'rebrand.ly', 's.click.aliexpress.com', 'a.aliexpress.com', 'temu.to'];
 const MARKETPLACES = ['temu.com', 'aliexpress.com', 'aliexpress.us', 'allegro.cz', 'allegro.pl', 'amazon.com', 'amazon.de', 'amazon.pl', 'ebay.com', 'ebay.de', 'shein.com', 'joom.com', 'vinted.cz'];
 const INP_MAX_HTML = 2000000;
+// Vstup bez odkazu (vložený text, screenshot): tržiště se pozná z názvu (celé slovo) nebo z typické fráze nabídky (Allegro: „Super prodejce“, „doporučuje 94,7 %“).
+const INP_MARKETPLACE_RE = /(?:^|[^a-z0-9])(?:allegro|aliexpress|ali express|temu|amazon|ebay|shein|alibaba|wish|joom|vinted)(?![a-z0-9])|super prodejce|doporučuje\s+\d+(?:[.,]\d+)?\s*%/i;
 const INP_PORTS = ['', '80', '443'];
 const INP_MAX_URL = 2048;
 const INP_ASCII_RE = /^[\x21-\x5b\x5d-\x7e]+$/; // tisknutelné ASCII bez mezery a bez zpětného lomítka
@@ -170,4 +172,12 @@ function checkQuota(state, nowMs, max) {
   return { ok: true };
 }
 
-if (typeof module !== 'undefined') module.exports = { normalizeUrl, validateInput, htmlToText, checkQuota };
+// Je nabídka z tržiště? Odkaz určuje sám (tržiště ano, e-shop ne, i když text tržiště zmiňuje); bez odkazu rozhoduje text nebo platforma z extrakce.
+function detectMarketplace(o) {
+  const x = o && typeof o === 'object' ? o : {};
+  if (x.rezim === 'marketplace') return true;
+  if (x.rezim === 'eshop') return false;
+  return [x.text, x.pageText, x.platforma].some((t) => typeof t === 'string' && INP_MARKETPLACE_RE.test(t));
+}
+
+if (typeof module !== 'undefined') module.exports = { normalizeUrl, validateInput, htmlToText, checkQuota, detectMarketplace };

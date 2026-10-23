@@ -104,7 +104,8 @@ try {
   const signals = [...offer.signals, ...seller.signals, ...identity.signals, ...safety.signals, ...gate];
   const moduly = { offer: offer.status, seller: seller.status, safety: safety.status };
   const skipped = (coiStale ? seller.skipped.concat(['seznam ČOI (neaktuální)']) : seller.skipped).concat(identity.skipped);
-  const marketplace = ctx.rezim === 'marketplace';
+  // Tržiště: z odkazu, a bez odkazu z textu nebo z platformy, kterou poznala extrakce (screenshot).
+  const marketplace = detectMarketplace({ rezim: ctx.rezim, text: ctx.input && ctx.input.text, pageText: ctx.pageText, platforma: x.produkt && x.produkt.platforma });
   // Čtečkový dossier IČO ani DIČ prodejce nenese (kolektor je nedodává), takže u marketplace přes čtečku se registr nezkouší; verdikt to řekne pravdivě.
   const sellerIds = !!(x.prodejce && (x.prodejce.ico || x.prodejce.dic));
   const verdict = computeVerdict(signals, moduly, { external: seller.external, skipped, marketplace, sellerIds });

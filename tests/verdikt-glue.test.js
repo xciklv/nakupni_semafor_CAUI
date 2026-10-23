@@ -146,3 +146,39 @@ test('glue 03: čtečkový dossier s mezerou ve specifikaci nebo popisu: ce_chyb
   assert.equal(await sevOf((d) => { jenObchod(d); d.gaps.push({ what: 'popis prodejce', why: 'prázdný' }); }), 'info');
   assert.equal(await sevOf((d) => { jenObchod(d); d.description = { ...d.description, aiOverview: { bullets: ['Lamp is CE certified.'] } }; }), undefined, 'CE v AI přehledu ce_chybi ruší');
 });
+
+// --- marketplace bez odkazu: text nebo screenshot s tržištěm ---
+const extrakce = (produkt = {}, prodejce = {}) => openai({ produkt: { nazev: 'Powerbanka', kategorie: 'jiné', cena: 500, mena: 'CZK', ...produkt }, prodejce: { nazev: 'Shop', hodnoceni: 4.7, pocet_prodeju: 1200, ...prodejce }, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' }, nerealne_parametry: [], nesoulady: [] });
+const vstup = (text, screenshoty = []) => ({ zkratka: false, input: { text, screenshoty, url: null }, pageText: '', rezim: 'neznámé', host: null, obsah: true });
+const ALLEGRO_TEXT = fs.readFileSync(path.join(__dirname, '..', 'eval', 'fixtures', 'allegro-oneblade.txt'), 'utf8');
+
+test('glue 03: Allegro text bez odkazu a bez externího ověření: nejvýš šedá; text kabelu a text bez znaků tržiště zůstávají zelené', async () => {
+  const allegro = await runModuly(extrakce(), vstup(ALLEGRO_TEXT));
+  assert.equal(allegro.out.marketplace, true);
+  assert.equal(allegro.out.external, false);
+  assert.equal(allegro.out.verdict.semafor, 'šedá');
+  assert.equal(allegro.out.verdict.sellerUnverified, 'bez_udaju');
+  const kabel = await runModuly(extrakce(), vstup('USB-C kabel 1 m, 60 W. Cena 149 Kč. Prodejce: Kabely CZ s.r.o. Produkt nese označení CE.'));
+  assert.equal(kabel.out.marketplace, false);
+  assert.equal(kabel.out.verdict.semafor, 'zelená');
+});
+
+test('glue 03: screenshot bez odkazu, extrakce pozná AliExpress (produkt.platforma): šedá; bez platformy beze změny', async () => {
+  const shot = [{ mime: 'image/png', data: 'AAAA' }];
+  const ali = await runModuly(extrakce({ platforma: 'AliExpress' }), vstup('', shot));
+  assert.equal(ali.out.marketplace, true);
+  assert.equal(ali.out.verdict.semafor, 'šedá');
+  const bez = await runModuly(extrakce({ platforma: '' }), vstup('', shot));
+  assert.equal(bez.out.marketplace, false);
+  assert.equal(bez.out.verdict.semafor, 'zelená');
+});
+
+test('glue 03: e-shop s odkazem se nemění ani při zmínce tržiště v textu; oranžová na tržišti zůstává oranžová', async () => {
+  const eshop = { ...vstup('Doprava jako na Allegro'), rezim: 'eshop', host: 'example.cz', input: { text: 'Doprava jako na Allegro', screenshoty: [], url: { rezim: 'eshop', host: 'example.cz' } } };
+  const e = await runModuly(extrakce(), eshop);
+  assert.equal(e.out.marketplace, false);
+  const orange = await runModuly(extrakce({ cena: 150, referencni_cena_odhad: { min: 800, max: 1200, mena: 'CZK' } }, { hodnoceni: 3.0 }), vstup(ALLEGRO_TEXT));
+  assert.equal(orange.out.marketplace, true);
+  assert.notEqual(orange.out.verdict.semafor, 'šedá');
+  assert.notEqual(orange.out.verdict.semafor, 'zelená');
+});

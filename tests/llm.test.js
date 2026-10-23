@@ -295,7 +295,7 @@ test('schéma extrakce je validní pro Structured Outputs a odpovídá tvaru z p
   checkStrict(schema, '$');
   assert.deepEqual(Object.keys(schema.properties).sort(), ['gpsr', 'nerealne_parametry', 'nesoulady', 'obrazky', 'prodejce', 'produkt', 'recenze']);
   assert.deepEqual(Object.keys(schema.properties.produkt.properties).sort(),
-    ['cena', 'ean', 'kategorie', 'kod_vyrobce', 'mena', 'model', 'nazev', 'referencni_cena_odhad', 'tvrzene_parametry', 'tvrzeni_certifikace', 'znacka']);
+    ['cena', 'ean', 'kategorie', 'kod_vyrobce', 'mena', 'model', 'nazev', 'platforma', 'referencni_cena_odhad', 'tvrzene_parametry', 'tvrzeni_certifikace', 'znacka']);
   assert.deepEqual(Object.keys(schema.properties.prodejce.properties).sort(),
     ['dic', 'hodnoceni', 'ico', 'kontakt_uveden', 'nazev', 'pocet_prodeju', 'podminky_uvedeny', 'provozovatel_uveden', 'stari_obchodu_dny', 'zeme_odeslani']);
   assert.deepEqual(Object.keys(schema.properties.recenze.properties).sort(), ['genericke', 'pocet', 'podobne_texty', 'prumer', 'vsechny_5_hvezd']);
@@ -484,4 +484,14 @@ test('normalizeExtraction: gpsr.* je ano, ne nebo null; chybějící objekt dá 
   const none = { vyrobce_uveden: null, adresa_vyrobce: null, odpovedna_osoba_eu: null };
   assert.deepEqual(normalizeExtraction({}).gpsr, none);
   assert.deepEqual(normalizeExtraction({ gpsr: 'ne' }).gpsr, none);
+});
+
+test('schéma extrakce: produkt.platforma je obyčejný string (bez unionu), prompt ji popisuje a normalizeExtraction ji čistí', () => {
+  const req = buildExtractRequest(input({ text: 'x' }), '');
+  assert.deepEqual(req.output_config.format.schema.properties.produkt.properties.platforma, { type: 'string' });
+  assert.ok(countUnions(req.output_config.format.schema) <= 16);
+  assert.match(req.system, /platforma: název tržiště/);
+  assert.equal(normalizeExtraction({ produkt: { platforma: ' AliExpress ' } }).produkt.platforma, 'AliExpress');
+  assert.equal(normalizeExtraction({ produkt: { platforma: '' } }).produkt.platforma, null);
+  assert.equal(normalizeExtraction({}).produkt.platforma, null);
 });

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { normalizeUrl, validateInput, htmlToText, checkQuota } = require('../engine/input');
+const { normalizeUrl, validateInput, htmlToText, checkQuota, detectMarketplace } = require('../engine/input');
 const { runInRealisticSandbox, createRealisticContext, FORBIDDEN_GLOBALS } = require('./sandbox');
 
 const ASCII_DUVOD = 'neplatný odkaz (použijte adresu v ASCII tvaru nebo vložte text či screenshot)';
@@ -511,4 +511,31 @@ test('validateInput: bez obrázků a JSON-LD vrací prázdné hodnoty', () => {
   const r = validateInput(OBR_BODY);
   assert.deepEqual(r.input.obrazky, []);
   assert.equal(r.input.jsonld, '');
+});
+
+// Vstup bez odkazu (vložený text, screenshot): tržiště se pozná z textu nebo z extrakce.
+test('detectMarketplace: odkaz na tržiště je marketplace, odkaz na e-shop nikdy (ani když text zmiňuje tržiště)', () => {
+  assert.equal(detectMarketplace({ rezim: 'marketplace', text: '' }), true);
+  assert.equal(detectMarketplace({ rezim: 'eshop', text: 'Allegro bezpečný nákup, Super prodejce' }), false);
+  assert.equal(detectMarketplace({ rezim: 'eshop', platforma: 'AliExpress' }), false);
+});
+
+test('detectMarketplace: vstup bez odkazu s názvem tržiště nebo typickou frází nabídky je marketplace', () => {
+  const alle = fs.readFileSync(path.join(__dirname, '..', 'eval', 'fixtures', 'allegro-oneblade.txt'), 'utf8');
+  assert.equal(detectMarketplace({ rezim: 'neznámé', text: alle }), true);
+  for (const t of ['Prodejce: X, Super prodejce, doporučuje 94,7 %.', 'Koupeno na AliExpress, doručení za 3 týdny', 'Temu: Free shipping', 'Amazon Prime nabídka', 'eBay Buyer Protection', 'Shein sada', 'Alibaba.com dodavatel', 'Wish']) {
+    assert.equal(detectMarketplace({ rezim: 'neznámé', text: t }), true, t);
+  }
+  assert.equal(detectMarketplace({ rezim: 'neznámé', text: '', platforma: 'AliExpress' }), true, 'z extrakce screenshotu');
+  assert.equal(detectMarketplace({ rezim: 'neznámé', text: '', pageText: 'Sold by X on Temu' }), true);
+});
+
+test('detectMarketplace: obyčejný text, e-shop bez zmínky o tržišti a nesmysly se nemění', () => {
+  const kabel = 'USB-C kabel 1 m, nylonový oplet, 60 W, 3 A. Cena 149 Kč vč. DPH. Prodejce: Kabely CZ s.r.o., IČO 12345679. Produkt nese označení CE.';
+  assert.equal(detectMarketplace({ rezim: 'neznámé', text: kabel }), false);
+  assert.equal(detectMarketplace({ rezim: 'neznámé', text: '' }), false);
+  assert.equal(detectMarketplace({ rezim: 'neznámé' }), false);
+  assert.equal(detectMarketplace({ rezim: 'neznámé', text: 'Whishlist, Temuco a Amazonka nejsou tržiště', platforma: 'Alza' }), false, 'jen celá slova');
+  assert.equal(detectMarketplace({ rezim: 'neznámé', text: 'Hodnocení doporučuje 3 lidé' }), false);
+  assert.equal(detectMarketplace(null), false);
 });
