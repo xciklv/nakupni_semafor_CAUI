@@ -1155,7 +1155,7 @@ test('glue 03 kalibrace (g): ČOI, RDAP a ARES se požadují souběžně (všech
 test('glue 03 kalibrace: verdikt nese skipped a Moduly neposílají dál nic navíc', async () => {
   const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'example.cz' };
   const { out } = await runGlue('03-moduly.js', { json: NOTEBOOK(), nodes: { 'Vstup a načtení': ctx }, state: {}, httpStub: coiFailStub() });
-  assert.deepEqual(Object.keys(out).sort(), ['dossier', 'external', 'mameObrazky', 'marketplace', 'moduly', 'signals', 'verdict', 'x']);
+  assert.deepEqual(Object.keys(out).sort(), ['dossier', 'external', 'mameObrazky', 'marketplace', 'moduly', 'sellerIds', 'signals', 'verdict', 'x']);
   assert.deepEqual(Object.keys(out.verdict).sort(), ['confidence', 'score', 'semafor', 'skipped', 'unchecked']);
   assert.deepEqual(out.verdict.skipped, ['seznam ČOI']);
   assert.deepEqual(await nezk(out), ['prodejce: seznam ČOI']);

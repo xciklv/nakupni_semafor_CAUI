@@ -86,7 +86,7 @@ test('glue 03: marketplace + prodejce ok z textových údajů bez externího zdr
   assert.equal(mp.out.moduly.seller, 'ok');
   assert.equal(mp.out.external, false);
   assert.equal(mp.out.verdict.semafor, 'šedá');
-  assert.equal(mp.out.verdict.sellerUnverified, true);
+  assert.equal(mp.out.verdict.sellerUnverified, 'bez_udaju');
   assert.equal(mp.out.marketplace, true);
   const nezn = await runModuly(x, ctx('neznámé', null));
   assert.equal(nezn.out.verdict.semafor, 'zelená');
@@ -97,8 +97,8 @@ test('glue 07: marketplace bez externího zdroje: zelená -> šedá, s externím
   const semafor = async (m, nodes = {}) => (await runSouhrn({ Moduly: mod(m), ...nodes })).out;
   const bez = await semafor({ marketplace: true, external: false });
   assert.equal(bez.verdict.semafor, 'šedá');
-  assert.equal(bez.verdict.sellerUnverified, true);
-  assert.deepEqual(payload(bez).nezkontrolovano, ['prodejce: nebyl ověřen v registru']);
+  assert.equal(bez.verdict.sellerUnverified, 'bez_udaju');
+  assert.deepEqual(payload(bez).nezkontrolovano, ['prodejce: nelze ověřit v rejstřících (v nabídce není IČO ani DIČ)']);
   assert.equal((await semafor({ marketplace: true, external: true })).verdict.semafor, 'zelená');
   assert.equal((await semafor({ marketplace: false, external: false })).verdict.semafor, 'zelená');
   const medium = { id: 'm', module: 'offer', severity: 'medium', title: 't', evidence: 'e', source: 'x', hard: false, druh: 'riziko', citace: null, vysvetleni: null, otazka: null, vypocet: null, jistota: null, odkazy: [] };
@@ -124,4 +124,6 @@ test('glue 03: marketplace s IČO, které ARES nenajde, nebo s neplatným DIČ: 
   assert.equal(ares.out.signals.some((s) => s.id === 'ico_neexistuje'), true);
   assert.equal(ares.out.external, false);
   assert.equal(ares.out.verdict.semafor, 'šedá');
+  assert.equal(ares.out.verdict.sellerUnverified, 'nepotvrzeno', 'registr se zkoušel a prodejce nepotvrdil');
+  assert.equal(ares.out.sellerIds, true);
 });

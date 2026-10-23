@@ -455,13 +455,24 @@ test('buildResponse: šedá po přeskočené věrohodnosti nese v nezkontrolovan
   assert.match(r.shrnuti, /ověření věrohodnosti/);
 });
 
-// Marketplace bez ověření prodejce: šedá to řekne.
-test('šedá kvůli neověřenému prodejci na marketplace: text i nezkontrolovano to pojmenují', () => {
+// Marketplace bez ověření prodejce: šedá to řekne pravdivě a nesliby screenshot.
+test('šedá na marketplace bez IČO a DIČ: prodejce nelze ověřit v rejstřících, platformní hodnocení jsou jen údaj z nabídky, co_delat neslibuje screenshot', () => {
   const v = computeVerdict([], OK3, { external: false, marketplace: true });
   const r = buildResponse({ verdict: v, signals: [] });
   assert.equal(r.semafor, 'šedá');
-  assert.match(r.shrnuti, /prodejce nebyl ověřen v registru/);
-  assert.ok(r.nezkontrolovano.includes('prodejce: nebyl ověřen v registru'));
+  assert.match(r.shrnuti, /prodejce na marketplace nelze ověřit v rejstřících/);
+  assert.match(r.shrnuti, /hodnocení a počet prodejů jsou jen údaje z nabídky/);
+  assert.ok(!/nebyl ověřen v registru/.test(r.shrnuti), 'ověření se nezkoušelo, takže se o něm nemluví');
+  assert.deepEqual(r.nezkontrolovano, ['prodejce: nelze ověřit v rejstřících (v nabídce není IČO ani DIČ)']);
+  assert.ok(!/screenshot|vložte/i.test(r.co_delat.join(' ')), r.co_delat.join(' | '));
   assert.ok(!/bezpečn|v pořádku/i.test(r.shrnuti));
-  assert.ok(JSON.parse(buildExplainRequest(v, []).messages[0].content).nezkontrolovano.includes('prodejce: nebyl ověřen v registru'));
+  assert.deepEqual(JSON.parse(buildExplainRequest(v, []).messages[0].content).nezkontrolovano, r.nezkontrolovano);
+});
+
+test('šedá na marketplace s IČO nebo DIČ, které registr nepotvrdil: říká to a také neslibuje screenshot', () => {
+  const v = computeVerdict([], OK3, { external: false, marketplace: true, sellerIds: true });
+  const r = buildResponse({ verdict: v, signals: [] });
+  assert.match(r.shrnuti, /prodejce se nepodařilo potvrdit v registru/);
+  assert.deepEqual(r.nezkontrolovano, ['prodejce: registr (ARES, VIES) ho nepotvrdil']);
+  assert.ok(!/screenshot|vložte/i.test(r.co_delat.join(' ')));
 });

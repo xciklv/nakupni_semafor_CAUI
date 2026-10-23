@@ -104,9 +104,11 @@ try {
   const moduly = { offer: offer.status, seller: seller.status, safety: safety.status };
   const skipped = (coiStale ? seller.skipped.concat(['seznam ČOI (neaktuální)']) : seller.skipped).concat(identity.skipped);
   const marketplace = ctx.rezim === 'marketplace';
-  const verdict = computeVerdict(signals, moduly, { external: seller.external, skipped, marketplace });
+  // Čtečkový dossier IČO ani DIČ prodejce nenese (kolektor je nedodává), takže u marketplace přes čtečku se registr nezkouší; verdikt to řekne pravdivě.
+  const sellerIds = !!(x.prodejce && (x.prodejce.ico || x.prodejce.dic));
+  const verdict = computeVerdict(signals, moduly, { external: seller.external, skipped, marketplace, sellerIds });
   // Souhrn přepočítá verdikt po věrohodnosti a obrázcích; potřebuje k tomu stavy modulů a zda uspěl externí zdroj.
-  return [{ json: { verdict, signals, dossier, x, moduly, external: seller.external, marketplace, mameObrazky: Array.isArray(dossier.obrazky) && dossier.obrazky.length > 0 } }];
+  return [{ json: { verdict, signals, dossier, x, moduly, external: seller.external, marketplace, sellerIds, mameObrazky: Array.isArray(dossier.obrazky) && dossier.obrazky.length > 0 } }];
 } catch (e) {
   // Degradace místo pádu: bez dat z modulů vznikne šedý verdikt a běh pokračuje k vysvětlení.
   const moduly = { offer: 'unchecked', seller: 'unchecked', safety: 'unchecked' };

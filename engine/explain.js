@@ -11,6 +11,7 @@ const SYSTEM_EXPLAIN = [
   'Nikdy netvrď, že nabídka nebo prodejce je bezpečný nebo v pořádku, pokud semafor není "zelená". Pokud je semafor "červená", nikdy kupujícímu nedoporuč koupi.',
   'Pole druh říká, o jaký nález jde: nesmysl (tvrzení v nabídce nedává smysl), rozpor (údaje si odporují), riziko, nelze_overit (jen se nepodařilo ověřit, není to podezření).',
   'Když je prodejce_duveryhodny true a mezi signály je druh nesmysl nebo rozpor, shrnutí řekne, že prodejce působí věrohodně, text nabídky ale obsahuje rozpor, a doporučí prodejce kontaktovat s otázkou. Nikdy neříkej, že jde o podvod. Když je prodejce_duveryhodny false, o věrohodnosti prodejce nic netvrď.',
+  'Když nezkontrolovano říká, že prodejce nelze ověřit v rejstřících nebo ho registr nepotvrdil, nikdy neraď vložit screenshot ani další údaje (zelenou to neodemkne); radi jen opatrnou platbu a že výsledek je orientační.',
   'Vrať pouze JSON: {"shrnuti": "1-2 věty", "co_delat": ["krátká rada", "..."]} (nejvýše 4 rady).',
 ].join('\n');
 
@@ -27,12 +28,20 @@ const EXPLAIN_ZELENA_VAROVANI = /nekup\w*|nedoporuc\w*|nedokoncuj\w*|nakup radej
 // Nezkontrolované moduly následované nedostupnými zdroji ('prodejce: seznam ČOI'); chybějící/špatné pole se toleruje.
 // Přeskočené zdroje jiných modulů než prodejce (ostatní se píší jako „prodejce: <zdroj>“).
 const EXPLAIN_SKIPPED_OTHER = { 'ověření věrohodnosti': 'ověření věrohodnosti', 'analýza obrázků': 'analýza obrázků', Icecat: MODULE_NAMES.identity + ': Icecat' };
-const EXPLAIN_SELLER_UNVERIFIED = MODULE_NAMES.seller + ': nebyl ověřen v registru';
+// Pravdivý důvod šedé na marketplace: bez IČO a DIČ se registr ani nezkoušel; s nimi ho zkusil a prodejce nepotvrdil.
+const EXPLAIN_SELLER_UNVERIFIED = {
+  bez_udaju: { nezkontrolovano: MODULE_NAMES.seller + ': nelze ověřit v rejstřících (v nabídce není IČO ani DIČ)', shrnuti: 'prodejce na marketplace nelze ověřit v rejstřících, hodnocení a počet prodejů jsou jen údaje z nabídky',
+    rady: ['Prodejce na marketplace nelze ověřit v rejstřících; platformní hodnocení jsou jen údaj z nabídky.', 'Plaťte způsobem s ochranou kupujícího (kartou nebo přes platformu) a uschovejte si potvrzení objednávky.', 'Do rozhodnutí berte výsledek jen jako orientační.'] },
+  nepotvrzeno: { nezkontrolovano: MODULE_NAMES.seller + ': registr (ARES, VIES) ho nepotvrdil', shrnuti: 'prodejce se nepodařilo potvrdit v registru',
+    rady: ['Uvedené IČO nebo DIČ se v registru nepodařilo spárovat s prodejcem; zeptejte se prodejce na přesné obchodní jméno a IČO.', 'Plaťte způsobem s ochranou kupujícího (kartou nebo přes platformu) a uschovejte si potvrzení objednávky.', 'Do rozhodnutí berte výsledek jen jako orientační.'] },
+};
+const explainSellerUnverified = (verdict) => (verdict && Object.hasOwn(EXPLAIN_SELLER_UNVERIFIED, verdict.sellerUnverified) ? EXPLAIN_SELLER_UNVERIFIED[verdict.sellerUnverified] : null);
 function explainUnchecked(verdict) {
   const mods = Array.isArray(verdict.unchecked) ? verdict.unchecked : [];
   const skipped = Array.isArray(verdict.skipped) ? verdict.skipped.filter((x) => typeof x === 'string' && x) : [];
   const list = mods.map((k) => MODULE_NAMES[k]).concat(skipped.map((x) => (Object.hasOwn(EXPLAIN_SKIPPED_OTHER, x) ? EXPLAIN_SKIPPED_OTHER[x] : MODULE_NAMES.seller + ': ' + x)));
-  return verdict.sellerUnverified === true ? list.concat([EXPLAIN_SELLER_UNVERIFIED]) : list;
+  const su = explainSellerUnverified(verdict);
+  return su ? list.concat([su.nezkontrolovano]) : list;
 }
 
 // Výchozí model vysvětlení: Claude Haiku 5.5 (krátký český text z hotového verdiktu). Build ho může přepsat (LLM_MODEL_EXPLAIN).
@@ -119,11 +128,12 @@ function fallbackAdvice(verdict) {
   const nedostupne = Array.isArray(verdict.skipped) && verdict.skipped.length > 0;
   // Přeskočený modul, který bránil zelené (věrohodnost, obrázky, identita), se v šedém textu pojmenuje.
   const blocked = (Array.isArray(verdict.skipped) ? verdict.skipped : []).filter((x) => Object.hasOwn(EXPLAIN_SKIPPED_OTHER, x)).map((x) => (x === 'Icecat' ? MODULE_NAMES.identity : EXPLAIN_SKIPPED_OTHER[x]));
-  if (verdict.sellerUnverified === true) blocked.push('prodejce nebyl ověřen v registru');
+  const su = explainSellerUnverified(verdict);
+  if (su) blocked.push(su.shrnuti);
   const shrnuti = verdict.semafor === 'šedá' || !table[verdict.semafor]
     ? (blocked.length ? 'Zatím nelze říct, že je riziko nízké: nezkontrolovalo se ' + blocked.join(', ') + '.' : t[0] + (nedostupne ? ' Údaje jsou neúplné, některý zdroj nebyl dostupný.' : ''))
     : t[0];
-  return { shrnuti, co_delat: t[1] };
+  return { shrnuti, co_delat: su && verdict.semafor === 'šedá' ? su.rady : t[1] };
 }
 
 // prodejceDuveryhodny: stejný údaj, jaký dostal prompt vysvětlení (Souhrn ho posílá dál); povoluje větu o věrohodném prodejci.

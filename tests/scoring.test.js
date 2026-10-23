@@ -207,7 +207,8 @@ test('přeskočený modul nic nemění na oranžové a červené (nálezy mají 
 test('marketplace bez externího ověření prodejce: zelená se mění na šedou a označí důvod', () => {
   const v = computeVerdict([], ALL_OK, { external: false, marketplace: true });
   assert.equal(v.semafor, 'šedá');
-  assert.equal(v.sellerUnverified, true);
+  assert.equal(v.sellerUnverified, 'bez_udaju', 'bez IČO a DIČ se registr ani nezkoušel');
+  assert.equal(computeVerdict([], ALL_OK, { external: false, marketplace: true, sellerIds: true }).sellerUnverified, 'nepotvrzeno', 'registr se zkoušel, nepotvrdil');
   assert.equal(computeVerdict([s('low')], ALL_OK, { marketplace: true }).semafor, 'šedá');
 });
 
