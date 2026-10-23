@@ -1027,7 +1027,7 @@ test('e2e kalibrace (a): textová nabídka jako z Alzy (katalogové fotky, obecn
   }
 });
 
-test('e2e kalibrace (b): kabel jako z Temu (CN, bez kontaktu, 30 prodejů, katalogové fotky, bez CE) -> oranžová, ne červená', async () => {
+test('e2e kalibrace (b): kabel jako z Temu z vloženého textu (CN, bez kontaktu, 30 prodejů, katalogové fotky, bez CE) -> šedá (absence u neúplného vstupu jen info, marketplace bez externího ověření), ne červená', async () => {
   const extract = ext({
     produkt: { nazev: 'USB kabel 100W rychlonabíjecí', kategorie: 'elektronika', cena: 99, mena: 'CZK' },
     prodejce: { kontakt_uveden: false, zeme_odeslani: 'CN', pocet_prodeju: 30 }, obrazky: { vypada_ai_nebo_katalog: true },
@@ -1035,10 +1035,10 @@ test('e2e kalibrace (b): kabel jako z Temu (CN, bez kontaktu, 30 prodejů, katal
   const f = await runFlow({ odkaz: 'https://www.temu.com/p', text: 'USB kabel 99 Kč' }, { extract, httpStub: () => ({ statusCode: 403, body: '' }) });
   const o = f.final.odpoved;
   assert.equal(f.r1.out.rezim, 'marketplace');
-  assert.equal(o.semafor, 'oranžová', JSON.stringify(sigIds(o)));
+  assert.equal(o.semafor, 'šedá', JSON.stringify(sigIds(o)));
   assert.notEqual(o.semafor, 'červená');
-  assert.ok(sigIds(o).includes('mimo_eu_bez_kontaktu'));
-  assert.equal(o.jistota, 'střední');
+  assert.equal(o.nalezy.find((n) => n.id === 'mimo_eu_bez_kontaktu').zavaznost, 'info');
+  assert.equal(o.nalezy.find((n) => n.id === 'ce_chybi').zavaznost, 'info');
 });
 
 test('e2e kalibrace (c): poctivý notebook se dvěma nesoulady od LLM -> zelená (a nesoulady jsou vidět)', async () => {

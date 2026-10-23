@@ -182,3 +182,31 @@ test('glue 03: e-shop s odkazem se nemění ani při zmínce tržiště v textu;
   assert.notEqual(orange.out.verdict.semafor, 'šedá');
   assert.notEqual(orange.out.verdict.semafor, 'zelená');
 });
+
+// --- D2 pro prodejce: absence údajů u neúplného vstupu jen info ---
+test('glue 03: text s kontakt_uveden:false a zemí CN: info, skóre bez těchto bodů, modul prodejce není ok jen z absence; plné čtení e-shopu beze změny', async () => {
+  const x = extrakce({ nazev: 'Nabíječka' }, { nazev: 'Shop', hodnoceni: null, pocet_prodeju: null, kontakt_uveden: false, provozovatel_uveden: null, podminky_uvedeny: false, zeme_odeslani: 'CN' });
+  const text = await runModuly(x, vstup('Nabíječka za 500 Kč, odesláno z Číny'));
+  const sev = (out, id) => (out.signals.find((s) => s.id === id) || {}).severity;
+  assert.equal(sev(text.out, 'mimo_eu_bez_kontaktu'), 'info');
+  assert.equal(sev(text.out, 'podminky_chybi'), 'info');
+  assert.equal(text.out.verdict.score, 0);
+  assert.equal(text.out.moduly.seller, 'unchecked', 'absence sama modul prodejce nezkontroluje');
+  assert.equal(text.out.verdict.semafor, 'šedá');
+  // e-shop s plně načtenou stránkou (pageText) zachovává původní závažnosti
+  const eshop = { zkratka: false, input: { text: '', screenshoty: [], url: { rezim: 'eshop', host: 'example.cz' } }, pageText: 'Text stránky e-shopu. '.repeat(30), rezim: 'eshop', host: 'example.cz', obsah: true };
+  const plny = await runModuly(x, eshop);
+  assert.equal(sev(plny.out, 'mimo_eu_bez_kontaktu'), 'medium');
+  assert.equal(sev(plny.out, 'podminky_chybi'), 'low');
+  // e-shop s odkazem, ale bez načtené stránky (jen vložený text) je neúplný vstup
+  const bezStranky = await runModuly(x, { ...eshop, pageText: '', input: { text: 'ručně vložený text', screenshoty: [], url: { rezim: 'eshop', host: 'example.cz' } } });
+  assert.equal(sev(bezStranky.out, 'mimo_eu_bez_kontaktu'), 'info');
+});
+
+test('glue 03: čtečkový dossier marketplace počítá prodejce jako úplné čtení (absence z dossieru by měla původní závažnost)', async () => {
+  const d = fixtureJson('dossier-cyklosvitilna.json');
+  d.gaps = [];
+  const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: null }, pageText: '', rezim: 'marketplace', host: 'aliexpress.com', obsah: true, dossier: d };
+  const { out } = await runModuly({}, ctx);
+  assert.ok(!out.signals.some((s) => s.module === 'seller' && ['kontakt_chybi', 'provozovatel_chybi', 'mimo_eu_bez_kontaktu'].includes(s.id)), 'dossier tyto údaje nenese, nic se nevymýšlí');
+});

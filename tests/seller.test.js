@@ -573,3 +573,51 @@ test('external: záporná odpověď jednoho registru ruší kladnou odpověď ji
   assert.ok(ids(r).includes('ico_neexistuje'));
   assert.equal(r.external, false);
 });
+
+// D2 i pro prodejce: chybějící údaje u neúplného vstupu (text, screenshot, rozšíření) jsou jen info a nepočítají se jako kontrola.
+const ABSENCE = { kontakt_uveden: false, provozovatel_uveden: false, podminky_uvedeny: false, zeme_odeslani: 'CN' };
+const sevOf = (r, id) => (r.signals.find((s) => s.id === id) || {}).severity;
+
+test('neúplný vstup: mimo_eu_bez_kontaktu a podminky_chybi jsou info/nelze_overit a skóre je 0', async () => {
+  const r = await runMk(ABSENCE);
+  assert.deepEqual(ids(r).sort(), ['mimo_eu_bez_kontaktu', 'podminky_chybi']);
+  for (const s of r.signals) {
+    assert.equal(s.severity, 'info', s.id);
+    assert.equal(s.druh, 'nelze_overit', s.id);
+    assert.match(s.evidence, /část nabídky/);
+  }
+  assert.equal(computeVerdict(r.signals, { offer: 'ok', seller: r.status, safety: 'ok' }).score, 0);
+});
+
+test('neúplný vstup: kontakt_chybi a provozovatel_chybi (bez složeného signálu) jsou také info', async () => {
+  const r = await runMk({ kontakt_uveden: false, provozovatel_uveden: false, zeme_odeslani: 'DE' }, { uplny: false });
+  assert.deepEqual(ids(r).sort(), ['kontakt_chybi', 'provozovatel_chybi']);
+  assert.ok(r.signals.every((s) => s.severity === 'info' && s.druh === 'nelze_overit'));
+});
+
+test('neúplný vstup: absence nepatří do checks, modul prodejce z ní sám nezíská „ok“', async () => {
+  const r = await runMk(ABSENCE);
+  assert.equal(r.status, 'unchecked');
+  assert.equal((await runMk({ ...ABSENCE, hodnoceni: 4.8 })).status, 'unchecked', 'jeden skutečný údaj k absenci nestačí');
+  assert.equal((await runMk({ ...ABSENCE, hodnoceni: 4.8, pocet_prodeju: 1200 })).status, 'ok');
+});
+
+test('neúplný vstup: přítomné údaje (kontakt a provozovatel uvedeny) jako kontrola dál platí', async () => {
+  const r = await runMk({ kontakt_uveden: true, provozovatel_uveden: true });
+  assert.deepEqual(r.signals, []);
+  assert.equal(r.status, 'ok');
+});
+
+test('úplné čtení (uplny: true): původní závažnosti zůstávají', async () => {
+  const r = await runMk(ABSENCE, { uplny: true });
+  assert.equal(sevOf(r, 'mimo_eu_bez_kontaktu'), 'medium');
+  assert.equal(sevOf(r, 'podminky_chybi'), 'low');
+  const eu = await runMk({ kontakt_uveden: false, provozovatel_uveden: false, zeme_odeslani: 'DE' }, { uplny: true });
+  assert.deepEqual(eu.signals.map((s) => [s.id, s.severity]).sort(), [['kontakt_chybi', 'medium'], ['provozovatel_chybi', 'medium']]);
+  assert.equal(r.status, 'ok', 'tři skutečné absence z plné stránky jsou kontrola');
+});
+
+test('neúplný vstup: ostatní signály prodejce (nízké hodnocení, málo prodejů, nový obchod) se nemění', async () => {
+  const r = await runMk({ hodnoceni: 3.4, stari_obchodu_dny: 30, pocet_prodeju: 10 });
+  assert.deepEqual(r.signals.map((s) => [s.id, s.severity]).sort(), [['hodnoceni_nizke', 'medium'], ['malo_prodeju', 'low'], ['obchod_novy', 'medium']]);
+});

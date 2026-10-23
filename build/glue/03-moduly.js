@@ -96,7 +96,7 @@ try {
   const safety = safetySignals(x, { uplny: !!fromReader && !dossierGapsHideSafety(dossier) });
   const gateQuery = safetyGateQuery(x);
   const [seller, gate, identity] = await Promise.all([
-    sellerSignals({ x, rezim: ctx.rezim, host: ctx.host, fetchers, coiList, nowMs }),
+    sellerSignals({ x, rezim: ctx.rezim, host: ctx.host, fetchers, coiList, nowMs, uplny: !!fromReader || (ctx.rezim === 'eshop' && !!ctx.pageText) }),
     gateQuery ? safetyGateFetch(gateQuery) : [],
     identitySignals({ dossier, fetchers }).catch(() => ({ status: 'unchecked', signals: [], skipped: [] })),
   ]);
