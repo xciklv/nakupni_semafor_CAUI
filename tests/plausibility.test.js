@@ -12,9 +12,9 @@ const sonnet = () => parsePlausibility(fixture('plausibility-response.json'));
 
 // Odpověď Messages API s daným tělem JSON.
 const apiWith = (body, extra = {}) => ({ type: 'message', stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(body) }], ...extra });
-const claim = (over = {}) => ({ tvrzeni: 'Výdrž 6 h', typ: 'fyzika', hruba_kontrola: '50 Wh ÷ 55 W ≈ 0,9 h', vysledek: 'nemozne', ...over });
-// Dossier cyklosvítilny rozšířený o řádek specifikace, aby citace „Výdrž 6 h“ měla oporu v textu, který model dostal.
-const cykloVydrz = () => { const d = cyklo(); d.specifikace.push({ nazev: 'Výdrž', hodnota: '6 h' }); return d; };
+// Výchozí tvrzení má oporu v textu cyklosvítilny: čísla 25500, 2000 a 3000 v citaci a 25500 ve výpočtu.
+const claim = (over = {}) => ({ tvrzeni: 'Titulek 25500 lm, varianta 2000-3000 lm', typ: 'fyzika', hruba_kontrola: '25500 lm ÷ 100 lm/W ≈ 255 W', vysledek: 'nemozne', ...over });
+const cykloVydrz = cyklo;
 const parsed = (over = {}) => ({
   ok: true, verdikt: 'nesmysl', jistota: 'vysoka', tvrzeni: [claim()],
   vysvetleni: 'Baterie vydrží asi hodinu, ne šest.', otazka: 'What is the real runtime at maximum brightness?', ...over,
@@ -43,8 +43,9 @@ test('plausibilitySignals: nesmysl s vysokou jistotou dá jeden nález medium/ne
   assert.equal(s[0].druh, 'nesmysl');
   assert.equal(s[0].title, 'Tvrzení v nabídce nedává smysl');
   assert.equal(s[0].jistota, 'vysoka');
-  assert.equal(s[0].citace, 'Svítivost 25 500 lumenů (titulek)');
-  assert.ok(s[0].vypocet.startsWith('25 500 lm ÷ 100 lm/W'));
+  // Nejlepší je první „nemožné“ tvrzení s dvěma doloženými čísly: rozpor titulku (25 500) a varianty (2 000–3 000).
+  assert.equal(s[0].citace, 'Rozpor: titulek 25 500 lm vs. varianta 2 000–3 000 lm');
+  assert.ok(s[0].vypocet.startsWith('25 500 ÷ 3 000'));
   assert.ok(s[0].vysvetleni.includes('255 W'));
   // Fixture je skutečná odpověď ze spiku, kde model napsal otázku anglicky; v nálezu se anglická otázka zahazuje (prompt dnes žádá češtinu).
   assert.equal(s[0].otazka, null);
@@ -62,7 +63,7 @@ test('plausibilitySignals: střední jistota zůstává medium, nízká jistota 
   const nepravd = plausibilitySignals(parsed({ verdikt: 'nepravdepodobne', jistota: 'vysoka', tvrzeni: [claim({ vysledek: 'nadsazene' })] }));
   assert.equal(nepravd[0].severity, 'low');
   assert.equal(nepravd[0].druh, 'rozpor');
-  assert.equal(nepravd[0].citace, 'Výdrž 6 h');
+  assert.equal(nepravd[0].citace, 'Titulek 25500 lm, varianta 2000-3000 lm');
 });
 
 test('plausibilitySignals: nejhorší tvrzení je první „nemožné“, jinak první „nadsazené“', () => {
@@ -249,4 +250,36 @@ test('živý případ cyklosvítilny (25 500 lm v titulku, varianta 2 000–3 00
 
 test('cena jako jediné nemožné tvrzení se nepočítá, i když je v textu', () => {
   assert.equal(plausibilitySignals(parsed({ tvrzeni: [claim({ typ: 'cena', tvrzeni: 'Cena 6 h' })] }), cykloVydrz())[0].severity, 'low');
+});
+
+// Druhé kolo, nález 4: podloženost se hlídá i ve výpočtu a triviální čísla nestačí.
+test('jedno doložené netriviální číslo nestačí (jen 25 500 bez druhého): nejvýš low', () => {
+  const p = parsed({ tvrzeni: [claim({ tvrzeni: 'Svítivost 25 500 lumenů (titulek)', hruba_kontrola: '25 500 lm ÷ 100 lm/W ≈ 255 W' })] });
+  const s = plausibilitySignals(p, cyklo());
+  assert.equal(s[0].severity, 'low');
+  assert.equal(s[0].druh, 'rozpor');
+});
+
+test('triviální čísla (jednociferná a 10, 100, 1000) samy nestačí, i když jsou v textu', () => {
+  const p = parsed({ tvrzeni: [claim({ tvrzeni: 'Výdrž 6 h, 8 LED, 100 %', hruba_kontrola: '10 × 6 = 60' })] });
+  const d = cyklo();
+  d.specifikace.push({ nazev: 'Výdrž', hodnota: '6 h, 100 %, 8 LED, 10 min' });
+  assert.equal(plausibilitySignals(p, d)[0].severity, 'low');
+});
+
+test('čísla ve výpočtu si model vymyslel: citace je v textu, výpočet nemá žádné doložené číslo → low', () => {
+  const p = parsed({ tvrzeni: [claim({ hruba_kontrola: '77 Wh ÷ 123 W ≈ 0,6 h' })] });
+  assert.equal(plausibilitySignals(p, cyklo())[0].severity, 'low');
+});
+
+test('výpočet bez čísel: low; výpočet s doloženým číslem i odvozenými hodnotami (255 W) zůstává medium', () => {
+  assert.equal(plausibilitySignals(parsed({ tvrzeni: [claim({ hruba_kontrola: 'Nereálné.' })] }), cyklo())[0].severity, 'low');
+  assert.equal(plausibilitySignals(parsed({ tvrzeni: [claim({ hruba_kontrola: '25500 lm ÷ 100 lm/W ≈ 255 W' })] }), cyklo())[0].severity, 'medium');
+});
+
+test('živý případ cyklosvítilny z fixture: aspoň jedno tvrzení s dvěma doloženými čísly dá medium + nesmysl', () => {
+  const s = plausibilitySignals(sonnet(), cyklo());
+  assert.equal(s[0].severity, 'medium');
+  assert.equal(s[0].druh, 'nesmysl');
+  assert.match(s[0].citace, /2 000–3 000|25 500/);
 });

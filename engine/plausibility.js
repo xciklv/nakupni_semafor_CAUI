@@ -114,10 +114,19 @@ const plaCzech = (t) => { const c = plaClean(t); return c && !plaEnglish(c) ? c 
 const PLA_NUMBER_RE = /\d+(?:[\s\u00a0]\d{3})*(?:[.,]\d+)?/g;
 const plaNumbers = (t) => (String(t).match(PLA_NUMBER_RE) || []).map((n) => n.replace(/[\s\u00a0]/g, '').replace(',', '.'));
 
-// Tvrzení je podložené, když citace obsahuje aspoň jedno číslo a všechna její čísla stojí v textu, který model dostal (výpočet z vymyšlených čísel nic neprokazuje).
+// Triviální čísla (jednociferná a běžné násobky 10, 100, 1000) jsou v textu skoro vždy, takže nic nedokládají.
+const plaNontrivial = (n) => Number(n) >= 10 && !['10', '100', '1000'].includes(n);
+
+// Tvrzení je podložené, když
+// - všechna netriviální čísla v citaci (tvrzeni) stojí v textu, který model dostal, a citace má aspoň jedno;
+// - výpočet (hruba_kontrola) obsahuje aspoň jedno netriviální číslo z textu (jinak ho model postavil na vymyšlených číslech);
+// - celkem jsou v textu doložena aspoň dvě různá netriviální čísla z citace nebo výpočtu (odvozené hodnoty jako 255 W v textu být nemusí).
 function plaGrounded(claim, offerNumbers) {
-  const nums = plaNumbers(claim.tvrzeni);
-  return nums.length > 0 && nums.every((n) => offerNumbers.has(n));
+  const cited = plaNumbers(claim.tvrzeni).filter(plaNontrivial);
+  const calc = plaNumbers(claim.hruba_kontrola).filter(plaNontrivial);
+  if (!cited.length || !cited.every((n) => offerNumbers.has(n))) return false;
+  if (!calc.some((n) => offerNumbers.has(n))) return false;
+  return new Set(cited.concat(calc).filter((n) => offerNumbers.has(n))).size >= 2;
 }
 
 // dossier: totéž, z čeho se sestavil požadavek; bez něj nejde citace ověřit a nález je nejvýš low.
