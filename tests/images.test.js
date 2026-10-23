@@ -317,18 +317,24 @@ test('C bez potvrzení druhým zdrojem je jen low (3 shodné běhy téhož model
   assert.equal(s[0].severity, 'low');
 });
 
-test('C je střední, když totéž číslo obrázku potvrdí strojová kontrola čísla (A) nebo značky (D)', () => {
+test('C je střední jen když totéž číslo obrázku potvrdí strojová kontrola čísla (A)', () => {
+  const rozpor = { obrazek: 1, tvrzeni_nabidky: 'Lumen: 2000-3000 Lumen', co_je_na_obrazku: 'Text MAX 12000 LM', jistota: 'vysoka' };
+  const s = imagesSignals(consolidateImages(three(() => run({ produkt: ['ne', 'ano'], rozpory: [rozpor], texty: [['MAX 12000 LM']] })), cyklo()));
+  assert.deepEqual(s.map((x) => [x.id, x.severity]).sort(), [['obrazek_cislo_rozpor', 'low'], ['obrazek_jiny_predmet', 'medium']]);
+  // číslo na jiném obrázku než C nepotvrzuje
+  const jiny = { obrazek: 2, tvrzeni_nabidky: 'Lumen: 2000-3000 Lumen', co_je_na_obrazku: 'Text MAX 12000 LM', jistota: 'vysoka' };
+  const t = imagesSignals(consolidateImages(three(() => run({ produkt: ['ne', 'ano'], rozpory: [jiny], texty: [[], ['MAX 12000 LM']] })), cyklo()));
+  assert.equal(t.find((x) => x.id === 'obrazek_jiny_predmet').severity, 'low');
+});
+
+test('D (značka na fotce) C nepovyšuje: C a D na témže obrázku jsou dvě low (vychází z týchž běhů téhož modelu)', () => {
   const d = cyklo();
   d.specifikace = d.specifikace.filter((r) => !/brand/i.test(r.nazev));
   d.popis = null;
   d.aiPrehled = [];
   const loga = [{ obrazek: 1, text_nebo_logo: 'ZOOMLITE', je_znacka_produktu: 'nejasne' }];
   const s = imagesSignals(consolidateImages(three(() => run({ produkt: ['ne', 'ano'], loga })), d));
-  assert.deepEqual(s.map((x) => [x.id, x.severity]).sort(), [['obrazek_cizi_znacka', 'low'], ['obrazek_jiny_predmet', 'medium']]);
-  // značka na jiném obrázku než C nepotvrzuje
-  const jina = [{ obrazek: 2, text_nebo_logo: 'ZOOMLITE', je_znacka_produktu: 'nejasne' }];
-  const t = imagesSignals(consolidateImages(three(() => run({ produkt: ['ne', 'ano'], loga: jina })), d));
-  assert.equal(t.find((x) => x.id === 'obrazek_jiny_predmet').severity, 'low');
+  assert.deepEqual(s.map((x) => [x.id, x.severity]).sort(), [['obrazek_cizi_znacka', 'low'], ['obrazek_jiny_predmet', 'low']]);
 });
 
 test('imagesSignals: C bez příznaku potvrzení je low, s příznakem medium', () => {

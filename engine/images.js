@@ -223,8 +223,9 @@ function consolidateImages(runs, dossier, obrazky) {
     add('D', g.obrazek, 'Na obrázku č. ' + shown(g.obrazek) + ' je uvedeno ‚' + g.text + '‘; v údajích nabídky tuto značku nenajdete.', g.behy.size);
   });
   // C (obrázky ukazují jiný předmět) je jen úsudek modelu a tři běhy téhož požadavku nejsou nezávislé: střední závažnost má jen tehdy,
-// když tentýž obrázek strojově potvrdí číslo na fotce proti nabídce (A) nebo cizí značka (D).
-  tvrzeni.forEach((t) => { t.potvrzeno = t.kod === 'C' && tvrzeni.some((o) => (o.kod === 'A' || o.kod === 'D') && o.pozice === t.pozice); });
+  // když tentýž obrázek strojově potvrdí nález A (číslo přečtené z fotky se porovnalo řetězcem s textem nabídky). Značka z fotky (D) pochází
+  // z týchž běhů téhož modelu, takže C nepovyšuje.
+  tvrzeni.forEach((t) => { t.potvrzeno = t.kod === 'C' && tvrzeni.some((o) => o.kod === 'A' && o.pozice === t.pozice); });
   return { tvrzeni, hlavniUrl };
 }
 
