@@ -196,12 +196,10 @@ test('výběr případu: ukáže kroky po skupinách, odškrtávací podklady s 
   const pr = p.PP.pripady[0];
   tlacitkoPripadu(p, pr.nazev).click();
   const t = texts(out(p));
-  for (const nadpis of ['Hned', 'V nejbližších dnech', 'Později', 'Podklady, které se vám budou hodit', 'Zdroje', 'Co zatím není ověřeno']) assert.ok(t.includes(nadpis), 'chybí nadpis ' + nadpis);
+  for (const nadpis of ['Hned', 'V nejbližších dnech', 'Později', 'Podklady, které se vám budou hodit', 'Zdroje']) assert.ok(t.includes(nadpis), 'chybí nadpis ' + nadpis);
   const boxy = findAll(out(p), (n) => n.tagName === 'INPUT' && n.type === 'checkbox' && n.className === 'podklad');
   assert.equal(boxy.length, pr.podklady.length);
   for (const d of pr.podklady) assert.ok(t.includes(d.proc), 'proč: ' + d.nazev);
-  assert.ok(t.some((x) => /orientační pomůcka/.test(x)));
-  assert.ok(t.some((x) => /není právní poradenství/.test(x)));
 });
 
 test('odškrtávání podkladů: počítadlo se mění a nic se neodesílá ani nepersistuje', () => {
@@ -321,13 +319,17 @@ test('úvod: tři sdělení (klid, nic neplatit ani když volá banka nebo polic
   assert.equal(/prohlížeči|orientační|právní poradenství/.test(vse), false, 'úvod je bez prohlížeče a bez právního upozornění');
 });
 
-test('upozornění o orientační pomůcce je dole: pod výběrem případu i pod detailem', () => {
+test('upozornění: v první pomoci není žádný rámeček, jen krátká poučka v patičce stránky', () => {
   const p = nahled();
-  const posledni = (n) => n.children[n.children.length - 1];
-  assert.ok(texts(posledni(out(p))).some((x) => /orientační pomůcka/.test(x)), 'pod výběrem');
+  const vsechno = () => texts(out(p)).join(' ');
+  assert.equal(/Co zatím není ověřeno|orientační pomůcka|neposoudil odborník|právní poradenství/.test(vsechno()), false, 'pod výběrem');
   tlacitkoPripadu(p, p.PP.pripady[0].nazev).click();
-  assert.ok(texts(posledni(out(p))).some((x) => /orientační pomůcka/.test(x)), 'pod detailem');
+  assert.equal(/Co zatím není ověřeno|orientační pomůcka|neposoudil odborník|právní poradenství/.test(vsechno()), false, 'pod detailem');
   assert.equal(findAll(out(p), (n) => n.className === 'upozorneni').length, 0, 'žádný oranžový box nahoře');
+  const paticka = /<footer class="paticka">([\s\S]*?)<\/footer>/.exec(pageHtml());
+  assert.ok(paticka, 'chybí patička');
+  assert.match(paticka[1], /jen pomůcka/);
+  assert.match(paticka[1], /kriticky/);
 });
 
 test('popis situace: otevřené pole ve výběru případu; text se po výběru ukáže v detailu s tlačítkem Kopírovat, nic se neodesílá', () => {

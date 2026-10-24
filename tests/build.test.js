@@ -1456,7 +1456,8 @@ async function settle(p, ms = 300) {
     return await Promise.race([p.then((value) => ({ ok: true, value }), (error) => ({ ok: false, error })), timeout]);
   } finally { clearTimeout(t); }
 }
-const ALLOWED_CLASSES = new Set(['', 'card', 'light', 'sig', 'err', 'hint', 'zelená', 'oranžová', 'červená', 'šedá', 'high', 'medium', 'low', 'info', 'sev', 'polozka', 'nahled', 'nazev', 'sekundarni']);
+// verdikt, lampy, lampa, verdikt-text, shrnuti, rady: stavba verdiktu nahoře (semafor s lampami, shrnutí, co dělat).
+const ALLOWED_CLASSES = new Set(['', 'card', 'light', 'sig', 'err', 'hint', 'zelená', 'oranžová', 'červená', 'šedá', 'high', 'medium', 'low', 'info', 'sev', 'polozka', 'nahled', 'nazev', 'sekundarni', 'verdikt', 'lampy', 'lampa', 'verdikt-text', 'shrnuti', 'rady']);
 const CHYBA_ZPRACOVANI = 'Obrázek se nepodařilo zpracovat.';
 const CHYBA_NACTENI = 'Obrázek se nepodařilo načíst.';
 

@@ -5,90 +5,143 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nákupní semafor</title>
 <style>
-  :root { color-scheme: light dark; --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6672; --card:#fff; --line:#dde2e8; --accent:#1f6feb; --green:#1a7f37; --orange:#b35900; --red:#c62828; --gray:#6b7280; --on:#ffffff; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e8ebef; --muted:#9aa5b1; --card:#1d2227; --line:#2f363d; --accent:#58a6ff; --green:#3fb950; --orange:#e3912e; --red:#f47067; --gray:#9ca3af; --on:#0b0f14; } }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
-  main { max-width:720px; margin:0 auto; padding:24px 16px 64px; }
-  h1 { font-size:1.6rem; margin:0 0 4px; }
-  h2 { font-size:1.2rem; margin:0 0 8px; }
-  p.lead { color:var(--muted); margin:0 0 20px; }
+  :root { color-scheme: light dark; --bg:#f2f1ed; --fg:#1b1f22; --muted:#5b6266; --card:#ffffff; --paper:#e9e7e0; --line:#dcdad3; --accent:#1b1f22; --green:#2c7a52; --orange:#9f6310; --red:#a6432f; --gray:#6b7280; --on:#ffffff; --green-soft:rgba(44,122,82,.10); --orange-soft:rgba(159,99,16,.10); --red-soft:rgba(166,67,47,.10); --gray-soft:rgba(107,114,128,.10); --housing:#1b1f22; --lamp-off:rgba(255,255,255,.14); --shadow:0 1px 2px rgba(27,31,34,.06),0 8px 24px -12px rgba(27,31,34,.18); --mono:ui-monospace,"Cascadia Code","SF Mono","JetBrains Mono","Roboto Mono",Consolas,monospace; --radius:4px; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#15181a; --fg:#eae6da; --muted:#a7aeb0; --card:#1b1f22; --paper:#1f2427; --line:#2e3437; --accent:#eae6da; --green:#5fb98b; --orange:#e8a33d; --red:#e08a73; --gray:#9ca3af; --on:#15181a; --green-soft:rgba(95,185,139,.14); --orange-soft:rgba(232,163,61,.14); --red-soft:rgba(224,138,115,.14); --gray-soft:rgba(156,163,175,.14); --housing:#0d0f10; --lamp-off:rgba(255,255,255,.10); --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 32px -14px rgba(0,0,0,.55); } }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
+  main { max-width:640px; margin:0 auto; padding:40px 16px 24px; }
+  .hlavicka { display:flex; align-items:center; justify-content:center; gap:14px; margin:0 0 24px; }
+  .znacka { display:flex; flex-direction:column; gap:3px; padding:5px; border-radius:8px; background:var(--housing); }
+  .znacka i { display:block; width:8px; height:8px; border-radius:50%; }
+  .znacka i:nth-child(1) { background:var(--red); } .znacka i:nth-child(2) { background:var(--orange); } .znacka i:nth-child(3) { background:var(--green); }
+  h1 { font:600 1.5rem/1.2 var(--mono); letter-spacing:-.01em; margin:0; }
+  h2 { font:600 1.05rem/1.3 var(--mono); margin:0 0 8px; }
+  h3 { font:600 .78rem/1.3 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 6px; }
+  p.lead { color:var(--muted); margin:0 0 16px; text-align:center; }
   .card, .sig, p { overflow-wrap:anywhere; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
-  label { display:block; font-weight:600; margin:12px 0 4px; }
-  input[type=text] { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
-  button:focus-visible, input:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
-  button { background:var(--accent); color:var(--on); border:0; border-radius:8px; padding:12px 20px; font:inherit; font-weight:600; cursor:pointer; margin-top:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:20px; margin-bottom:16px; box-shadow:var(--shadow); }
+  label { display:block; font-weight:600; margin:0 0 6px; }
+  input[type=text] { width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); color:var(--fg); font:inherit; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible, summary:focus-visible { outline:2px solid var(--fg); outline-offset:2px; }
+  button { background:var(--accent); color:var(--on); border:0; border-radius:var(--radius); padding:12px 20px; font:inherit; font-weight:600; cursor:pointer; margin-top:16px; }
   button:disabled { opacity:.6; cursor:wait; }
-  button.sekundarni { background:transparent; color:var(--accent); border:2px solid var(--accent); margin-top:8px; }
-  .nebo { margin:16px 0 0; text-align:center; color:var(--muted); }
-  .drop { margin-top:12px; padding:12px 16px 16px; border:2px dashed var(--muted); border-radius:12px; }
-  .drop.dragging { border-color:var(--accent); }
-  .drop.highlight { outline:3px solid var(--orange); outline-offset:2px; }
+  button.sekundarni { background:transparent; color:var(--fg); border:1px solid var(--line); margin-top:8px; }
+  button.sekundarni:hover { border-color:var(--muted); }
+  #go { width:100%; }
+  .nebo { display:flex; align-items:center; gap:12px; margin:14px 0 0; color:var(--muted); font:.78rem var(--mono); text-transform:uppercase; letter-spacing:.06em; }
+  .nebo::before, .nebo::after { content:""; flex:1; height:1px; background:var(--line); }
+  .drop { margin-top:14px; padding:14px 16px 16px; border:2px dashed var(--muted); border-radius:var(--radius); }
+  .drop.dragging { border-color:var(--fg); background:var(--paper); }
+  .drop.highlight { outline:2px solid var(--orange); outline-offset:2px; }
   .drop .nadpis { display:block; font-weight:600; }
   .seznam { list-style:none; margin:8px 0 0; padding:0; }
   .polozka { display:flex; align-items:center; gap:12px; padding:6px 0; }
   .polozka .nazev { flex:1; min-width:0; overflow-wrap:anywhere; }
-  .nahled { width:56px; height:56px; object-fit:cover; border-radius:6px; border:1px solid var(--line); flex:none; }
+  .nahled { width:56px; height:56px; object-fit:cover; border-radius:var(--radius); border:1px solid var(--line); flex:none; }
   .polozka button { margin:0; padding:6px 12px; min-width:44px; min-height:44px; flex:none; }
-  .hint { color:var(--muted); font-size:.9rem; }
-  .light { display:inline-block; padding:8px 18px; border-radius:999px; color:var(--on); font-weight:700; font-size:1.2rem; }
+  .hint { color:var(--muted); font-size:.875rem; margin:8px 0 0; }
+  details.soukromi { margin-top:14px; }
+  details.soukromi > summary { font:.8rem var(--mono); font-weight:400; color:var(--muted); }
+  .light { display:inline-block; padding:4px 12px; border-radius:var(--radius); color:var(--on); font:700 .8rem/1.4 var(--mono); letter-spacing:.06em; text-transform:uppercase; }
   .zelená { background:var(--green); } .oranžová { background:var(--orange); } .červená { background:var(--red); } .šedá { background:var(--gray); }
+  .verdikt { display:grid; grid-template-columns:auto 1fr; gap:20px; align-items:start; scroll-margin-top:16px; }
+  .verdikt[data-semafor="zelená"] { --tint:var(--green-soft); } .verdikt[data-semafor="oranžová"] { --tint:var(--orange-soft); } .verdikt[data-semafor="červená"] { --tint:var(--red-soft); } .verdikt[data-semafor="šedá"] { --tint:var(--gray-soft); }
+  .verdikt { background-image:linear-gradient(var(--tint,transparent),var(--tint,transparent)); }
+  .lampy { display:flex; flex-direction:column; gap:7px; padding:8px; border-radius:12px; background:var(--housing); }
+  .lampa { display:block; width:20px; height:20px; border-radius:50%; background:var(--lamp-off); }
+  .lampy[data-semafor="červená"] .lampa:nth-child(1) { background:var(--red); box-shadow:0 0 12px var(--red); }
+  .lampy[data-semafor="oranžová"] .lampa:nth-child(2) { background:var(--orange); box-shadow:0 0 12px var(--orange); }
+  .lampy[data-semafor="zelená"] .lampa:nth-child(3) { background:var(--green); box-shadow:0 0 12px var(--green); }
+  .verdikt-text > * { margin:0 0 10px; }
+  .verdikt-text > :last-child { margin-bottom:0; }
+  .shrnuti { font-size:1.2rem; line-height:1.4; font-weight:500; }
+  .verdikt-text h3 { margin-top:16px; }
+  .rady { margin:0; padding-left:20px; }
+  .rady li { margin:2px 0; }
   .sig { border-left:4px solid var(--line); padding:4px 0 4px 12px; margin:12px 0; }
   .sig.high { border-color:var(--red); } .sig.medium { border-color:var(--orange); } .sig.low { border-color:var(--gray); } .sig.info { border-color:var(--muted); }
-  .sig b { display:inline; } .sig span { color:var(--muted); font-size:.9rem; }
-  .sig .sev { display:inline-block; margin-right:8px; padding:0 8px; border:1px solid var(--line); border-radius:999px; font-weight:600; font-size:.8rem; }
-  .nalez { margin:16px 0; }
+  .sig b { display:inline; } .sig span { color:var(--muted); font-size:.875rem; }
+  .sig .sev { display:inline-flex; align-items:center; gap:6px; margin-right:8px; padding:1px 8px; border:1px solid var(--line); border-radius:999px; color:var(--fg); font:600 .72rem/1.5 var(--mono); }
+  .sig .sev::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--gray); }
+  .sig.high .sev::before { background:var(--red); } .sig.medium .sev::before { background:var(--orange); }
+  .skupina { padding:0; overflow:hidden; }
+  .skupina > h2 { margin:0; padding:16px 20px 12px; font:600 .78rem/1.3 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  details.skupina > summary { padding:16px 20px; font:600 .78rem/1.3 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  details.skupina[open] > summary { border-bottom:1px solid var(--line); }
+  details.skupina > p.poznamka { margin:0; padding:12px 20px 0; }
+  details.nalez { margin:0; padding:0 20px; border:0; border-top:1px solid var(--line); }
+  details.nalez > summary { display:flex; align-items:center; gap:8px; padding:14px 0; font-size:1rem; font-weight:600; }
+  details.nalez > summary b { font-weight:600; }
+  details.nalez > summary::marker { content:""; }
+  details.nalez > summary::-webkit-details-marker { display:none; }
+  details.nalez > summary::after { content:"▾"; margin-left:auto; padding-left:12px; color:var(--muted); font-weight:400; }
+  details.nalez[open] > summary::after { content:"▴"; }
+  details.nalez > :not(summary) { max-width:100%; }
+  details.nalez > b { display:block; margin:12px 0 2px; font:600 .72rem/1.3 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  details.nalez > p { margin:2px 0; }
+  details.nalez > :last-child { margin-bottom:16px; }
+  details.nalez > span { display:block; margin-top:10px; font:.78rem/1.4 var(--mono); color:var(--muted); }
   .nalez p { margin:4px 0; }
-  .citace { margin:6px 0; padding:6px 10px; background:var(--bg); border-left:3px solid var(--line); border-radius:4px; font-style:italic; }
-  .otazka { margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+  .citace { margin:8px 0; padding:8px 12px; background:var(--bg); border-left:3px solid var(--line); border-radius:var(--radius); font-style:italic; }
+  .otazka { margin-top:12px; padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); }
+  .otazka b { font:600 .72rem/1.3 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   .nalez button { margin:8px 8px 0 0; padding:8px 14px; min-height:44px; }
   .odkazy { margin-top:10px; }
-  .odkazy a { display:inline-block; margin:0 16px 4px 0; padding:8px 0; color:var(--accent); font-weight:600; }
-  a:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  a { color:var(--fg); text-underline-offset:3px; }
+  .odkazy a { display:inline-block; margin:0 16px 4px 0; padding:8px 0; font-weight:600; }
   summary { cursor:pointer; font-weight:600; padding:4px 0; }
-  details.skupina > summary { font-size:1.2rem; }
   details.vypocet { margin-top:8px; }
-  .poznamka { color:var(--muted); font-size:.9rem; margin:4px 0 0; }
+  .poznamka { color:var(--muted); font-size:.875rem; margin:4px 0 0; }
   .err { color:var(--red); font-weight:600; }
   ul { padding-left:20px; }
-  .zalozky { display:flex; gap:4px; margin:12px 0 16px; border-bottom:2px solid var(--line); }
-  button.zalozka { background:transparent; color:var(--muted); border:0; border-bottom:4px solid transparent; border-radius:0; margin:0 0 -2px; padding:12px 14px; min-height:44px; flex:1; }
-  .zalozka[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--accent); }
+  .zalozky { display:flex; gap:4px; padding:4px; margin:0 0 24px; background:var(--paper); border-radius:6px; }
+  button.zalozka { flex:1; margin:0; padding:10px 12px; min-height:44px; background:transparent; color:var(--muted); border:0; border-radius:var(--radius); font:600 .85rem var(--mono); }
+  .zalozka[aria-selected="true"] { background:var(--card); color:var(--fg); box-shadow:var(--shadow); }
   .karty { display:grid; gap:10px; margin-top:12px; }
-  button.pripad { background:var(--card); color:var(--fg); border:2px solid var(--line); border-radius:12px; text-align:left; width:100%; margin:0; padding:14px 16px; font-weight:400; }
-  button.pripad:hover { border-color:var(--accent); }
-  button.pripad .nadpis { display:block; font-weight:700; font-size:1.05rem; }
-  button.pripad .popis { display:block; color:var(--muted); }
-  .upozorneni { margin:12px 0; padding:10px 12px; border:1px solid var(--orange); border-radius:8px; }
-  .nalehave { margin:12px 0; padding:12px 14px; border:2px solid var(--red); border-radius:8px; background:var(--bg); }
+  .karty + label { margin-top:20px; }
+  .card > button.sekundarni { margin-right:8px; }
+  details.zdroje-kroku { margin:2px 0; }
+  details.zdroje-kroku > summary { font-weight:400; font-size:.875rem; color:var(--muted); padding:2px 0; }
+  button.pripad { background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:var(--radius); text-align:left; width:100%; margin:0; padding:14px 16px; font-weight:400; }
+  button.pripad:hover { border-color:var(--fg); }
+  button.pripad .nadpis { display:block; font-weight:700; font-size:1.02rem; }
+  button.pripad .popis { display:block; color:var(--muted); font-size:.9rem; }
+  .upozorneni { margin:12px 0; padding:10px 12px; border:1px solid var(--orange); border-radius:var(--radius); }
+  .nalehave { margin:14px 0 0; padding:14px 16px; border-left:4px solid var(--red); border-radius:var(--radius); background:var(--red-soft); }
   .nalehave h3 { margin:0 0 6px; color:var(--red); }
   .nalehave[hidden] { display:none; }
-  .volba { margin:12px 0; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+  .volba { margin:12px 0 0; padding:8px 12px; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); }
   label.volba-label, label.podklad-radek { display:flex; gap:10px; align-items:flex-start; margin:0; font-weight:600; padding:6px 0; min-height:44px; cursor:pointer; }
-  input[type=checkbox] { width:22px; height:22px; flex:none; margin:2px 0 0; accent-color:var(--accent); }
-  input[type=checkbox]:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
-  .skupina-kroku h3, .zdroje h3, .podklady h3 { font-size:1.1rem; margin:20px 0 6px; }
-  .krok { margin:10px 0; padding:2px 0 2px 12px; border-left:4px solid var(--line); }
+  input[type=checkbox] { appearance:none; -webkit-appearance:none; display:grid; place-content:center; width:22px; height:22px; flex:none; margin:2px 0 0; border:2px solid var(--muted); border-radius:4px; background:var(--card); }
+  input[type=checkbox]:checked { background:var(--accent); border-color:var(--accent); }
+  input[type=checkbox]:checked::after { content:""; width:10px; height:5px; border:solid var(--on); border-width:0 0 2px 2px; transform:rotate(-45deg) translate(1px,-1px); }
+  .skupina-kroku h3, .zdroje h3, .podklady h3 { margin:20px 0 6px; }
+  .skupina-kroku:first-child h3 { margin-top:0; }
+  .krok { margin:10px 0; padding:2px 0 2px 12px; border-left:3px solid var(--line); }
   .skupina-kroku.hned .krok { border-left-color:var(--red); }
   .skupina-kroku.dny .krok { border-left-color:var(--orange); }
   .krok p { margin:2px 0; }
-  .krok .proc { color:var(--muted); font-size:.95rem; }
-  .stitek { display:inline-block; margin-left:8px; padding:0 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:.8rem; font-weight:600; }
-  .zdroje-kroku a, .zdroje a { color:var(--accent); font-weight:600; display:inline-block; padding:6px 12px 6px 0; }
+  .krok .proc { color:var(--muted); font-size:.9rem; }
+  .stitek { display:inline-block; margin-left:8px; padding:0 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:.75rem; font-weight:600; }
+  .zdroje-kroku a, .zdroje a { font-weight:600; display:inline-block; padding:6px 12px 6px 0; }
   .zdroje ul { list-style:none; padding:0; margin:6px 0; }
   .podklad-detail { margin:0 0 8px 32px; }
   .podklad-detail p { margin:2px 0; }
-  textarea.pole-popis { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; resize:vertical; }
-  textarea.pole-popis:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  textarea.pole-popis { width:100%; margin-top:6px; padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); color:var(--fg); font:inherit; resize:vertical; }
   .popis-text { white-space:pre-wrap; }
   label.podklad-radek.hotovo span { color:var(--muted); text-decoration:line-through; }
   .nav-pomoc { display:flex; flex-wrap:wrap; gap:8px; }
+  .paticka { max-width:640px; margin:0 auto; padding:8px 16px 48px; text-align:center; color:var(--muted); font-size:.875rem; }
+  .paticka p { margin:0; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Nákupní semafor</h1>
+  <header class="hlavicka">
+    <span class="znacka" aria-hidden="true"><i></i><i></i><i></i></span>
+    <h1>Nákupní semafor</h1>
+  </header>
   <div class="zalozky" role="tablist" aria-label="Části nástroje">
     <button id="tab-kontrola" type="button" role="tab" class="zalozka" aria-selected="true" aria-controls="panel-kontrola">Zkontrolovat nabídku</button>
     <button id="tab-pomoc" type="button" role="tab" class="zalozka" aria-selected="false" aria-controls="panel-pomoc">První pomoc při podvodu</button>
@@ -109,13 +162,19 @@
     </div>
     <button id="go" type="submit">Zkontrolovat</button>
     <p id="cekani" class="hint">Kontrola může trvat až 30 sekund.</p>
-    <p class="hint">Pro vyhodnocení se službě Anthropic odesílá odkaz, text stránky včetně recenzí, screenshoty a obrázky z nabídky; Anthropic je může podle svých podmínek po omezenou dobu uchovávat. Do veřejných registrů (ARES, VIES, RDAP, Icecat, EU Safety Gate) odcházejí jen veřejné identifikátory (IČO, DIČ, EAN, doména) a značka či model z nabídky, nikdy vaše texty ani screenshoty. Průběh kontroly se pro ladění ukládá lokálně v n8n. Smazat ho jde skriptem „npm run purge“ (popis v README); ukládání vypíná volba SAVE_EXECUTIONS=none při sestavení workflow. Výsledek je pomůcka, ne právní verdikt.</p>
-    <p class="hint zdroje">Zdroje dat: seznam rizikových e-shopů ČOI, ARES, RDAP (CZ.NIC), EU Safety Gate © Evropská unie (CC BY 4.0).</p>
+    <details class="soukromi">
+      <summary>Co se s odkazem a screenshoty děje</summary>
+      <p class="hint">Pro vyhodnocení se službě Anthropic odesílá odkaz, text stránky včetně recenzí, screenshoty a obrázky z nabídky; Anthropic je může podle svých podmínek po omezenou dobu uchovávat. Do veřejných registrů (ARES, VIES, RDAP, Icecat, EU Safety Gate) odcházejí jen veřejné identifikátory (IČO, DIČ, EAN, doména) a značka či model z nabídky, nikdy vaše texty ani screenshoty. Průběh kontroly se pro ladění ukládá lokálně v n8n. Smazat ho jde skriptem „npm run purge“ (popis v README); ukládání vypíná volba SAVE_EXECUTIONS=none při sestavení workflow. Výsledek je pomůcka, ne právní verdikt.</p>
+      <p class="hint zdroje">Zdroje dat: seznam rizikových e-shopů ČOI, ARES, RDAP (CZ.NIC), EU Safety Gate © Evropská unie (CC BY 4.0).</p>
+    </details>
   </form>
   <div id="out" aria-live="polite"></div>
   </section>
   <section id="panel-pomoc" role="tabpanel" aria-labelledby="tab-pomoc" hidden></section>
 </main>
+<footer class="paticka">
+  <p>Nákupní semafor je jen pomůcka. Nad výsledkem je vždy potřeba přemýšlet kriticky.</p>
+</footer>
 <script>
 // Adresa API z adresy stránky: bez query a hashe a bez koncových lomítek se poslední segment (nakupni-kontrola-web) nahradí
 // segmentem nakupni-kontrola; funguje pro /webhook/ i /webhook-test/ a pro adresu s lomítkem na konci.
@@ -235,13 +294,15 @@ function sbalene(nadpis, cls, obsah) {
   return d;
 }
 
-// Karta nálezu: titul, citace z nabídky, Proč, Výpočet (sbalený), otázka pro prodejce, odkazy. Vše přes textContent.
-function kartaNalezu(n) {
+// Karta nálezu: v záhlaví titul (a závažnost), po rozbalení citace z nabídky, Proč, Výpočet (sbalený), otázka pro prodejce, odkazy.
+// Vše přes textContent. Nejzávažnější nález se otevírá rovnou (otevrit), ostatní jsou sbalené.
+function kartaNalezu(n, otevrit) {
   const nelze = n.druh === 'nelze_overit';
   // Co se nepodařilo ověřit nikdy nevypadá jako problém: bez štítku závažnosti, jen informační barva.
   const zavaznost = nelze ? 'info' : povoleno(str(n.zavaznost), ZAVAZNOSTI, 'low');
-  const d = el('div', null, 'sig ' + zavaznost + ' nalez');
-  const hlavicka = el('div');
+  const d = el('details', null, 'sig ' + zavaznost + ' nalez');
+  if (otevrit) d.setAttribute('open', '');
+  const hlavicka = el('summary');
   if (!nelze) hlavicka.append(el('span', ZAVAZNOST_STITEK[zavaznost], 'sev'));
   hlavicka.append(el('b', str(n.titul)));
   d.append(hlavicka);
@@ -283,14 +344,16 @@ function vykreslitNalezy(nalezy) {
   const tvrzeni = nalezy.filter((n) => DRUHY_TVRZENI.includes(n.druh));
   const nelze = nalezy.filter((n) => n.druh === 'nelze_overit');
   const rizika = nalezy.filter((n) => !DRUHY_TVRZENI.includes(n.druh) && n.druh !== 'nelze_overit');
+  let otevrit = true; // jen první (nejzávažnější) nález první neprázdné skupiny
   [['Tvrzení, která nesedí', tvrzeni], ['Rizika', rizika]].forEach(([nadpis, seznamNalezu]) => {
     if (!seznamNalezu.length) return;
     const g = el('div', null, 'card skupina');
-    g.append(el('h2', nadpis), ...seznamNalezu.map(kartaNalezu));
+    g.append(el('h2', nadpis), ...seznamNalezu.map((n, i) => kartaNalezu(n, otevrit && i === 0)));
+    otevrit = false;
     out.append(g);
   });
   if (nelze.length) {
-    const g = sbalene('Nepodařilo se ověřit (' + nelze.length + ')', 'card skupina', [el('p', NOTE_NELZE_OVERIT, 'poznamka'), ...nelze.map(kartaNalezu)]);
+    const g = sbalene('Nepodařilo se ověřit (' + nelze.length + ')', 'card skupina', [el('p', NOTE_NELZE_OVERIT, 'poznamka'), ...nelze.map((n) => kartaNalezu(n, false))]);
     out.append(g);
   }
 }
@@ -310,12 +373,30 @@ function render(r) {
     return;
   }
   const semafor = povoleno(str(r.semafor), SEMAFORY, 'šedá');
-  card.append(el('span', SEMAFOR_STITEK[semafor], 'light ' + semafor));
-  card.append(el('p', str(r.shrnuti)));
-  card.append(el('p', 'Jistota kontroly: ' + str(r.jistota), 'hint'));
+  // Verdikt je nahoře: semafor (lampy jsou jen doplněk, význam nese text štítku), shrnutí a co dělat; detaily jsou až pod ním.
+  card.className = 'card verdikt';
+  card.setAttribute('data-semafor', semafor);
+  const lampy = el('div', null, 'lampy');
+  lampy.setAttribute('data-semafor', semafor);
+  lampy.setAttribute('aria-hidden', 'true');
+  lampy.append(el('span', null, 'lampa'), el('span', null, 'lampa'), el('span', null, 'lampa'));
+  const text = el('div', null, 'verdikt-text');
+  text.append(el('span', SEMAFOR_STITEK[semafor], 'light ' + semafor));
+  text.append(el('p', str(r.shrnuti), 'shrnuti'));
+  text.append(el('p', 'Jistota kontroly: ' + str(r.jistota), 'hint'));
   const nezkontrolovano = strs(r.nezkontrolovano);
-  if (nezkontrolovano.length) card.append(el('p', 'Nezkontrolováno: ' + nezkontrolovano.join(', '), 'hint'));
+  if (nezkontrolovano.length) text.append(el('p', 'Nezkontrolováno: ' + nezkontrolovano.join(', '), 'hint'));
+  const rady = strs(r.co_delat);
+  if (rady.length) {
+    const ul = el('ul', null, 'rady');
+    rady.forEach((t) => ul.append(el('li', t)));
+    text.append(el('h3', 'Co dělat'), ul);
+  }
+  text.append(tlacitkoPomoc());
+  card.append(lampy, text);
   out.append(card);
+  // Formulář je nad výsledkem; verdikt se po kontrole posune nahoru, ať ho není nutné hledat.
+  if (typeof card.scrollIntoView === 'function') card.scrollIntoView({ block: 'start' });
   const signaly = objs(r.signaly);
   const nalezy = objs(r.nalezy).filter((n) => str(n.titul) || str(n.dukaz));
   // Nové pole nalezy má přednost; odpověď bez něj (nebo s prázdným při neprázdných signalech) se ukáže jako dřív.
@@ -332,12 +413,7 @@ function render(r) {
     });
     out.append(sc);
   }
-  const wc = el('div', null, 'card');
-  wc.append(el('h2', 'Co dělat'));
-  const ul = el('ul');
-  strs(r.co_delat).forEach((t) => ul.append(el('li', t)));
-  wc.append(ul, el('p', str(r.upozorneni), 'hint'), tlacitkoPomoc());
-  out.append(wc);
+  if (str(r.upozorneni)) out.append(el('p', str(r.upozorneni), 'hint'));
 }
 
 // Povolené jsou jen PNG, JPEG a WebP (podle type; přípona jen když prohlížeč type nezná).
@@ -488,6 +564,8 @@ document.getElementById('f').addEventListener('submit', async (e) => {
 // První pomoc při podvodu: statický obsah z veřejných zdrojů (docs/superpowers/specs/prvni-pomoc/obsah-*.md), bez LLM a bez
 // volání na server. Adresy zdrojů jsou uložené BEZ schématu (//host/cesta); před použitím se doplní https: a projdou přes bezpecnyOdkaz.
 // Obsah zatím neprošel odbornou revizí; lhůty a částky jsou jen ty, které výslovně uvádí zdroj.
+// Pole upozorneni a neoverene u případů se v rozhraní nezobrazují (v patičce stránky je jen krátká poučka); zůstávají tu jako záznam
+// o stavu obsahu a přiznání o neprověřeném obsahu je v README a podkladech.
 // ---------------------------------------------------------------------------------------------------------------------
 const PRVNI_POMOC = {
   overeno: '2026-10-16',
@@ -784,12 +862,11 @@ function ppOdkaz(idZdroje) {
   return a;
 }
 
+// Zdroje kroku jsou sbalené (počet v záhlaví), ať kroky nezahlcují stránku.
 function ppZdrojeKroku(ids) {
-  const box = el('div', null, 'zdroje-kroku');
   const odkazy = (ids || []).map((id) => ppOdkaz(id)).filter(Boolean);
   if (!odkazy.length) return null;
-  box.append(el('span', 'Zdroj: ', 'hint'), ...odkazy);
-  return box;
+  return sbalene((odkazy.length === 1 ? 'Zdroj' : 'Zdroje (' + odkazy.length + ')'), 'zdroje-kroku', odkazy);
 }
 
 function ppKrok(k, cislo) {
@@ -846,7 +923,7 @@ function ppVyber() {
   const zpet = el('button', 'Zkontrolovat nabídku, než zaplatíte', 'sekundarni');
   zpet.setAttribute('type', 'button');
   zpet.addEventListener('click', () => prepnoutZalozku(false));
-  c.append(zpet, el('p', PRVNI_POMOC.upozorneni, 'poznamka'));
+  c.append(zpet);
   return c;
 }
 
@@ -966,10 +1043,6 @@ function ppDetail(p) {
   wrap.append(zd);
 
   const nov = el('div', null, 'card');
-  const neoverene = el('ul');
-  p.neoverene.forEach((t) => neoverene.append(el('li', t)));
-  nov.append(sbalene('Co zatím není ověřeno', 'sbalene', [neoverene]));
-  nov.append(el('p', PRVNI_POMOC.upozorneni, 'poznamka'));
   const nav = el('div', null, 'nav-pomoc');
   const zpet2 = el('button', '← Zpět na výběr případu', 'sekundarni');
   zpet2.setAttribute('type', 'button');
