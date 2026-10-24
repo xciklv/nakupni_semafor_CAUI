@@ -26,8 +26,8 @@
   button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible, summary:focus-visible { outline:2px solid var(--fg); outline-offset:2px; }
   button { background:var(--accent); color:var(--on); border:0; border-radius:var(--radius); padding:12px 20px; font:inherit; font-weight:600; cursor:pointer; margin-top:16px; }
   button:disabled { opacity:.6; cursor:wait; }
-  button.sekundarni { background:transparent; color:var(--fg); border:1px solid var(--line); margin-top:8px; }
-  button.sekundarni:hover { border-color:var(--muted); }
+  button.sekundarni { background:transparent; color:var(--fg); border:1px solid var(--muted); margin-top:8px; }
+  button.sekundarni:hover { border-color:var(--fg); }
   #go { width:100%; }
   .nebo { display:flex; align-items:center; gap:12px; margin:14px 0 0; color:var(--muted); font:.78rem var(--mono); text-transform:uppercase; letter-spacing:.06em; }
   .nebo::before, .nebo::after { content:""; flex:1; height:1px; background:var(--line); }
@@ -56,7 +56,7 @@
   .verdikt-text > * { margin:0 0 10px; }
   .verdikt-text > :last-child { margin-bottom:0; }
   .shrnuti { font-size:1.2rem; line-height:1.4; font-weight:500; }
-  .verdikt-text h3 { margin-top:16px; }
+  .verdikt-text > h2 { margin:16px 0 6px; font:600 .78rem/1.3 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   .rady { margin:0; padding-left:20px; }
   .rady li { margin:2px 0; }
   .sig { border-left:4px solid var(--line); padding:4px 0 4px 12px; margin:12px 0; }
@@ -69,15 +69,16 @@
   .skupina > h2 { margin:0; padding:16px 20px 12px; font:600 .78rem/1.3 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   details.skupina > summary { padding:16px 20px; font:600 .78rem/1.3 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   details.skupina[open] > summary { border-bottom:1px solid var(--line); }
+  details.skupina > summary:focus-visible { outline-offset:-2px; }
   details.skupina > p.poznamka { margin:0; padding:12px 20px 0; }
   details.nalez { margin:0; padding:0 20px; border:0; border-top:1px solid var(--line); }
+  details.nalez.sig { border-top-color:var(--line); }
   details.nalez > summary { display:flex; align-items:center; gap:8px; padding:14px 0; font-size:1rem; font-weight:600; }
   details.nalez > summary b { font-weight:600; }
   details.nalez > summary::marker { content:""; }
   details.nalez > summary::-webkit-details-marker { display:none; }
-  details.nalez > summary::after { content:"▾"; margin-left:auto; padding-left:12px; color:var(--muted); font-weight:400; }
-  details.nalez[open] > summary::after { content:"▴"; }
-  details.nalez > :not(summary) { max-width:100%; }
+  details.nalez > summary::after { content:"▾"; content:"▾" / ""; margin-left:auto; padding-left:12px; color:var(--muted); font-weight:400; }
+  details.nalez[open] > summary::after { content:"▴"; content:"▴" / ""; }
   details.nalez > b { display:block; margin:12px 0 2px; font:600 .72rem/1.3 var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   details.nalez > p { margin:2px 0; }
   details.nalez > :last-child { margin-bottom:16px; }
@@ -130,6 +131,7 @@
   .podklad-detail p { margin:2px 0; }
   textarea.pole-popis { width:100%; margin-top:6px; padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); color:var(--fg); font:inherit; resize:vertical; }
   .popis-text { white-space:pre-wrap; }
+  @media (forced-colors: active) { input[type=checkbox]:checked { background:Highlight; border-color:Highlight; } input[type=checkbox]:checked::after { border-color:HighlightText; } }
   label.podklad-radek.hotovo span { color:var(--muted); text-decoration:line-through; }
   .nav-pomoc { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
   .nav-pomoc button { margin:0; }
@@ -391,7 +393,7 @@ function render(r) {
   if (rady.length) {
     const ul = el('ul', null, 'rady');
     rady.forEach((t) => ul.append(el('li', t)));
-    text.append(el('h3', 'Co dělat'), ul);
+    text.append(el('h2', 'Co dělat'), ul);
   }
   text.append(tlacitkoPomoc());
   card.append(lampy, text);

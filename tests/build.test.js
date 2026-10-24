@@ -3026,6 +3026,37 @@ test('nálezy: prázdné pole nalezy při neprázdných signalech spadne zpět n
   assert.ok(texts(dom.byId.out).includes('Záložní signál'));
 });
 
+test('verdikt: karta nese semafor v data-semafor (ne jako třídu), lampy a Co dělat jsou uvnitř karty, upozornění je až pod nálezy', () => {
+  const { dom } = nactiNalezy(odpoved([nalez()]));
+  const out = dom.byId.out;
+  const karta = out.children[0];
+  assert.equal(karta.attrs['data-semafor'], 'oranžová');
+  assert.ok(!karta.className.split(' ').includes('oranžová'), 'plná barva patří jen štítku verdiktu, ne celé kartě');
+  assert.equal(karta.children[0].attrs['data-semafor'], 'oranžová', 'lampy');
+  assert.equal(karta.children[0].children.length, 3);
+  assert.equal(karta.children[0].attrs['aria-hidden'], 'true');
+  const t = texts(karta);
+  assert.ok(t.includes('Střední riziko') && t.includes('Shrnutí') && t.includes('Co dělat') && t.includes('Zeptejte se prodejce'));
+  assert.equal(out.children[out.children.length - 1].textContent, 'U', 'upozornění z odpovědi je poslední');
+  const neznamy = nactiNalezy(odpoved([], { semafor: 'card err', signaly: [{ titul: 'S', dukaz: 'D' }] }));
+  assert.equal(neznamy.dom.byId.out.children[0].attrs['data-semafor'], 'šedá');
+  assert.equal(neznamy.dom.byId.out.children[0].children[0].attrs['data-semafor'], 'šedá');
+});
+
+test('nálezy: otevřený je jen nejzávažnější nález první skupiny; ostatní a skupina „Nepodařilo se ověřit“ jsou sbalené', () => {
+  const { dom } = nactiNalezy(odpoved([
+    nalez({ id: 'a', titul: 'T1' }), nalez({ id: 'b', druh: 'rozpor', titul: 'T2' }),
+    holyNalez({ druh: 'riziko', titul: 'T3' }), holyNalez({ druh: 'nelze_overit', titul: 'T4' }),
+  ]));
+  const karty = dom.all.filter((n) => n.tagName === 'details' && /\bnalez\b/.test(n.className));
+  assert.equal(karty.length, 4);
+  const titul = (k) => k.children[0].children.find((c) => c.tagName === 'b').textContent;
+  assert.deepEqual(karty.filter((k) => k.attrs.open !== undefined).map(titul), ['T1']);
+  const jenRizika = nactiNalezy(odpoved([holyNalez({ druh: 'riziko', titul: 'R1' }), holyNalez({ druh: 'riziko', titul: 'R2' })]));
+  const k2 = jenRizika.dom.all.filter((n) => n.tagName === 'details' && /\bnalez\b/.test(n.className));
+  assert.deepEqual(k2.filter((k) => k.attrs.open !== undefined).map(titul), ['R1'], 'bez skupiny tvrzení se otevírá první riziko');
+});
+
 test('nálezy: stránka používá navigator.clipboard a nemá žádnou externí adresu', () => {
   const html = pageHtml();
   assert.match(html, /navigator\.clipboard/);

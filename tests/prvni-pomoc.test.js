@@ -319,6 +319,18 @@ test('úvod: tři sdělení (klid, nic neplatit ani když volá banka nebo polic
   assert.equal(/prohlížeči|orientační|právní poradenství/.test(vse), false, 'úvod je bez prohlížeče a bez právního upozornění');
 });
 
+test('zdroje kroků jsou sbalené: odkazy leží uvnitř details se záhlavím Zdroj / Zdroje (n)', () => {
+  const p = nahled();
+  tlacitkoPripadu(p, p.PP.pripady[0].nazev).click();
+  const bloky = findAll(out(p), (n) => n.tagName === 'DETAILS' && n.className === 'zdroje-kroku');
+  assert.ok(bloky.length > 5, 'bloků zdrojů: ' + bloky.length);
+  for (const b of bloky) {
+    assert.equal(b.attrs.open, undefined, 'sbalené');
+    assert.match(b.children[0].textContent, /^Zdroj(e \(\d+\))?$/);
+    assert.ok(findAll(b, (n) => n.tagName === 'A').length >= 1);
+  }
+});
+
 test('upozornění: v první pomoci není žádný rámeček, jen krátká poučka v patičce stránky', () => {
   const p = nahled();
   const vsechno = () => texts(out(p)).join(' ');
