@@ -152,7 +152,7 @@ Jedna kontrola stojí **asi 0,01–0,03 USD** (textová s Haiku nejméně, s vě
 - `npm test`: **939 z 939** testů prochází (23 souborů v [tests/](tests/) a `tools/`; spuštěno 2026-10-24).
 - Celá sada eval má **41 případů** ([eval/cases.json](eval/cases.json)): 16 podvodů, 19 v pořádku, 6 sporných. Z toho 15 podvodných případů pochází ze seznamu ČOI, který kontrola sama používá jako zdroj, takže jejich zachycení málo vypovídá.
 - Měření s opakováním (2026-10-23): **8 případů × 3 běhy = 24 kontrol**. Zachycené podvody 3/3, falešné poplachy 0/9, chyby 0, kritérium stability PASS, 7 z 8 případů stabilních. To je **malá sada, ne statistický důkaz**: podvodný případ je v ní jediný (tři běhy téže nabídky).
-- **Poslední dvě změny nejsou přeměřeny** (`9da052b`: platforma marketplace se pozná z vloženého textu; `6c97ad4`: chybějící údaje o prodejci jsou u neúplného vstupu jen informace). Druhá z nich pravděpodobně mění výsledek podvodné powerbanky (v měření červená, protože ji zvedaly právě takové signály). Mezilehlé měření téhož dne po opravách z code review kritérium nesplnilo; podrobnosti a zdroje čísel v [docs/prihlaska-podklady.md](docs/prihlaska-podklady.md#reálná-čísla).
+- **Poslední dvě změny nejsou přeměřeny** (`f0609f4`: platforma marketplace se pozná z vloženého textu; `949aa22`: chybějící údaje o prodejci jsou u neúplného vstupu jen informace). Druhá z nich pravděpodobně mění výsledek podvodné powerbanky (v měření červená, protože ji zvedaly právě takové signály). Mezilehlé měření téhož dne po opravách z code review kritérium nesplnilo; podrobnosti a zdroje čísel v [docs/prihlaska-podklady.md](docs/prihlaska-podklady.md#reálná-čísla).
 
 ## Omezení
 
@@ -201,7 +201,7 @@ Ze spec [kontrola na důkazech](docs/superpowers/specs/2026-10-20-kontrola-na-du
 | `eval/` | testovací sada, vyhodnocení a kritérium stability |
 | `tests/` | testy (`node --test`) |
 | `docs/prihlaska-podklady.md` | ověřená čísla, kritéria poroty, demo scénáře |
-| `docs/superpowers/specs/`, `plans/` | specifikace a plány (kontrola, kontrola na důkazech, první pomoc) |
+| `docs/superpowers/specs/` | specifikace (kontrola, kontrola na důkazech, první pomoc) |
 | `docs/superpowers/research/` | zprávy ze spiků, koncepce nasazení a rozvoje, právní katalog |
 | `docs/superpowers/reviews/` | code review (dvě kola) a co z něj zůstalo otevřené |
 | `LICENSE` | Apache-2.0 |
