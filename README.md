@@ -1,6 +1,6 @@
-# Nákupní kontrola
+# Nákupní semafor
 
-*Pracovní název; konečný název zatím není vybraný.*
+*Dříve pracovní název „Nákupní kontrola“. Technické identifikátory (cesty webhooků, názvy workflow v n8n, `X-Nakupni-Kontrola`, schéma dossieru) jméno „nakupni-kontrola“ zatím nesou.*
 
 Kontrola online nabídky, která **nejdřív sesbírá data do jednoho dossieru** (stránka, specifikace, recenze, prodejce, identifikátory, obrázky), pak je **vyhodnotí po částech** a ukáže nálezy se semaforem a vysvětlením pro laika. Má dvě úlohy: ochránit před nečestným prodejcem a před nesmyslným produktem nebo popisem (například parametr, který odporuje fyzice).
 

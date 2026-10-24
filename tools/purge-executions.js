@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// Mazání uložených průběhů Nákupní kontroly z lokálního n8n.
+// Mazání uložených průběhů Nákupního semaforu z lokálního n8n.
 //
 // Proč: n8n si pro ladění ukládá průběhy kontrol včetně odeslaných textů stránek (u Allegra může text obsahovat jméno
 // přihlášeného účtu). Lokální uložení je v pořádku, ale data musí jít odstranit. Jsou na to tři cesty:
@@ -8,7 +8,7 @@
 //      nasadit; viz resolveSaveExecutions v build/build-workflow.js). Průběhy kontroly se pak neukládají.
 //   2. Staré průběhy mazat samo: nastavení n8n EXECUTIONS_DATA_PRUNE=true a EXECUTIONS_DATA_MAX_AGE=<hodiny>
 //      (např. 24 = nechat jen poslední den). Platí pro všechny workflow v dané instanci n8n.
-//   3. Tento skript: smaže průběhy obou workflow Nákupní kontroly přes veřejné API n8n.
+//   3. Tento skript: smaže průběhy obou workflow Nákupního semaforu přes veřejné API n8n.
 //
 // Použití (bez --yes se nic nesmaže, jen se vypíše, kolik průběhů by se smazalo):
 //   N8N_API_KEY=<klíč> node tools/purge-executions.js                          výpis (dry-run)

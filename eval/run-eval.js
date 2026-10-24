@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Testovací sada Nákupní kontroly: pošle každý případ z eval/cases.json na webhook,
+// Testovací sada Nákupního semaforu: pošle každý případ z eval/cases.json na webhook,
 // spočítá metriky a zapíše eval/vysledky.json (strojově) a eval/vysledky.md (česky, čitelně).
 //
 // Použití (z kořene projektu, plain Node, žádné závislosti):

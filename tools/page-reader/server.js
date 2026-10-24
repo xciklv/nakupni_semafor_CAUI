@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// Lokální služba čtečky stránek pro Nákupní kontrolu. Poslouchá jen na 127.0.0.1 (výchozí port 5687). Všechny POST cesty vyžadují
+// Lokální služba čtečky stránek pro Nákupní semafor. Poslouchá jen na 127.0.0.1 (výchozí port 5687). Všechny POST cesty vyžadují
 // hlavičku X-Nakupni-Kontrola: 1 a Content-Type: application/json; požadavky se zpracovávají po jednom (jeden prohlížeč).
 //   POST /read     {"url":"https://..."}        ->  {ok:true,text,title,finalUrl,status,ms} | {ok:false,duvod}
 //   POST /collect  {"url":"https://..."}        ->  {ok:true,dossier} | {ok:false,duvod,blokace?:{druh,dodavatel}}   (dossier@0-spike, viz tools/page-collector)

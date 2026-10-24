@@ -1,7 +1,7 @@
 # Čtečka stránek (page-reader)
 
 Malá lokální služba, která otevře veřejnou stránku ve skutečném headless Chromiu a vrátí její viditelný text.
-Nákupní kontrola ji volá pro **marketplace** (AliExpress, Temu, Allegro, …): ty se kreslí JavaScriptem, takže
+Nákupní semafor ji volá pro **marketplace** (AliExpress, Temu, Allegro, …): ty se kreslí JavaScriptem, takže
 obyčejné stažení HTML z nich dostane jen kostru bez ceny, prodejce a recenzí.
 
 Není povinná. Neběží-li, workflow postupuje jako dřív (obyčejné stažení, případně výzva k vložení screenshotu).

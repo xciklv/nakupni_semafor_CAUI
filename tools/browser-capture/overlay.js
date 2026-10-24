@@ -23,7 +23,7 @@ function nakupniKontrolaOverlay(stav) {
   const el = (t, txt, cls) => { const e = document.createElement(t); if (txt != null) e.textContent = txt; if (cls) e.className = cls; return e; };
   const zavrit = el('button', '×', 'x');
   zavrit.onclick = () => host.remove();
-  box.append(zavrit, el('h3', 'Nákupní kontrola'));
+  box.append(zavrit, el('h3', 'Nákupní semafor'));
   const tlacitko = (txt, akce, cls) => { const b = el('button', txt, cls); b.onclick = () => chrome.runtime.sendMessage({ akce }); return b; };
 
   const MAX_KARET = 6; // zbytek skupiny je pod „+N dalších“, nic se neořezává

@@ -1,7 +1,7 @@
 if (typeof require !== 'undefined' && typeof WEIGHT === 'undefined') { var { WEIGHT } = require('./signals'); var { parseLlmJson } = require('./llm'); }
 
 const MODULE_NAMES = { offer: 'nabídka', seller: 'prodejce', safety: 'bezpečnost', identity: 'identita produktu', plausibility: 'věrohodnost', images: 'obrázky', reviews: 'recenze' };
-const DISCLAIMER = 'Nákupní kontrola je pomůcka založená na rizikových signálech, ne právní verdikt ani tvrzení o prodejci.';
+const DISCLAIMER = 'Nákupní semafor je pomůcka založená na rizikových signálech, ne právní verdikt ani tvrzení o prodejci.';
 
 const SYSTEM_EXPLAIN = [
   'Píšeš česky srozumitelně i pro seniora, bez odborných výrazů.',

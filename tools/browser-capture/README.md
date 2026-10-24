@@ -1,19 +1,19 @@
 # browser-capture: rozšíření do Chrome (hlavní cesta sběru dat)
 
-Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, kterou už uživatel otevřel a prošel, **ukáže celý text, který odejde**, a po potvrzení ho pošle do Nákupní kontroly (`POST http://127.0.0.1:5678/webhook/nakupni-kontrola`, tělo `{ odkaz, text, obrazky, jsonld }`). Jen čte: na stránce nic neklikne, nerozbalí ani nevyplní. Proč právě rozšíření: čte to, co člověk vidí, takže prochází i Allegro, které server blokuje (zpráva `docs/superpowers/research/2026-10-20-zalozka-spike.md`).
+Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, kterou už uživatel otevřel a prošel, **ukáže celý text, který odejde**, a po potvrzení ho pošle do Nákupního semaforu (`POST http://127.0.0.1:5678/webhook/nakupni-kontrola`, tělo `{ odkaz, text, obrazky, jsonld }`). Jen čte: na stránce nic neklikne, nerozbalí ani nevyplní. Proč právě rozšíření: čte to, co člověk vidí, takže prochází i Allegro, které server blokuje (zpráva `docs/superpowers/research/2026-10-20-zalozka-spike.md`).
 
 ## Instalace (1 minuta)
 
 1. Spusťte n8n lokálně (`127.0.0.1:5678`) a ověřte, že workflow „Nákupní kontrola“ je aktivní a nasazené s aktuálním `build/glue/01-vstup.js`.
 2. V Chrome otevřete `chrome://extensions` a vpravo nahoře zapněte „Režim pro vývojáře“.
 3. Klikněte na „Načíst rozbalené“ a vyberte složku `tools/browser-capture` (ta, kde leží `manifest.json`).
-4. V seznamu se objeví „Nákupní kontrola – sběr stránky“ (verze 0.2.0). Bez chybové hlášky u karty rozšíření je instalace v pořádku. Přišpendlete ikonu (puzzle na liště, špendlík u rozšíření).
+4. V seznamu se objeví „Nákupní semafor – sběr stránky“ (verze 0.2.0). Bez chybové hlášky u karty rozšíření je instalace v pořádku. Přišpendlete ikonu (puzzle na liště, špendlík u rozšíření).
 5. Po každé změně souborů v této složce klikněte u rozšíření na „Znovu načíst“ (kruhová šipka) a na otevřených stránkách obnovte kartu.
 
 ## Použití
 
 1. Otevřete stránku nabídky (Allegro, AliExpress, Temu…). Případně sami rozbalte recenze, parametry a popis: rozšíření nic nerozbaluje, přečte jen to, co je na stránce.
-2. Klikněte na ikonu rozšíření. Vpravo nahoře se ukáže okno „Nákupní kontrola“ s **celým textem, který by se odeslal** (odkaz, text, adresy obrázků, JSON-LD). Nic se zatím neodeslalo.
+2. Klikněte na ikonu rozšíření. Vpravo nahoře se ukáže okno „Nákupní semafor“ s **celým textem, který by se odeslal** (odkaz, text, adresy obrázků, JSON-LD). Nic se zatím neodeslalo.
 3. „Zkontrolovat“ odešle přesně to, co vidíte. Po 10 až 60 s se v okně ukáže semafor, shrnutí a nálezy ve stejných skupinách jako na webovce (tvrzení, která nesedí; rizika; „nepodařilo se ověřit“ sbalené a bez barvy varování). Kontrola stojí řádově 0,01 až 0,03 USD.
 4. „Vymazat sběr“ zahodí sebrané stránky bez odeslání. Okno zavřete tlačítkem ×.
 
