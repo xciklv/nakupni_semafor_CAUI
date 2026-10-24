@@ -1,6 +1,7 @@
 {
   "name": "nakupni-kontrola",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "test": "node --test \"tests/*.test.js\" \"tools/**/*.test.js\"",
     "build": "node build/build-workflow.js",
