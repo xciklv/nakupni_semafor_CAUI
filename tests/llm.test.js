@@ -159,7 +159,7 @@ test('prompt: prodejce.hodnoceni jen z výslovného hodnocení prodejce, nikdy p
 
 test('normalizeExtraction: hodnocení prodejce shodné s průměrem produktu při málo recenzích je nezjištěné', () => {
   const n = (hodnoceni, prumer, pocet) => normalizeExtraction({ prodejce: { hodnoceni }, recenze: { prumer, pocet } });
-  // Allegro OneBlade: „Hodnocení: 3,00 (2 hodnocení a 2 recenze)“ je hodnocení produktu, ne prodejce
+  // Allegro: „Hodnocení: 3,00 (2 hodnocení a 2 recenze)“ je hodnocení produktu, ne prodejce
   const a = n(3, 3, 2);
   assert.equal(a.prodejce.hodnoceni, null);
   assert.equal(a.recenze.prumer, 3);
@@ -496,7 +496,7 @@ test('schéma extrakce: produkt.platforma je obyčejný string (bez unionu), pro
   assert.equal(normalizeExtraction({}).produkt.platforma, null);
 });
 
-test('nesoulady: věta, která sama říká „není rozpor“ (dětský e-shop), se zahodí; skutečný rozpor vedle ní zůstává', () => {
+test('nesoulady: věta, která sama říká „není rozpor“, se zahodí; skutečný rozpor vedle ní zůstává', () => {
   const x = normalizeExtraction({ nesoulady: [
     'Kód produktu 1005007138908110 je uveden jako kód, nikoli jako EAN; cena 814 Kč u hlavního produktu oproti ceně 955 Kč u doporučeného batohu není rozpor',
     'Cena u doporučeného zboží nejde o rozpor',
@@ -506,7 +506,7 @@ test('nesoulady: věta, která sama říká „není rozpor“ (dětský e-shop)
   assert.deepEqual(x.nesoulady, ['Název uvádí 64 GB, zatímco specifikace uvádí 32 GB; cena není rozpor', 'Název uvádí Solight 1MF20, popis 1M04']);
 });
 
-test('nesoulady: „kód není EAN“ není rozpor (dětský e-shop podruhé), skutečný rozpor kódů zůstává', () => {
+test('nesoulady: „kód není EAN“ není rozpor, skutečný rozpor kódů zůstává', () => {
   const x = normalizeExtraction({ nesoulady: [
     "Kód produktu 1005007138908110 je uveden jako 'Kód', nikoli jako EAN; nesouvisí s EAN",
     'Kód 123 není EAN',

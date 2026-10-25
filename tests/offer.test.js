@@ -57,7 +57,7 @@ test('žádný signál nabídky není medium ani high a cena_extremne_nizka je l
 const { computeVerdict } = require('../engine/scoring');
 const ALL_OK = { offer: 'ok', seller: 'ok', safety: 'ok' };
 
-test('legitimní nabídka (Alza: katalogové fotky, obecné recenze, cena v normě) → skóre <= 2, nikdy oranžová', () => {
+test('legitimní nabídka (velký e-shop: katalogové fotky, obecné recenze, cena v normě) → skóre <= 2, nikdy oranžová', () => {
   const r = offerSignals(X({
     produkt: { nazev: 'Powerbanka Xiaomi 20000 mAh', cena: 899, mena: 'CZK', referencni_cena_odhad: { min: 700, max: 1100, mena: 'CZK' } },
     obrazky: { vypada_ai_nebo_katalog: true, nesoulad_s_popisem: false },

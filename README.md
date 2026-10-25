@@ -163,7 +163,7 @@ Jedna kontrola stojí **asi 0,01–0,03 USD** (textová s Haiku nejméně, s vě
 - Extrakce modelem **není deterministická** (Haiku nejde nastavit deterministicky): v měření 2026-10-23 kolísal `text-injekce-podvod` (šedá×2, červená×1), v předchozím `produkt-allegro-oneblade-text` (šedá×2, zelená×1). Pravidlo o kolísání nejvýše jednoho případu z osmi se podle [eval/gate.js](eval/gate.js) uplatní až od pěti běhů, takže se při třech bězích nevyhodnocovalo.
 - `produkt-aliexpress-diffuser-odkaz` (sporný) dal šedou×3 (signál `obrazek_hlavni_bez_predmetu`), přestože poznámka v sadě čekala oranžovou až červenou; sporné případy se do metrik zachycení a falešného poplachu nepočítají.
 - U vloženého textu vidí modul věrohodnosti jen shrnutí z extrakce, ne celý text nabídky (nález 17 druhého code review).
-- Cizí EAN u OneBlade z Allegra (podle databáze EAN-Search, jak uvádí spec, patří jinému produktu) bezplatné zdroje nepoznají; Icecat kód nezná, takže vznikne jen nález `ean_nenalezen` (informace). Rozpoznal by to placený EAN dotaz (viz mapa rozšíření).
+- Cizí EAN u nabídky z Allegra (kód podle databáze EAN-Search, jak uvádí spec, patří jinému produktu) bezplatné zdroje nepoznají; Icecat kód nezná, takže vznikne jen nález `ean_nenalezen` (informace). Rozpoznal by to placený EAN dotaz (viz mapa rozšíření).
 - Ceny u konkurence kontrola nezná: pro ně není legální bezplatný zdroj ([průzkum](docs/superpowers/research/2026-10-20-zdroje-dat.md)).
 - Obrázky: kontrola čte text z fotek a porovnává ho s nabídkou. Nepozná AI generování ani převzatou fotku; hlavní fotka bez samostatného předmětu je jen nález nízké závažnosti.
 - Recenze: jen základ (počet, průměr, texty); časová osa recenzí není hotová.
