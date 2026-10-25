@@ -145,14 +145,14 @@ Se smazáním: `npm run purge -- --yes` (volitelně `--older-than-hours N`). V P
 | Analýza obrázků (3 běhy, většina) | Claude Haiku 5.5 | `LLM_MODEL_IMAGES` |
 | Vysvětlení pro laika | Claude Haiku 5.5 | `LLM_MODEL_EXPLAIN` |
 
-Jedna kontrola stojí **asi 0,01–0,03 USD** (textová s Haiku nejméně, s věrohodností a obrázky asi 0,02 USD). **Ověřený výdaj za Anthropic API za vývoj včetně spiků a evalů byl k 2026-10-21 1,32 USD** (zkontrolováno v Anthropic Console). Od té doby přibyla další měření; aktuální částka není ověřená (podle autora zhruba 1,7 USD). Rozpočet byl pevně omezený (3 USD měsíčně), eval se proto měřil jen na malé sadě.
+Jedna kontrola stojí **asi 0,01–0,03 USD** (textová s Haiku nejméně, s věrohodností a obrázky asi 0,02 USD). **Výdaj za Anthropic API za vývoj včetně spiků a evalů je podle autora k 2026-10-25 zhruba 2,15 USD** (k 2026-10-21 bylo v Anthropic Console ověřeno 1,32 USD). Rozpočet byl pevně omezený (3 USD měsíčně), eval se proto měřil jen na malé sadě.
 
 ## Testy a eval
 
-- `npm test`: **939 z 939** testů prochází (23 souborů v [tests/](tests/) a `tools/`; spuštěno 2026-10-24).
+- `npm test`: **956 z 956** testů prochází (soubory v [tests/](tests/) a `tools/`; spuštěno 2026-10-25).
 - Celá sada eval má **41 případů** ([eval/cases.json](eval/cases.json)): 16 podvodů, 19 v pořádku, 6 sporných. Z toho 15 podvodných případů pochází ze seznamu ČOI, který kontrola sama používá jako zdroj, takže jejich zachycení málo vypovídá.
 - Měření s opakováním (2026-10-23): **8 případů × 3 běhy = 24 kontrol**. Zachycené podvody 3/3, falešné poplachy 0/9, chyby 0, kritérium stability PASS, 7 z 8 případů stabilních. To je **malá sada, ne statistický důkaz**: podvodný případ je v ní jediný (tři běhy téže nabídky).
-- **Poslední dvě změny nejsou přeměřeny** (`f0609f4`: platforma marketplace se pozná z vloženého textu; `949aa22`: chybějící údaje o prodejci jsou u neúplného vstupu jen informace). Druhá z nich pravděpodobně mění výsledek podvodné powerbanky (v měření červená, protože ji zvedaly právě takové signály). Mezilehlé měření téhož dne po opravách z code review kritérium nesplnilo; podrobnosti a zdroje čísel v [docs/prihlaska-podklady.md](docs/prihlaska-podklady.md#reálná-čísla).
+- **Změny po tomto měření nejsou přeměřeny** (výčet je v [podkladech](docs/prihlaska-podklady.md)): mimo jiné `f0609f4` (platforma marketplace se pozná z vloženého textu) a `949aa22` (chybějící údaje o prodejci jsou u neúplného vstupu jen informace), nový vzhled webovky a pět drobných oprav z živého průchodu 2026-10-25 (kontrola proběhla jen na malé sadě živých nabídek, ne jako měření). `949aa22` pravděpodobně mění výsledek podvodné powerbanky (v měření červená, protože ji zvedaly právě takové signály). Mezilehlé měření téhož dne po opravách z code review kritérium nesplnilo; podrobnosti a zdroje čísel v [docs/prihlaska-podklady.md](docs/prihlaska-podklady.md#reálná-čísla).
 
 ## Omezení
 
