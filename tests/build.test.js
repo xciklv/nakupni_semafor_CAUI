@@ -928,7 +928,7 @@ test('e2e 8c (a): ČOI e-shop, stránka 403, bez textu -> červená bez LLM extr
   assert.equal(o.stav, 'ok');
   assert.equal(o.semafor, 'červená');
   assert.ok(o.signaly.some((s) => s.id === 'coi_seznam'));
-  assert.deepEqual(o.nezkontrolovano, ['nabídka', 'bezpečnost']);
+  assert.deepEqual(o.nezkontrolovano, ['nabídka', 'bezpečnost', 'čtení stránky nabídky']);
   assert.equal(f.r1.out.obsah, false);
   assert.equal(f.r2, undefined, 'Sestavit extrakci se nevolá');
   assert.ok(!f.llmCalls.includes('LLM – extrakce'), 'LLM extrakce se nevolá: ' + f.llmCalls);
@@ -958,7 +958,7 @@ test('e2e 8c (d): e-shop pouze z URL, mimo seznam ČOI, doména stará -> ok, š
   const o = f.final.odpoved;
   assert.equal(o.stav, 'ok');
   assert.equal(o.semafor, 'šedá');
-  assert.deepEqual(o.nezkontrolovano, ['nabídka', 'bezpečnost']);
+  assert.deepEqual(o.nezkontrolovano, ['nabídka', 'bezpečnost', 'čtení stránky nabídky']);
   assert.ok(Array.isArray(o.co_delat) && o.co_delat.length > 0);
   assert.deepEqual(o.signaly, []);
   assert.ok(!f.llmCalls.includes('LLM – extrakce'));
@@ -1092,7 +1092,7 @@ test('e2e kalibrace (e): obnova ČOI selže, ale existuje stará cache (>6 h) s 
   assert.equal(o0.semafor, 'červená');
   assert.ok(sigIds(o0).includes('coi_seznam'));
   assert.ok(o0.nezkontrolovano.includes('prodejce: seznam ČOI (neaktuální)'), o0.nezkontrolovano.join());
-  assert.deepEqual(f0.r3.out.verdict.skipped, ['seznam ČOI (neaktuální)']);
+  assert.deepEqual(f0.r3.out.verdict.skipped, ['seznam ČOI (neaktuální)', 'čtení stránky']);
   assert.notEqual(o0.jistota, 'vysoká');
   assert.equal(callsTo(f0, 'https://coi.gov.cz/'), 1, 'obnova se zkusila');
   assert.equal(state0.coi.at, stale.at, 'stará cache zůstala');
@@ -1109,7 +1109,7 @@ test('e2e kalibrace (e2): čerstvá cache (<6 h) se nepřeobnovuje', async () =>
   const f = await runFlow({ odkaz: 'https://clarkscz.cz/x' }, { httpStub: coiFailStub(), state });
   assert.equal(callsTo(f, 'https://coi.gov.cz/'), 0);
   assert.equal(f.final.odpoved.semafor, 'červená');
-  assert.deepEqual(f.r3.out.verdict.skipped, [], 'čerstvá cache nic nepřidává do skipped');
+  assert.deepEqual(f.r3.out.verdict.skipped, ['čtení stránky'], 'čerstvá cache nic nepřidává do skipped (jen nenačtená stránka)');
   assert.ok(!f.final.odpoved.nezkontrolovano.some((x) => x.includes('ČOI')));
 });
 

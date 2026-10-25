@@ -210,3 +210,12 @@ test('glue 03: čtečkový dossier marketplace počítá prodejce jako úplné �
   const { out } = await runModuly({}, ctx);
   assert.ok(!out.signals.some((s) => s.module === 'seller' && ['kontakt_chybi', 'provozovatel_chybi', 'mimo_eu_bez_kontaktu'].includes(s.id)), 'dossier tyto údaje nenese, nic se nevymýšlí');
 });
+
+test('glue 03: nenačtená stránka e-shopu se zapíše mezi přeskočené zdroje; přečtená ne', async () => {
+  const ctx = (nenactena) => ({ zkratka: false, input: { text: '', screenshoty: [], url: { ok: true, url: 'https://www.example.cz/p/x', host: 'example.cz', rezim: 'eshop' } }, pageText: '', rezim: 'eshop', host: 'example.cz', obsah: false, strankaNenactena: nenactena });
+  const a = await runModuly({}, ctx(true));
+  assert.ok(a.out.verdict.skipped.includes('čtení stránky'));
+  assert.equal(a.out.verdict.semafor, 'šedá');
+  const b = await runModuly({}, ctx(false));
+  assert.ok(!b.out.verdict.skipped.includes('čtení stránky'));
+});

@@ -141,3 +141,25 @@ test('volný text modelu (nerealne + nesoulady) nikdy nepřidá víc než 2 body
   const points = r.signals.reduce((sum, sg) => sum + (sg.severity === 'low' ? 1 : 0), 0);
   assert.equal(points, 2);
 });
+
+test('nižší hodnocení produktu: jen info (váha 0), barvu nemění; 3,6 z 5 při 5 hodnoceních', () => {
+  const r = offerSignals(X({ produkt: { nazev: 'Dock' }, recenze: { pocet: 5, prumer: 3.6 } }));
+  assert.deepEqual(ids(r), ['recenze_nizke_hodnoceni']);
+  const s = r.signals[0];
+  assert.equal(s.severity, 'info');
+  assert.match(s.evidence, /3,6 z 5 \(5 hodnocení\)/);
+  const v = computeVerdict(r.signals, ALL_OK);
+  assert.equal(v.score, 0);
+  assert.equal(v.semafor, 'zelená');
+});
+
+test('nižší hodnocení: hranice 4,0 a 3 hodnocení; neznámý počet se bere, 1–2 hodnocení jsou šum', () => {
+  const at = (recenze) => ids(offerSignals(X({ produkt: { nazev: 'A' }, recenze })));
+  assert.deepEqual(at({ pocet: 30, prumer: 4 }), []);
+  assert.deepEqual(at({ pocet: 30, prumer: 4.2 }), []);
+  assert.deepEqual(at({ pocet: 30, prumer: 3.9 }), ['recenze_nizke_hodnoceni']);
+  assert.deepEqual(at({ pocet: 3, prumer: 2 }), ['recenze_nizke_hodnoceni']);
+  assert.deepEqual(at({ pocet: 2, prumer: 1 }), []);
+  assert.deepEqual(at({ pocet: null, prumer: 3.5 }), ['recenze_nizke_hodnoceni']);
+  assert.deepEqual(at({ pocet: 10, prumer: null }), []);
+});

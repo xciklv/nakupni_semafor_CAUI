@@ -43,3 +43,18 @@ test('glue 01: obrázky a JSON-LD z rozšíření dojdou v input až do dalšíc
   assert.deepEqual(out.input.obrazky, ['https://a.cz/1.jpg']);
   assert.equal(out.input.jsonld, '{"@type":"Product"}');
 });
+
+test('glue 01: e-shop, jehož stránka se nepřečte (prázdná, příliš krátká, chyba), nese strankaNenactena; vložený text nebo přečtená stránka ne', async () => {
+  const odkaz = 'https://www.example.cz/p/sprchova-sada/p100398866001';
+  const stub = (body, statusCode = 200) => () => ({ statusCode, headers: { 'content-type': 'text/html' }, body });
+  for (const [nazev, httpStub] of [['prázdná', stub('')], ['příliš krátká', stub('<html><body>Ahoj</body></html>')], ['404', stub('', 404)]]) {
+    const { out } = await run({ odkaz }, { httpStub });
+    assert.equal(out.zkratka, false, nazev);
+    assert.equal(out.obsah, false, nazev);
+    assert.equal(out.strankaNenactena, true, nazev);
+  }
+  const ok = await run({ odkaz }, { httpStub: stub('<html><body>' + dlouhyText(2000) + '</body></html>') });
+  assert.equal(ok.out.strankaNenactena, false);
+  const vlozeny = await run({ odkaz, text: dlouhyText(400) }, { httpStub: stub('') });
+  assert.equal(vlozeny.out.strankaNenactena, false);
+});

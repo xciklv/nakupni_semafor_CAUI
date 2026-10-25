@@ -24,11 +24,19 @@ const EXPLAIN_PODVOD = /podvodnik|podvodnic|podvodn[ey] (prodejc|obchod|eshop|e-
 const EXPLAIN_BEZPECNOST_TVRZENI = /bezpecn\w*|v poradku|v pohode|bez obav|neni duvod k obav|nemate se ceho bat|duveryhodn\w*|nic (podezrel|rizikov)\w*.*nenasli|nic nenasli|bez problem|klidne koupit|muzete (si )?koupit|dobry nakup/;
 // Applied to zelená only. Conservative on purpose: 'rizikov' also rejects the neutral
 // 'Kontrola nenašla rizikové signály.', so the deterministic zelená text is used instead.
-const EXPLAIN_ZELENA_VAROVANI = /nekup\w*|nedoporuc\w*|nedokoncuj\w*|nakup radeji|radeji ne|varuj\w*|varovan\w*|podvod\w*|nebezpecn\w*|riziko|rizikov/;
+// 'varování' (jedno drobné varování) is allowed: the prompt asks for that word and the fallback text itself uses it; 'varuji' is not.
+const EXPLAIN_ZELENA_VAROVANI = /nekup\w*|nedoporuc\w*|nedokoncuj\w*|nakup radeji|radeji ne|varuj\w*|podvod\w*|nebezpecn\w*|riziko|rizikov/;
 
 // Nezkontrolované moduly následované nedostupnými zdroji ('prodejce: seznam ČOI'); chybějící/špatné pole se toleruje.
 // Přeskočené zdroje jiných modulů než prodejce (ostatní se píší jako „prodejce: <zdroj>“).
-const EXPLAIN_SKIPPED_OTHER = { 'ověření věrohodnosti': 'ověření věrohodnosti', 'analýza obrázků': 'analýza obrázků', Icecat: MODULE_NAMES.identity + ': Icecat' };
+// 'čtení stránky': odkaz se nepodařilo přečíst (prázdná nebo příliš krátká stránka) a nic jiného nebylo vloženo; zkontrolovala se jen adresa prodejce.
+const STRANKA_NENACTENA = 'čtení stránky';
+const EXPLAIN_SKIPPED_OTHER = { 'ověření věrohodnosti': 'ověření věrohodnosti', 'analýza obrázků': 'analýza obrázků', Icecat: MODULE_NAMES.identity + ': Icecat', [STRANKA_NENACTENA]: 'čtení stránky nabídky' };
+const EXPLAIN_STRANKA_NENACTENA = {
+  shrnuti: 'Stránku nabídky se nepodařilo přečíst, takže se zkontrolovala jen adresa prodejce. Nabídku samotnou kontrola neposoudila.',
+  rady: ['Zkopírujte text nabídky ze stránky a vložte ho sem, nebo vložte screenshot (případně použijte rozšíření do prohlížeče).', 'Do rozhodnutí berte výsledek jen jako orientační.'],
+};
+const explainStrankaNenactena = (verdict) => verdict && verdict.semafor === 'šedá' && Array.isArray(verdict.skipped) && verdict.skipped.includes(STRANKA_NENACTENA);
 // Pravdivý důvod šedé na marketplace: bez IČO a DIČ se registr ani nezkoušel; s nimi ho zkusil a prodejce nepotvrdil.
 const EXPLAIN_SELLER_UNVERIFIED = {
   bez_udaju: { nezkontrolovano: MODULE_NAMES.seller + ': nelze ověřit v rejstřících (v nabídce není IČO ani DIČ)', shrnuti: 'prodejce na tržišti nelze ověřit v rejstřících, hodnocení a počet prodejů jsou jen údaje z nabídky',
@@ -117,7 +125,8 @@ function parseExplanation(api) {
   };
 }
 
-function fallbackAdvice(verdict) {
+function fallbackAdvice(verdict, signals = []) {
+  if (explainStrankaNenactena(verdict)) return { shrnuti: EXPLAIN_STRANKA_NENACTENA.shrnuti, co_delat: EXPLAIN_STRANKA_NENACTENA.rady.slice() };
   const table = {
     'zelená': ['Kontrola nenašla žádná varování.', ['Přesto plaťte kartou nebo způsobem s ochranou kupujícího.', 'Uschovejte si potvrzení objednávky.']],
     'oranžová': ['Kontrola našla varování, která stojí za zvážení.', ['Projděte si níže uvedené nálezy.', 'Pokud se rozhodnete koupit, plaťte kartou nebo způsobem s ochranou kupujícího.', 'Zkuste srovnat nabídku u jiného prodejce.']],
@@ -134,6 +143,9 @@ function fallbackAdvice(verdict) {
   const shrnuti = verdict.semafor === 'šedá' || !table[verdict.semafor]
     ? (blocked.length ? 'Zatím nelze říct, že je riziko nízké: nezkontrolovalo se ' + blocked.join(', ') + '.' : t[0] + (nedostupne ? ' Údaje jsou neúplné, některý zdroj nebyl dostupný.' : ''))
     : t[0];
+  // Zelená s nálezy (i jen informativními) nesmí tvrdit „nenašla žádná varování“ těsně nad seznamem nálezů.
+  const snalezy = verdict.semafor === 'zelená' && Array.isArray(signals) && signals.some((s) => s && typeof s === 'object');
+  if (snalezy) return { shrnuti: 'Kontrola nenašla nic závažného, pár drobností ale stojí za ověření. Podívejte se na nálezy níže.', co_delat: ['Před platbou si nálezy níže ověřte.'].concat(t[1]) };
   return { shrnuti, co_delat: su && verdict.semafor === 'šedá' ? su.rady : t[1] };
 }
 
@@ -142,9 +154,10 @@ function buildResponse({ verdict, signals = [], explanation, prodejceDuveryhodny
   const weightOf = (s) => (s && Object.hasOwn(WEIGHT, s.severity) ? WEIGHT[s.severity] : 0);
   const list = (Array.isArray(signals) ? signals : []).filter((s) => s && typeof s === 'object');
   const sorted = list.slice().sort((a, b) => weightOf(b) - weightOf(a));
-  const fb = fallbackAdvice(verdict);
+  const fb = fallbackAdvice(verdict, list);
   let text = fb;
-  const useLlm = explanation && typeof explanation === 'object' && explanation.ok === true
+  // Nenačtená stránka má pevný text: model o ní jen hádal („nelze ověřit prodejce“).
+  const useLlm = !explainStrankaNenactena(verdict) && explanation && typeof explanation === 'object' && explanation.ok === true
     && !explainContradicts(verdict.semafor, explanation, { prodejceDuveryhodny }) && !explainUnsafeWording(explanation);
   if (useLlm && typeof explanation.shrnuti === 'string' && explanation.shrnuti.trim()) {
     const rady = (Array.isArray(explanation.co_delat) ? explanation.co_delat : [])

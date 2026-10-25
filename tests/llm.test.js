@@ -495,3 +495,22 @@ test('schéma extrakce: produkt.platforma je obyčejný string (bez unionu), pro
   assert.equal(normalizeExtraction({ produkt: { platforma: '' } }).produkt.platforma, null);
   assert.equal(normalizeExtraction({}).produkt.platforma, null);
 });
+
+test('nesoulady: věta, která sama říká „není rozpor“ (dětský e-shop), se zahodí; skutečný rozpor vedle ní zůstává', () => {
+  const x = normalizeExtraction({ nesoulady: [
+    'Kód produktu 1005007138908110 je uveden jako kód, nikoli jako EAN; cena 814 Kč u hlavního produktu oproti ceně 955 Kč u doporučeného batohu není rozpor',
+    'Cena u doporučeného zboží nejde o rozpor',
+    'Název uvádí 64 GB, zatímco specifikace uvádí 32 GB; cena není rozpor',
+    'Název uvádí Solight 1MF20, popis 1M04',
+  ] });
+  assert.deepEqual(x.nesoulady, ['Název uvádí 64 GB, zatímco specifikace uvádí 32 GB; cena není rozpor', 'Název uvádí Solight 1MF20, popis 1M04']);
+});
+
+test('nesoulady: „kód není EAN“ není rozpor (dětský e-shop podruhé), skutečný rozpor kódů zůstává', () => {
+  const x = normalizeExtraction({ nesoulady: [
+    "Kód produktu 1005007138908110 je uveden jako 'Kód', nikoli jako EAN; nesouvisí s EAN",
+    'Kód 123 není EAN',
+    'Název uvádí EAN 8590000000001, specifikace EAN 8590000000002',
+  ] });
+  assert.deepEqual(x.nesoulady, ['Název uvádí EAN 8590000000001, specifikace EAN 8590000000002']);
+});

@@ -126,8 +126,15 @@ const llmClean = (v) => llmArr(v).filter((t) => !llmAccuses(t));
 // a žádný rozpor neuvádí (žádná z negací/rozporových slov), se zahodí. "neodpovídá", "není konzistentní", "zatímco ..." zůstávají.
 const LLM_CONSISTENT_RE = /konzistentn|odpovídá|odpovídají|souhlasí|sedí|v souladu|shoduje se|shodují se|bez rozporu/;
 const LLM_CONTRADICTION_RE = /není|nejsou|ne(odpovíd|sed|souhlas|konzist|soulad|shoduj)|rozpor|odporuj|liší|zatímco|však|jiný|jiná|jiné|chyb/;
+// Věta, která výslovně říká, že rozpor není („… není rozpor“, „nejde o rozpor“): zahodí se, pokud po jejím vyříznutí nezbývá jiné rozporové slovo.
+const LLM_NO_CONFLICT_RE = /(?:není|nejde o|nepředstavuje|netvoří)\s+(?:to\s+|zde\s+)?(?:žádn\w+\s+|skutečn\w+\s+)?(?:rozpor|nesoulad)\w*/g;
+// „Kód je uveden jako kód, nikoli jako EAN“ popisuje jen druh kódu, žádné dvě protichůdné hodnoty.
+const LLM_NOT_EAN_RE = /(?:nikoli(?:v)?|ne|není|nesouvis\w*)\s+(?:jako\s+|s\s+)?ean/;
 const llmClaimsConsistency = (t) => {
   const s = String(t).toLowerCase();
+  if (LLM_NOT_EAN_RE.test(s)) return true;
+  const rest = s.replace(LLM_NO_CONFLICT_RE, ' ');
+  if (rest !== s) return !LLM_CONTRADICTION_RE.test(rest);
   return LLM_CONSISTENT_RE.test(s) && !LLM_CONTRADICTION_RE.test(s.replace(/bez rozpor\w*/g, ' '));
 };
 const llmMismatches = (v) => llmClean(v).filter((t) => !llmClaimsConsistency(t));

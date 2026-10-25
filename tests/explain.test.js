@@ -476,3 +476,48 @@ test('šedá na tržišti s IČO nebo DIČ, které rejstřík nepotvrdil: řík�
   assert.deepEqual(r.nezkontrolovano, ['prodejce: rejstřík (ARES, VIES) ho nepotvrdil']);
   assert.ok(!/screenshot|vložte/i.test(r.co_delat.join(' ')));
 });
+
+test('zelená s „drobným varováním“ (drobný rozpor u zelené): vysvětlení od modelu se použije, „varuji“ dál ne', () => {
+  const sigs = [sg('a', 'low')];
+  const v = computeVerdict(sigs, OK3);
+  assert.equal(v.semafor, 'zelená');
+  const text = 'Zelená, prodejce působí věrohodně. Nalezla ale jedno drobné varování: rychlost 5 Gb/s a USB 3.2 Gen 2 si odporují.';
+  const r = buildResponse({ verdict: v, signals: sigs, explanation: { ok: true, shrnuti: text, co_delat: ['Zeptejte se prodejce.'] } });
+  assert.equal(r.shrnuti, text);
+  const bad = buildResponse({ verdict: v, signals: sigs, explanation: { ok: true, shrnuti: 'Varuji vás před koupí.', co_delat: ['Počkejte.'] } });
+  assert.equal(bad.shrnuti, fallbackAdvice(v, sigs).shrnuti);
+});
+
+test('fallback zelené s nálezy (i jen info) netvrdí „žádná varování“; bez nálezů zůstává původní text', () => {
+  const v = computeVerdict([], OK3);
+  assert.equal(fallbackAdvice(v).shrnuti, 'Kontrola nenašla žádná varování.');
+  assert.equal(fallbackAdvice(v, []).shrnuti, 'Kontrola nenašla žádná varování.');
+  for (const sev of ['info', 'low']) {
+    const sigs = [sg('a', sev)];
+    const f = fallbackAdvice(computeVerdict(sigs, OK3), sigs);
+    assert.doesNotMatch(f.shrnuti, /žádná varování/);
+    assert.match(f.shrnuti, /nálezy níže/);
+    assert.ok(f.co_delat.length <= 4);
+    const r = buildResponse({ verdict: computeVerdict(sigs, OK3), signals: sigs, explanation: null });
+    assert.equal(r.shrnuti, f.shrnuti);
+  }
+  // oranžová a červená se nemění
+  const o = [sg('m', 'medium'), sg('n', 'low'), sg('p', 'low')];
+  assert.equal(fallbackAdvice(computeVerdict(o, OK3), o).shrnuti, fallbackAdvice(computeVerdict(o, OK3)).shrnuti);
+});
+
+test('nenačtená stránka (šedá): pevný text o nepřečtené stránce, vysvětlení od modelu se ignoruje, v nezkontrolovano je čtení stránky', () => {
+  const v = computeVerdict([], { offer: 'unchecked', seller: 'ok', safety: 'unchecked' }, { external: true, skipped: ['čtení stránky'] });
+  assert.equal(v.semafor, 'šedá');
+  const f = fallbackAdvice(v);
+  assert.match(f.shrnuti, /Stránku nabídky se nepodařilo přečíst/);
+  assert.doesNotMatch(f.shrnuti, /prodejce nelze/);
+  assert.match(f.co_delat[0], /text nabídky|screenshot/);
+  const r = buildResponse({ verdict: v, signals: [], explanation: { ok: true, shrnuti: 'Prodejce nebylo možné ověřit.', co_delat: ['Výsledek bral jako orientační.'] } });
+  assert.equal(r.shrnuti, f.shrnuti);
+  assert.deepEqual(r.co_delat, f.co_delat);
+  assert.ok(r.nezkontrolovano.includes('čtení stránky nabídky'), r.nezkontrolovano.join());
+  // bez tohoto přeskočení se šedá chová jako dřív
+  const bez = computeVerdict([], { offer: 'unchecked', seller: 'ok', safety: 'unchecked' }, { external: true });
+  assert.equal(fallbackAdvice(bez).shrnuti, 'Z dostupných dat nelze nabídku spolehlivě posoudit.');
+});

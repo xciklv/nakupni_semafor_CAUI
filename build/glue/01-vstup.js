@@ -115,7 +115,7 @@ try {
       : 'Stránku se nepodařilo načíst (tržiště často blokují automatické čtení). Vložte prosím screenshot nabídky nebo zkopírovaný text.';
     return [{ json: { zkratka: true, status: 200, odpoved: needMoreInput(zprava) } }];
   }
-  return [{ json: { zkratka: false, input, pageText, rezim: input.url ? input.url.rezim : 'neznámé', host: input.url ? input.url.host : null, obsah: !!hasContent, dossier, blokace } }];
+  return [{ json: { zkratka: false, input, pageText, rezim: input.url ? input.url.rezim : 'neznámé', host: input.url ? input.url.host : null, obsah: !!hasContent, strankaNenactena: !!(input.url && !hasContent), dossier, blokace } }];
 } catch (e) {
   // Žádné detaily chyby ven: obecná hláška, aby webhook nikdy neodpověděl prázdným 200.
   return [{ json: { zkratka: true, status: 500, odpoved: { stav: 'chyba', chyba: 'Kontrola se nepodařila. Zkuste to prosím znovu.' } } }];

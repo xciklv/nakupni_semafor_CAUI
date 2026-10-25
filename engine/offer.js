@@ -1,6 +1,8 @@
 if (typeof require !== 'undefined' && typeof signal === 'undefined') { var { signal } = require('./signals'); }
 
 const OFFER_FREE_TEXT_MAX = 2;
+const OFFER_LOW_RATING = 4;
+const OFFER_RATING_MIN_COUNT = 3;
 
 function offerSignals(x) {
   const p = x.produkt, r = x.recenze, o = x.obrazky;
@@ -32,6 +34,11 @@ function offerSignals(x) {
   if (r.podobne_texty === true) add('recenze_podobne', 'low', 'Recenze si jsou podezřele podobné', 'Několik recenzí má téměř stejný text.');
   if (r.vsechny_5_hvezd === true && (r.pocet || 0) >= 20) add('recenze_same_petky', 'low', 'Samé pětihvězdičkové recenze', r.pocet + ' recenzí a všechny mají 5 hvězd.');
   if (r.genericke === true) add('recenze_genericke', 'info', 'Recenze jsou obecné fráze', 'Recenze nezmiňují konkrétní vlastnosti produktu.');
+  // Nižší hodnocení říká o kvalitě zboží, ne o podvodu: jen info (váha 0), barvu semaforu nemění. Při 1–2 hodnoceních je průměr šum.
+  if (r.prumer != null && r.prumer < OFFER_LOW_RATING && (r.pocet == null || r.pocet >= OFFER_RATING_MIN_COUNT)) {
+    const pocet = r.pocet != null ? ' (' + r.pocet + ' hodnocení)' : '';
+    add('recenze_nizke_hodnoceni', 'info', 'Zákazníci hodnotí zboží hůř', 'Průměrné hodnocení je ' + String(r.prumer).replace('.', ',') + ' z 5' + pocet + '. Před koupí si přečtěte komentáře, hlavně ty nejhorší.');
+  }
   return { status: 'ok', signals: out };
 }
 

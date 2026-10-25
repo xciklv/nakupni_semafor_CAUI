@@ -103,7 +103,8 @@ try {
 
   const signals = [...offer.signals, ...seller.signals, ...identity.signals, ...safety.signals, ...gate];
   const moduly = { offer: offer.status, seller: seller.status, safety: safety.status };
-  const skipped = (coiStale ? seller.skipped.concat(['seznam ČOI (neaktuální)']) : seller.skipped).concat(identity.skipped);
+  // Odkaz bez čtitelné stránky a bez vloženého obsahu: kontrolovala se jen adresa prodejce, nabídku nikdo nečetl (výsledek to musí říct).
+  const skipped = (coiStale ? seller.skipped.concat(['seznam ČOI (neaktuální)']) : seller.skipped).concat(identity.skipped).concat(ctx.strankaNenactena === true ? ['čtení stránky'] : []);
   // Tržiště: z odkazu, a bez odkazu z textu nebo z platformy, kterou poznala extrakce (screenshot).
   const marketplace = detectMarketplace({ rezim: ctx.rezim, text: ctx.input && ctx.input.text, pageText: ctx.pageText, platforma: x.produkt && x.produkt.platforma });
   // Čtečkový dossier IČO ani DIČ prodejce nenese (kolektor je nedodává), takže u marketplace přes čtečku se registr nezkouší; verdikt to řekne pravdivě.
