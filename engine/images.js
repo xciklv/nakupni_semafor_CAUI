@@ -257,7 +257,7 @@ const IMG_FINDINGS = {
   },
   D: {
     id: 'obrazek_cizi_znacka', severity: 'low', title: 'Značka na fotce není v nabídce',
-    vysvetleni: 'Na obrázcích je vidět značka, kterou nabídka neuvádí. Může jít o značku výrobce, ale z nabídky nepoznáte, čí zboží kupujete.',
+    vysvetleni: 'Na obrázcích je vidět značka, kterou jsme v nabídce nenašli. Může jít o značku výrobce, ale z nabídky nepoznáte, čí zboží kupujete.',
     otazka: 'Čí značky je výrobek a proč ji nabídka neuvádí?',
   },
 };

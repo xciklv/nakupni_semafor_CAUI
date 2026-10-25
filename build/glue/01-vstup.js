@@ -112,7 +112,7 @@ try {
   if (!hasContent && !hostCheckable) {
     const zprava = blokace
       ? 'Stránka vyžaduje ověření nebo přihlášení, takže ji nelze načíst automaticky. Vložte prosím screenshot nabídky nebo zkopírovaný text.'
-      : 'Stránku se nepodařilo načíst (marketplace často blokují automatické čtení). Vložte prosím screenshot nabídky nebo zkopírovaný text.';
+      : 'Stránku se nepodařilo načíst (tržiště často blokují automatické čtení). Vložte prosím screenshot nabídky nebo zkopírovaný text.';
     return [{ json: { zkratka: true, status: 200, odpoved: needMoreInput(zprava) } }];
   }
   return [{ json: { zkratka: false, input, pageText, rezim: input.url ? input.url.rezim : 'neznámé', host: input.url ? input.url.host : null, obsah: !!hasContent, dossier, blokace } }];

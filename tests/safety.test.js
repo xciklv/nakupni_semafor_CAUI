@@ -67,13 +67,13 @@ test('dětská postýlka → bez signálu', () => {
 test('dětská hračka s baterií → low a text o hračkách', () => {
   const s = full(X({ nazev: 'Dětská hračka s baterií', kategorie: 'hračky' })).signals[0];
   assert.equal(s.severity, 'low');
-  assert.match(s.evidence, /U hraček je označení CE povinné/);
+  assert.match(s.evidence, /U hraček je značka CE povinná; v nabídce jsme ji nenašli/);
 });
 
 test('Toy car → low se zněním o hračkách', () => {
   const s = full(X({ nazev: 'Toy car' })).signals[0];
   assert.equal(s.severity, 'low');
-  assert.match(s.evidence, /U hraček je označení CE povinné/);
+  assert.match(s.evidence, /U hraček je značka CE povinná; v nabídce jsme ji nenašli/);
 });
 
 test('ce_chybi je low u všech kategorií (žádný medium ani high)', () => {
@@ -115,7 +115,7 @@ test('hračka v ohýbaných tvarech (hračku, hračkou, hračkám, hraček) se p
   for (const nazev of ['Koupím hračku', 'Hra s hračkou', 'Dárek pro hračkám', 'Sada hraček', 'Plyšová hračka', 'Autíčka na hračky', 'Toys set']) {
     const s = full(X({ nazev })).signals;
     assert.equal(s.length, 1, nazev);
-    assert.match(s[0].evidence, /U hraček je označení CE povinné/, nazev);
+    assert.match(s[0].evidence, /U hraček je značka CE povinná; v nabídce jsme ji nenašli/, nazev);
   }
   assert.equal(ceChybi('Hrací karty'), false);
 });
@@ -123,7 +123,7 @@ test('hračka v ohýbaných tvarech (hračku, hračkou, hračkám, hraček) se p
 test('Nabíječka bez tvrzení → low', () => {
   const s = full(X({ nazev: 'Nabíječka' })).signals[0];
   assert.equal(s.severity, 'low');
-  assert.match(s.evidence, /obvykle povinné/);
+  assert.match(s.evidence, /bývá značka CE obvykle povinná/);
 });
 
 test('Kabelka dámská → bez signálu (kabel nesmí chytat kabelku)', () => {

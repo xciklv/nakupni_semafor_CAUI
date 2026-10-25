@@ -456,11 +456,11 @@ test('buildResponse: šedá po přeskočené věrohodnosti nese v nezkontrolovan
 });
 
 // Marketplace bez ověření prodejce: šedá to řekne pravdivě a nesliby screenshot.
-test('šedá na marketplace bez IČO a DIČ: prodejce nelze ověřit v rejstřících, platformní hodnocení jsou jen údaj z nabídky, co_delat neslibuje screenshot', () => {
+test('šedá na tržišti bez IČO a DIČ: prodejce nelze ověřit v rejstřících, hodnocení jsou jen údaj z nabídky, co_delat neslibuje screenshot', () => {
   const v = computeVerdict([], OK3, { external: false, marketplace: true });
   const r = buildResponse({ verdict: v, signals: [] });
   assert.equal(r.semafor, 'šedá');
-  assert.match(r.shrnuti, /prodejce na marketplace nelze ověřit v rejstřících/);
+  assert.match(r.shrnuti, /prodejce na tržišti nelze ověřit v rejstřících/);
   assert.match(r.shrnuti, /hodnocení a počet prodejů jsou jen údaje z nabídky/);
   assert.ok(!/nebyl ověřen v registru/.test(r.shrnuti), 'ověření se nezkoušelo, takže se o něm nemluví');
   assert.deepEqual(r.nezkontrolovano, ['prodejce: nelze ověřit v rejstřících (v nabídce není IČO ani DIČ)']);
@@ -469,10 +469,10 @@ test('šedá na marketplace bez IČO a DIČ: prodejce nelze ověřit v rejstří
   assert.deepEqual(JSON.parse(buildExplainRequest(v, []).messages[0].content).nezkontrolovano, r.nezkontrolovano);
 });
 
-test('šedá na marketplace s IČO nebo DIČ, které registr nepotvrdil: říká to a také neslibuje screenshot', () => {
+test('šedá na tržišti s IČO nebo DIČ, které rejstřík nepotvrdil: říká to a také neslibuje screenshot', () => {
   const v = computeVerdict([], OK3, { external: false, marketplace: true, sellerIds: true });
   const r = buildResponse({ verdict: v, signals: [] });
-  assert.match(r.shrnuti, /prodejce se nepodařilo potvrdit v registru/);
-  assert.deepEqual(r.nezkontrolovano, ['prodejce: registr (ARES, VIES) ho nepotvrdil']);
+  assert.match(r.shrnuti, /prodejce se nepodařilo potvrdit v rejstříku/);
+  assert.deepEqual(r.nezkontrolovano, ['prodejce: rejstřík (ARES, VIES) ho nepotvrdil']);
   assert.ok(!/screenshot|vložte/i.test(r.co_delat.join(' ')));
 });

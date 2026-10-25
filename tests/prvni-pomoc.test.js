@@ -74,7 +74,7 @@ const POVOLENE_HOSTY = new Set([
   'finarbitr.gov.cz', 'portal.gov.cz', 'www.zakonyprolidi.cz', 'www.kb.cz', 'www.airbank.cz', 'www.csas.cz', 'www.moneta.cz', 'platbakartou.csob.cz',
   'www.paypal.com', 'www.vinted.cz', 'www.bazos.cz', 'o-seznam.cz', 'napoveda.seznam.cz', 'www.aukro.cz', 'www.zasilkovna.cz',
 ]);
-const ZAKAZANE = /máte nárok|nárok máte|zaručen[eě] (vrác|získ)|vrátíme|určitě (dostan|získ)|dokážeme vrátit|jistě/i;
+const ZAKAZANE = /máte nárok|nárok máte|zaručen[eě] (vrác|získ)|vrátíme|určitě (dostan|získ)|dokážeme vrátit|(?<![a-zěščřžýáíéúůďťňó])jistě/i;
 
 function vsechnyTexty(pp) { return JSON.stringify(pp); }
 
@@ -310,10 +310,10 @@ test('úvod: tři sdělení (klid, nic neplatit ani když volá banka nebo polic
   const body = findAll(uvod, (n) => n.tagName === 'LI').map((n) => n.textContent);
   assert.equal(body.length, 3);
   assert.match(body[0], /klid/i);
-  assert.match(body[1], /Nic neplať/);
+  assert.match(body[1], /Nic neplaťte/);
   assert.match(body[1], /banka/);
   assert.match(body[1], /policie/);
-  assert.match(body[2], /Nemaž/);
+  assert.match(body[2], /Nemažte/);
   for (const w of ['zprávy', 'e-maily', 'výpisy hovorů', 'screenshoty']) assert.ok(body[2].includes(w), 'nemazat: ' + w);
   const vse = texts(uvod).join(' ');
   assert.equal(/prohlížeči|orientační|právní poradenství/.test(vse), false, 'úvod je bez prohlížeče a bez právního upozornění');
@@ -344,16 +344,34 @@ test('upozornění: v první pomoci není žádný rámeček, jen krátká pouč
   assert.match(paticka[1], /kriticky/);
 });
 
+test('vykání: v textech první pomoci a ve statické části stránky není tykání', () => {
+  const { PP } = loadPage();
+  const html = pageHtml();
+  const staticka = html.slice(html.indexOf('<body'), html.indexOf('<script>'));
+  const TYKANI = /(?<![a-zěščřžýáíéúůďťňó])(vlož|zkus|ulož|zavolej|neplať|nech|napiš|podej|zajisti|tvůj|tvé|tvou|tvoje|ti|tě|jsi|ses|můžeš|máš|zkontroluj|ověř|popiš|nahlas|oznam|přestaň|nemaž|zeptej|podívej|pošli)(?![a-zěščřžýáíéúůďťňó])/i;
+  assert.equal(TYKANI.test(JSON.stringify(PP)), false, 'tykání v první pomoci: ' + TYKANI.exec(JSON.stringify(PP)));
+  assert.equal(TYKANI.test(staticka), false, 'tykání na stránce: ' + TYKANI.exec(staticka));
+});
+
+test('zkratky: slovníček pod stránkou rozepisuje zkratky z výsledku i první pomoci; patička říká, že to není právní posudek', () => {
+  const html = pageHtml();
+  const paticka = /<footer class="paticka">([\s\S]*?)<\/footer>/.exec(html)[1];
+  const slovnicek = /<details class="zkratky">([\s\S]*?)<\/details>/.exec(paticka);
+  assert.ok(slovnicek, 'chybí slovníček zkratek v patičce');
+  for (const z of ['ČOI', 'ESC', 'ADR', 'ARES', 'VIES', 'IČO', 'DIČ', 'EAN', 'CE', 'GPSR']) assert.ok(slovnicek[1].includes('<dt>' + z + '</dt>'), z);
+  assert.match(paticka, /ne právní posudek ani tvrzení o prodejci/);
+});
+
 test('popis situace: otevřené pole ve výběru případu; text se po výběru ukáže v detailu s tlačítkem Kopírovat, nic se neodesílá', () => {
   const p = nahled();
   const pole = find(out(p), (n) => n.tagName === 'TEXTAREA' && n.className === 'pole-popis');
   assert.ok(pole, 'chybí pole');
-  assert.ok(find(out(p), (n) => n.tagName === 'LABEL' && /Popiš, co se stalo/.test(n.textContent)), 'popisek');
+  assert.ok(find(out(p), (n) => n.tagName === 'LABEL' && /Popište, co se stalo/.test(n.textContent)), 'popisek');
   const payload = '<img src=x onerror=alert(1)> Včera jsem poslal 1 200 Kč.';
   pole.value = payload; pole.listeners.input();
   tlacitkoPripadu(p, p.PP.pripady[1].nazev).click();
   const t = texts(out(p));
-  assert.ok(t.includes('Tvůj popis'));
+  assert.ok(t.includes('Váš popis'));
   assert.ok(t.includes(payload), 'popis je vložen jako prostý text');
   assert.ok(findAll(out(p), (n) => n.tagName === 'BUTTON' && n.textContent === 'Kopírovat').length >= 1);
   assert.equal(p.dom.all.filter((n) => n.htmlWrites > 0).length, 0);
@@ -364,7 +382,7 @@ test('popis situace: otevřené pole ve výběru případu; text se po výběru 
 test('popis situace: bez popisu se karta „Tvůj popis“ nezobrazí; kód první pomoci nic nevolá', () => {
   const p = nahled();
   tlacitkoPripadu(p, p.PP.pripady[0].nazev).click();
-  assert.equal(texts(out(p)).includes('Tvůj popis'), false);
+  assert.equal(texts(out(p)).includes('Váš popis'), false);
   const src = /const PRVNI_POMOC[\s\S]*$/.exec(pageHtml())[0];
   assert.equal(/fetch\(|XMLHttpRequest|sendBeacon/.test(src), false, 'první pomoc nevolá server');
 });
@@ -375,7 +393,7 @@ test('popis situace je pod kartami případů jako záloha, když nic nesedí; t
   const poradi = [];
   walk(panel, (n) => { if (n.className === 'karty') poradi.push('karty'); if (n.tagName === 'TEXTAREA') poradi.push('pole'); });
   assert.deepEqual(poradi, ['karty', 'pole'], 'pole je až pod kartami');
-  assert.ok(find(panel, (n) => n.tagName === 'LABEL' && /^Nic z toho nesedí\? Popiš, co se stalo/.test(n.textContent)));
+  assert.ok(find(panel, (n) => n.tagName === 'LABEL' && /^Nic z toho nesedí\? Popište, co se stalo/.test(n.textContent)));
   const pole = find(panel, (n) => n.tagName === 'TEXTAREA');
   pole.value = 'Poslal jsem peníze na účet kamaráda, kterému někdo hacknul profil.'; pole.listeners.input();
   const b = find(panel, (n) => n.tagName === 'BUTTON' && n.textContent === 'Zobrazit obecné první kroky');
@@ -383,7 +401,7 @@ test('popis situace je pod kartami případů jako záloha, když nic nesedí; t
   b.click();
   const t = texts(out(p));
   assert.ok(t.includes('Jiná situace'));
-  assert.ok(t.includes('Tvůj popis'));
+  assert.ok(t.includes('Váš popis'));
   assert.ok(t.includes(pole.value));
   assert.ok(t.includes('Hned') && t.includes('V nejbližších dnech') && t.includes('Později'));
   assert.equal(findAll(out(p), (n) => n.tagName === 'INPUT' && n.className === 'podklad').length, p.PP.jina.podklady.length);

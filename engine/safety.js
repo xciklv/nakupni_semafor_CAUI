@@ -35,10 +35,10 @@ function safetySignals(x, opts) {
     const toy = SAFETY_TOY_RE.test(hay);
     signals.push(signal({
       id: 'ce_chybi', module: 'safety', severity, druh: uplny ? 'riziko' : 'nelze_overit',
-      title: 'Nabídka nezmiňuje shodu s předpisy EU',
+      title: 'V nabídce jsme nenašli značku CE (shoda s předpisy EU)',
       evidence: (toy
-        ? 'U hraček je označení CE povinné, nabídka o něm mlčí.'
-        : 'U této kategorie zboží je obvykle povinné označení CE, nabídka o něm mlčí.')
+        ? 'U hraček je značka CE povinná; v nabídce jsme ji nenašli.'
+        : 'U této kategorie zboží bývá značka CE obvykle povinná; v nabídce jsme ji nenašli.')
         + (uplny ? '' : ' Máme jen část nabídky, takže údaj nemusí chybět; ověřte ho na stránce nabídky.'),
       source: 'analýza nabídky',
     }));
@@ -47,8 +47,8 @@ function safetySignals(x, opts) {
   if (SAFETY_GPSR_FIELDS.some((k) => g[k] === 'ne')) {
     signals.push(signal({
       id: 'gpsr_chybi', module: 'safety', severity, druh: uplny ? 'riziko' : 'nelze_overit',
-      title: 'Nabídka neuvádí údaje o výrobci požadované nařízením GPSR',
-      evidence: 'Nařízení EU o bezpečnosti výrobků (GPSR) vyžaduje u zboží uvést výrobce, jeho adresu a odpovědnou osobu v EU; nabídka některý z těchto údajů neuvádí.'
+      title: 'V nabídce jsme nenašli údaje o výrobci, které vyžaduje nařízení EU o bezpečnosti výrobků (GPSR)',
+      evidence: 'Nařízení EU o bezpečnosti výrobků (GPSR) vyžaduje u zboží uvést výrobce, jeho adresu a odpovědnou osobu v EU; některý z těchto údajů jsme v nabídce nenašli.'
         + (uplny ? '' : ' Máme jen část nabídky, takže údaj nemusí chybět; ověřte ho na stránce nabídky.'),
       source: 'analýza nabídky',
     }));

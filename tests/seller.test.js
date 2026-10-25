@@ -105,7 +105,7 @@ test('IČO neexistuje v ARES → low s neutrálním zněním; neplatné IČO →
   const ne = a.signals.find((s) => s.id === 'ico_neexistuje');
   assert.equal(ne.severity, 'low');
   assert.equal(ne.hard, false);
-  assert.equal(ne.evidence, 'IČO nebylo nalezeno v českém registru ARES; u zahraničních (např. slovenských) firem je to běžné.');
+  assert.equal(ne.evidence, 'IČO jsme v českém rejstříku firem (ARES) nenašli; u zahraničních (např. slovenských) firem je to běžné.');
   assert.equal(a.external, false, 'záporná odpověď registru ověření nepotvrzuje, ani když jiný zdroj (RDAP) vyšel dobře');
   assert.deepEqual(a.skipped, []);
   const b = await sellerSignals({ x: X({ ico: '12345678' }), rezim: 'eshop', host: 'x.cz', nowMs: NOW, fetchers: f, coiList: {} });

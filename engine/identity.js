@@ -170,7 +170,7 @@ function idnMismatchSignal(code, d, ice, offerBrand) {
   return signal({
     id: 'identifikator_nesedi', module: 'identity', severity: offerBrand ? 'medium' : 'low', druh: 'rozpor', jistota: 'stredni',
     title: 'Značka u kódu v nabídce nesedí',
-    evidence: 'Podle katalogu Icecat patří kód ' + code + ' značce ' + znacka + ', ale nabídka tuto značku neuvádí' + (offerBrand ? ' (uvádí značku ' + idnCut(offerBrand, 60) + ')' : '') + '.',
+    evidence: 'Podle katalogu Icecat patří kód ' + code + ' značce ' + znacka + ', ale v nabídce jsme tuto značku nenašli' + (offerBrand ? ' (je tam značka ' + idnCut(offerBrand, 60) + ')' : '') + '.',
     citace: 'Nabídka: „' + offer + '“. Icecat k EAN ' + code + ': ' + idnCut([ice.znacka, ice.nazev].filter(Boolean).join(' – '), IDN_NAME_CITE_MAX) + '.',
     vysvetleni: 'Kód z nabídky katalog výrobců přiřazuje značce ' + znacka + ', která se v nabídce neobjevuje. Může jít o kompatibilní příslušenství s převzatým kódem, o překlep nebo o zaměněný produkt.',
     otazka: 'Patří kód ' + code + ' opravdu k tomuto produktu? Od jaké značky je vyrobený?',

@@ -782,7 +782,7 @@ test('glue 04: chyba vysvětlení -> status 200, stav ok a záložní text', asy
   assert.equal(out.status, 200);
   assert.equal(out.odpoved.stav, 'ok');
   assert.equal(out.odpoved.semafor, 'oranžová');
-  assert.equal(out.odpoved.shrnuti, 'Kontrola našla signály, které stojí za zvážení.');
+  assert.equal(out.odpoved.shrnuti, 'Kontrola našla varování, která stojí za zvážení.');
 });
 
 test('glue 04: validní vysvětlení se použije', async () => {
@@ -1742,7 +1742,7 @@ test('stránka: textové pole je pryč (žádné id text, žádný textarea, ž�
 
 test('stránka: úvodní věta, popisek odkazu, tlačítko Vybrat screenshot a file input s accept image/*', () => {
   const html = pageHtml();
-  assert.ok(html.includes('Stačí odkaz na nabídku, nebo screenshot celé nabídky včetně údajů o prodejci. Nic nemusíš kopírovat.'));
+  assert.ok(html.includes('Stačí odkaz na nabídku, nebo screenshot celé nabídky včetně údajů o prodejci. Nic nemusíte kopírovat.'));
   assert.match(html, /<label for="odkaz">Odkaz na nabídku<\/label>/);
   assert.match(html, /<button id="vybrat" type="button"[^>]*>Vybrat screenshot<\/button>/);
   const fi = /<input\b[^>]*id="shots"[^>]*>/.exec(html);
@@ -1758,7 +1758,7 @@ test('stránka: úvodní věta, popisek odkazu, tlačítko Vybrat screenshot a f
 
 test('submit bez odkazu i screenshotu: nápověda ve výsledcích, API se nevolá, tlačítko zůstane povolené', async () => {
   const p = await submitPage({ odkaz: '   ' }, []);
-  assert.deepEqual(texts(p.out), ['Vlož odkaz nebo screenshot nabídky.']);
+  assert.deepEqual(texts(p.out), ['Vložte odkaz nebo screenshot nabídky.']);
   assert.equal(p.fetchCalls.length, 0);
   const go = p.dom.document.getElementById('go');
   assert.equal(go.disabled, false);
@@ -1932,7 +1932,7 @@ test('potrebuji_vice: zpráva serveru, řádek o screenshotu, zvýrazněná obla
   render({ stav: 'potrebuji_vice', zprava: 'Stránku se nepodařilo přečíst.' });
   const t = texts(dom.byId.out);
   assert.ok(t.includes('Stránku se nepodařilo přečíst.'));
-  assert.ok(t.includes('Zkus přidat screenshot nabídky.'));
+  assert.ok(t.includes('Zkuste přidat screenshot nabídky.'));
   assert.ok(dom.byId.drop.classList.contains('highlight'));
   assert.equal(dom.state.focused, dom.byId.vybrat);
   assert.equal(dom.byId.vybrat.focusOpts.preventScroll, true);
@@ -1962,7 +1962,7 @@ test('zvýraznění zmizí s dalším výsledkem i po přidání screenshotu; os
 });
 
 // --- fix round 1: allowlist typů, drag jen pro soubory, zaneprázdněno, názvy, zvýraznění ---
-const TYP_NAPOVEDA = 'Tenhle typ souboru nelze použít, vlož PNG, JPEG nebo WebP.';
+const TYP_NAPOVEDA = 'Tenhle typ souboru nelze použít, vložte PNG, JPEG nebo WebP.';
 
 test('filtr typů: gif, heic, svg a pdf se ignorují s upozorněním; png, jpeg a webp projdou', () => {
   for (const bad of [IMG('a.gif', 'image/gif'), IMG('a.heic', 'image/heic'), IMG('a.svg', 'image/svg+xml'), { name: 'a.pdf', type: 'application/pdf' }]) {
@@ -3013,10 +3013,10 @@ test('nálezy: odpověď bez nalezy se vykreslí jako dřív ze signalu; s nalez
   const sig = [{ id: 's', modul: 'M', zavaznost: 'high', titul: 'Starý signál', dukaz: 'D', zdroj: 'z' }];
   const stara = nactiNalezy({ stav: 'ok', semafor: 'červená', shrnuti: 'S', co_delat: [], signaly: sig });
   const t = texts(stara.dom.byId.out);
-  assert.ok(t.includes('Zjištěné signály') && t.includes('Starý signál'));
+  assert.ok(t.includes('Zjištěná varování') && t.includes('Starý signál'));
   const nova = nactiNalezy(odpoved([nalez()], { signaly: sig }));
   const tn = texts(nova.dom.byId.out);
-  assert.ok(!tn.includes('Starý signál') && !tn.includes('Zjištěné signály'));
+  assert.ok(!tn.includes('Starý signál') && !tn.includes('Zjištěná varování'));
   assert.ok(tn.includes('Co dělat'));
 });
 
@@ -3026,7 +3026,7 @@ test('nálezy: prázdné pole nalezy při neprázdných signalech spadne zpět n
   assert.ok(texts(dom.byId.out).includes('Záložní signál'));
 });
 
-test('verdikt: karta nese semafor v data-semafor (ne jako třídu), lampy a Co dělat jsou uvnitř karty, upozornění je až pod nálezy', () => {
+test('verdikt: karta nese semafor v data-semafor (ne jako třídu), lampy a Co dělat jsou uvnitř karty; upozornění z odpovědi se nezobrazuje (je jen patička stránky)', () => {
   const { dom } = nactiNalezy(odpoved([nalez()]));
   const out = dom.byId.out;
   const karta = out.children[0];
@@ -3037,7 +3037,7 @@ test('verdikt: karta nese semafor v data-semafor (ne jako třídu), lampy a Co d
   assert.equal(karta.children[0].attrs['aria-hidden'], 'true');
   const t = texts(karta);
   assert.ok(t.includes('Střední riziko') && t.includes('Shrnutí') && t.includes('Co dělat') && t.includes('Zeptejte se prodejce'));
-  assert.equal(out.children[out.children.length - 1].textContent, 'U', 'upozornění z odpovědi je poslední');
+  assert.ok(!out.children.some((c) => c.textContent === 'U'), 'upozornění z odpovědi se na obrazovce nezobrazuje, patička stránky je jediné upozornění');
   const neznamy = nactiNalezy(odpoved([], { semafor: 'card err', signaly: [{ titul: 'S', dukaz: 'D' }] }));
   assert.equal(neznamy.dom.byId.out.children[0].attrs['data-semafor'], 'šedá');
   assert.equal(neznamy.dom.byId.out.children[0].children[0].attrs['data-semafor'], 'šedá');

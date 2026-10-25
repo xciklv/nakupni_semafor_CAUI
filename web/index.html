@@ -137,6 +137,11 @@
   .nav-pomoc button { margin:0; }
   .paticka { max-width:640px; margin:0 auto; padding:8px 16px 48px; text-align:center; color:var(--muted); font-size:.875rem; }
   .paticka p { margin:0; }
+  details.zkratky { margin:0 0 16px; text-align:left; }
+  details.zkratky > summary { text-align:center; font-weight:400; font-size:.875rem; color:var(--muted); }
+  details.zkratky dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; margin:10px 0 0; }
+  details.zkratky dt { font-weight:700; color:var(--fg); }
+  details.zkratky dd { margin:0; overflow-wrap:anywhere; }
 </style>
 </head>
 <body>
@@ -150,7 +155,7 @@
     <button id="tab-pomoc" type="button" role="tab" class="zalozka" aria-selected="false" aria-controls="panel-pomoc">První pomoc při podvodu</button>
   </div>
   <section id="panel-kontrola" role="tabpanel" aria-labelledby="tab-kontrola">
-  <p class="lead">Stačí odkaz na nabídku, nebo screenshot celé nabídky včetně údajů o prodejci. Nic nemusíš kopírovat.</p>
+  <p class="lead">Stačí odkaz na nabídku, nebo screenshot celé nabídky včetně údajů o prodejci. Nic nemusíte kopírovat.</p>
   <form id="f" class="card">
     <label for="odkaz">Odkaz na nabídku</label>
     <input id="odkaz" type="text" placeholder="adresa nabídky…" autocomplete="off">
@@ -159,7 +164,7 @@
       <span id="drop-nadpis" class="nadpis">Screenshot nabídky (až 4, včetně údajů o prodejci)</span>
       <button id="vybrat" type="button" class="sekundarni">Vybrat screenshot</button>
       <input id="shots" type="file" accept="image/*" multiple hidden>
-      <p class="hint">Nebo obrázek přetáhni sem, případně ho vlož ze schránky (Ctrl+V).</p>
+      <p class="hint">Nebo obrázek přetáhněte sem, případně ho vložte ze schránky (Ctrl+V).</p>
       <ul id="seznam" class="seznam"></ul>
       <p id="limit" class="hint" aria-live="polite"></p>
     </div>
@@ -167,7 +172,7 @@
     <p id="cekani" class="hint">Kontrola může trvat až 30 sekund.</p>
     <details class="soukromi">
       <summary>Co se s odkazem a screenshoty děje</summary>
-      <p class="hint">Pro vyhodnocení se službě Anthropic odesílá odkaz, text stránky včetně recenzí, screenshoty a obrázky z nabídky; Anthropic je může podle svých podmínek po omezenou dobu uchovávat. Do veřejných registrů (ARES, VIES, RDAP, Icecat, EU Safety Gate) odcházejí jen veřejné identifikátory (IČO, DIČ, EAN, doména) a značka či model z nabídky, nikdy vaše texty ani screenshoty. Průběh kontroly se pro ladění ukládá lokálně v n8n. Smazat ho jde skriptem „npm run purge“ (popis v README); ukládání vypíná volba SAVE_EXECUTIONS=none při sestavení workflow. Výsledek je pomůcka, ne právní verdikt.</p>
+      <p class="hint">Pro vyhodnocení se službě Anthropic odesílá odkaz, text stránky včetně recenzí, screenshoty a obrázky z nabídky; Anthropic je může podle svých podmínek po omezenou dobu uchovávat. Do veřejných rejstříků (ARES, VIES, RDAP, Icecat, EU Safety Gate) odcházejí jen veřejné identifikátory (IČO, DIČ, EAN, doména) a značka či model z nabídky, nikdy vaše texty ani screenshoty. Průběh kontroly se pro ladění ukládá lokálně v n8n. Smazat ho jde skriptem „npm run purge“ (popis v README); ukládání vypíná volba SAVE_EXECUTIONS=none při sestavení workflow. Výsledek je pomůcka, ne právní verdikt.</p>
       <p class="hint zdroje">Zdroje dat: seznam rizikových e-shopů ČOI, ARES, RDAP (CZ.NIC), EU Safety Gate © Evropská unie (CC BY 4.0).</p>
     </details>
   </form>
@@ -176,7 +181,29 @@
   <section id="panel-pomoc" role="tabpanel" aria-labelledby="tab-pomoc" hidden></section>
 </main>
 <footer class="paticka">
-  <p>Nákupní semafor je jen pomůcka. Nad výsledkem je vždy potřeba přemýšlet kriticky.</p>
+  <details class="zkratky">
+    <summary>Co znamenají zkratky</summary>
+    <dl>
+      <dt>ADR</dt><dd>mimosoudní řešení sporů mezi kupujícím a prodejcem</dd>
+      <dt>ARES</dt><dd>český rejstřík firem</dd>
+      <dt>CE</dt><dd>značka, že výrobek splňuje předpisy EU</dd>
+      <dt>CSIRT.CZ</dt><dd>národní tým pro kybernetickou bezpečnost</dd>
+      <dt>CVC</dt><dd>tříciferný kód na zadní straně platební karty</dd>
+      <dt>ČNB</dt><dd>Česká národní banka</dd>
+      <dt>ČOI</dt><dd>Česká obchodní inspekce</dd>
+      <dt>DIČ</dt><dd>daňové identifikační číslo firmy</dd>
+      <dt>DPH</dt><dd>daň z přidané hodnoty</dd>
+      <dt>EAN</dt><dd>čárový kód výrobku</dd>
+      <dt>ESC</dt><dd>Evropské spotřebitelské centrum</dd>
+      <dt>EU Safety Gate</dt><dd>evropská databáze nebezpečných výrobků</dd>
+      <dt>GPSR</dt><dd>evropské nařízení o bezpečnosti výrobků</dd>
+      <dt>Icecat</dt><dd>katalog údajů o výrobcích</dd>
+      <dt>IČO</dt><dd>identifikační číslo firmy</dd>
+      <dt>RDAP</dt><dd>veřejný záznam o tom, kdy byla adresa webu zaregistrována</dd>
+      <dt>VIES</dt><dd>evropský rejstřík plátců DPH</dd>
+    </dl>
+  </details>
+  <p>Nákupní semafor je jen pomůcka, ne právní posudek ani tvrzení o prodejci. Nad výsledkem je vždy potřeba přemýšlet kriticky.</p>
 </footer>
 <script>
 // Adresa API z adresy stránky: bez query a hashe a bez koncových lomítek se poslední segment (nakupni-kontrola-web) nahradí
@@ -211,9 +238,9 @@ const odkazEl = document.getElementById('odkaz');
 const drop = document.getElementById('drop');
 const vybrat = document.getElementById('vybrat');
 const seznam = document.getElementById('seznam');
-const NAPOVEDA_PRAZDNY = 'Vlož odkaz nebo screenshot nabídky.';
-const NAPOVEDA_SCREENSHOT = 'Zkus přidat screenshot nabídky.';
-const NAPOVEDA_TYP = 'Tenhle typ souboru nelze použít, vlož PNG, JPEG nebo WebP.';
+const NAPOVEDA_PRAZDNY = 'Vložte odkaz nebo screenshot nabídky.';
+const NAPOVEDA_SCREENSHOT = 'Zkuste přidat screenshot nabídky.';
+const NAPOVEDA_TYP = 'Tenhle typ souboru nelze použít, vložte PNG, JPEG nebo WebP.';
 // Vybrané screenshoty: { file, url } (url je blob URL jen pro náhled, uvolní se při odebrání a po kontrole).
 let vybrane = [];
 let zaneprazdneno = false; // kontrola běží: seznam se nesmí měnit
@@ -406,7 +433,7 @@ function render(r) {
   if (Array.isArray(r.nalezy) && (nalezy.length || !signaly.length)) vykreslitNalezy(nalezy);
   else if (signaly.length) {
     const sc = el('div', null, 'card');
-    sc.append(el('h2', 'Zjištěné signály'));
+    sc.append(el('h2', 'Zjištěná varování'));
     signaly.forEach((s) => {
       const zdroj = str(s.zdroj);
       const zavaznost = povoleno(str(s.zavaznost), ZAVAZNOSTI, 'low');
@@ -416,7 +443,6 @@ function render(r) {
     });
     out.append(sc);
   }
-  if (str(r.upozorneni)) out.append(el('p', str(r.upozorneni), 'hint'));
 }
 
 // Povolené jsou jen PNG, JPEG a WebP (podle type; přípona jen když prohlížeč type nezná).
@@ -630,36 +656,36 @@ const PRVNI_POMOC = {
         id: 'prozradil',
         label: 'Už jsem někomu prozradil(a) údaje karty, přihlášení do banky nebo kód z SMS, nebo jsem schválil(a) platbu v aplikaci.',
         krok: {
-          text: 'Zavolej hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo z e-shopu ani ze zprávy). Nech zablokovat kartu a případně přístup do bankovnictví.',
+          text: 'Zavolejte hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo z e-shopu ani ze zprávy). Nechte zablokovat kartu a případně přístup do bankovnictví.',
           proc: 'Komerční banka při zadání údajů na falešné stránce doporučuje kartu zablokovat a při podezření na cizí přístup volat banku bez odkladu.',
           zdroje: ['kb_podvod', 'air_stornovat'],
         },
       }],
       kroky: [
-        { kdy: 'hned', obecna: true, text: 'Nic dalšího neplať a nesděluj žádné další údaje.', proc: 'Na výzvy k „doplatku“ nebo „odblokování“ nereaguj.' },
-        { kdy: 'hned', text: 'Zajisti podklady, než e-shop zmizí nebo smaže stránky (seznam níže).', proc: 'Banky při reklamaci chtějí objednávku a komunikaci s obchodníkem.', zdroje: ['kb_reklamace', 'air_neprislo'] },
-        { kdy: 'hned', text: 'Napiš obchodníkovi a ulož si důkaz, že jsi to udělal(a).', proc: 'Banky (Komerční banka, Air Bank, MONETA) žádají, aby ses nejdřív obrátil(a) na obchodníka.', zdroje: ['kb_reklamace', 'air_neprislo', 'moneta'] },
-        { kdy: 'dny', text: 'Platil(a) jsi kartou? Podej u své banky reklamaci platby.', proc: 'Banka může peníze vyžádat zpět od banky obchodníka (chargeback), ale ze zákona nemusí a nárok na to nemáš. Přilož objednávku, komunikaci, doklad o platbě a slíbený termín dodání. Lhůty se u bank liší, proto se své bance ozvi co nejdřív.', zdroje: ['esc_ziskat', 'coi_doporuceni', 'kb_reklamace', 'air_neprislo', 'moneta', 'csob'] },
-        { kdy: 'dny', text: 'Platil(a) jsi převodem nebo dobírkou? Zavolej do banky a podej trestní oznámení.', proc: 'Zdroje u převodu ani u dobírky návrat peněz jako u karty nepotvrzují (podle ESC se zpět obvykle nedostanou), proto ulož podklady a obrať se i na policii.', zdroje: ['esc_podvody', 'esc_obezretni'] },
-        { kdy: 'dny', text: 'Platil(a) jsi přes PayPal? Otevři spor v Centru řešení problémů a včas ho eskaluj.', proc: 'PayPal uvádí, že se spor po 20 dnech automaticky uzavře, pokud ho neeskaluješ. ČOI zároveň upozorňuje, že se na takovou ochranu nedá stoprocentně spoléhat.', zdroje: ['paypal', 'coi_doporuceni'] },
-        { kdy: 'dny', text: 'Podej trestní oznámení na Policii ČR.', proc: 'Jde to ústně na kterémkoli oddělení nebo písemně. Popiš, co se stalo, kdy, kde a jak, přilož důkazy a uveď výši škody.', zdroje: ['policie_oznameni'] },
-        { kdy: 'pozdeji', text: 'Dej podnět ČOI k podezřelému e-shopu.', proc: 'ČOI má postup pro e-shopy, které nejsou na jejím seznamu rizikových. Podle ESC ale konkrétní případ podvodu s nedodaným zbožím nevyřeší.', zdroje: ['coi_rizikove', 'esc_obezretni'] },
-        { kdy: 'pozdeji', text: 'E-shop je z EU, Norska nebo Islandu? Obrať se na Evropské spotřebitelské centrum. U českého obchodníka přichází v úvahu mimosoudní řešení sporu (ADR) při ČOI.', proc: 'ESC pomáhá spotřebitelům bezplatně. U ADR je potřeba nejdřív kontaktovat obchodníka a doložit to; ČOI nemůže vydat závazné rozhodnutí.', zdroje: ['esc', 'coi_adr'] },
-        { kdy: 'pozdeji', text: 'Banka reklamaci zamítla? ČOI u sporů s finančními službami odkazuje na finančního arbitra.', proc: 'Jeho pravomoc u reklamací plateb kartou jsme neověřili, zeptej se přímo u něj.', zdroje: ['coi_adr'] },
+        { kdy: 'hned', obecna: true, text: 'Nic dalšího neplaťte a nesdělujte žádné další údaje.', proc: 'Na výzvy k „doplatku“ nebo „odblokování“ nereagujte.' },
+        { kdy: 'hned', text: 'Zajistěte podklady, než e-shop zmizí nebo smaže stránky (seznam níže).', proc: 'Banky při reklamaci chtějí objednávku a komunikaci s obchodníkem.', zdroje: ['kb_reklamace', 'air_neprislo'] },
+        { kdy: 'hned', text: 'Napište obchodníkovi a uložte si důkaz, že jste to udělal(a).', proc: 'Banky (Komerční banka, Air Bank, MONETA) žádají, abyste se nejdřív obrátil(a) na obchodníka.', zdroje: ['kb_reklamace', 'air_neprislo', 'moneta'] },
+        { kdy: 'dny', text: 'Platil(a) jste kartou? Podejte u své banky reklamaci platby.', proc: 'Banka může peníze vyžádat zpět od banky obchodníka (chargeback), ale ze zákona nemusí a nárok na to nemáte. Přiložte objednávku, komunikaci, doklad o platbě a slíbený termín dodání. Lhůty se u bank liší, proto se své bance ozvěte co nejdřív.', zdroje: ['esc_ziskat', 'coi_doporuceni', 'kb_reklamace', 'air_neprislo', 'moneta', 'csob'] },
+        { kdy: 'dny', text: 'Platil(a) jste převodem nebo dobírkou? Zavolejte do banky a podejte trestní oznámení.', proc: 'Zdroje u převodu ani u dobírky návrat peněz jako u karty nepotvrzují (podle Evropského spotřebitelského centra, ESC, se zpět obvykle nedostanou), proto uložte podklady a obraťte se i na policii.', zdroje: ['esc_podvody', 'esc_obezretni'] },
+        { kdy: 'dny', text: 'Platil(a) jste přes PayPal? Otevřete spor v Centru řešení problémů a včas ho eskalujte.', proc: 'PayPal uvádí, že se spor po 20 dnech automaticky uzavře, pokud ho neeskalujete. Česká obchodní inspekce (ČOI) zároveň upozorňuje, že se na takovou ochranu nedá stoprocentně spoléhat.', zdroje: ['paypal', 'coi_doporuceni'] },
+        { kdy: 'dny', text: 'Podejte trestní oznámení na Policii ČR.', proc: 'Jde to ústně na kterémkoli oddělení nebo písemně. Popište, co se stalo, kdy, kde a jak, přiložte důkazy a uveďte výši škody.', zdroje: ['policie_oznameni'] },
+        { kdy: 'pozdeji', text: 'Dejte podnět ČOI k podezřelému e-shopu.', proc: 'ČOI má postup pro e-shopy, které nejsou na jejím seznamu rizikových. Podle ESC ale konkrétní případ podvodu s nedodaným zbožím nevyřeší.', zdroje: ['coi_rizikove', 'esc_obezretni'] },
+        { kdy: 'pozdeji', text: 'E-shop je z EU, Norska nebo Islandu? Obraťte se na Evropské spotřebitelské centrum. U českého obchodníka přichází v úvahu mimosoudní řešení sporu (ADR) při ČOI.', proc: 'ESC pomáhá spotřebitelům bezplatně. U ADR je potřeba nejdřív kontaktovat obchodníka a doložit to; ČOI nemůže vydat závazné rozhodnutí.', zdroje: ['esc', 'coi_adr'] },
+        { kdy: 'pozdeji', text: 'Banka reklamaci zamítla? ČOI u sporů s finančními službami odkazuje na finančního arbitra.', proc: 'Jeho pravomoc u reklamací plateb kartou jsme neověřili, zeptejte se přímo u něj.', zdroje: ['coi_adr'] },
       ],
       podklady: [
-        { nazev: 'Potvrzení objednávky nebo faktura', proc: 'Dokládá, co a za kolik jsi objednal(a); banky o to žádají.', jak: 'E-mail, SMS, screenshot objednávky nebo účet zákazníka.', nemam: 'Aspoň podrobný popis zboží (značka, barva, typ) nebo foto stejného zboží.' },
+        { nazev: 'Potvrzení objednávky nebo faktura', proc: 'Dokládá, co a za kolik jste objednal(a); banky o to žádají.', jak: 'E-mail, SMS, screenshot objednávky nebo účet zákazníka.', nemam: 'Aspoň podrobný popis zboží (značka, barva, typ) nebo foto stejného zboží.' },
         { nazev: 'Doklad o platbě', proc: 'Banka potřebuje datum, částku a poslední čtyři číslice karty.', jak: 'Historie transakce v bankovnictví nebo potvrzení o platbě.', nemam: 'Stačí údaje z pohybů na účtu.' },
-        { nazev: 'Slíbený termín dodání a obchodní podmínky', proc: 'Banka posuzuje, jestli termín dodání už uplynul.', jak: 'Screenshot webu, e-mail nebo obchodní podmínky.', nemam: 'Ulož aktuální stav webu hned; jinak popiš, co bylo slíbeno.' },
-        { nazev: 'Komunikace s e-shopem', proc: 'Ukazuje, že ses pokusil(a) věc vyřešit; banky to vyžadují.', jak: 'E-maily, chat nebo formuláře (screenshot).', nemam: 'Doložíš aspoň své nezodpovězené zprávy.' },
-        { nazev: 'Identifikace e-shopu (adresa webu, IČO, adresa, telefon)', proc: 'Potřebuješ ji pro policii i pro ČOI.', jak: 'Screenshot webu, kontaktů a podmínek.', nemam: 'Ulož adresu webu a datum; web se může smazat.' },
-        { nazev: 'Potvrzení o dodání nebo sledování zásilky', proc: 'Ukazuje, že zboží nedorazilo (nebo dorazilo jiné).', jak: 'E-mail od dopravce nebo odkaz na sledování.', nemam: 'Popiš situaci vlastními slovy; dorazilo-li jiné zboží, vyfoť ho i s obalem.' },
+        { nazev: 'Slíbený termín dodání a obchodní podmínky', proc: 'Banka posuzuje, jestli termín dodání už uplynul.', jak: 'Screenshot webu, e-mail nebo obchodní podmínky.', nemam: 'Uložte aktuální stav webu hned; jinak popište, co bylo slíbeno.' },
+        { nazev: 'Komunikace s e-shopem', proc: 'Ukazuje, že jste se pokusil(a) věc vyřešit; banky to vyžadují.', jak: 'E-maily, chat nebo formuláře (screenshot).', nemam: 'Doložíte aspoň své nezodpovězené zprávy.' },
+        { nazev: 'Identifikace e-shopu (adresa webu, IČO – číslo firmy, adresa, telefon)', proc: 'Potřebujete ji pro policii i pro ČOI.', jak: 'Screenshot webu, kontaktů a podmínek.', nemam: 'Uložte adresu webu a datum; web se může smazat.' },
+        { nazev: 'Potvrzení o dodání nebo sledování zásilky', proc: 'Ukazuje, že zboží nedorazilo (nebo dorazilo jiné).', jak: 'E-mail od dopravce nebo odkaz na sledování.', nemam: 'Popište situaci vlastními slovy; dorazilo-li jiné zboží, vyfoťte ho i s obalem.' },
       ],
       neoverene: [
-        'Jednotná lhůta pro reklamaci platby kartou: banky uvádějí různé lhůty, proto tu žádnou neuvádíme. Zeptej se své banky.',
+        'Jednotná lhůta pro reklamaci platby kartou: banky uvádějí různé lhůty, proto tu žádnou neuvádíme. Zeptejte se své banky.',
         'Postup u Google Pay, Apple Pay, splátek (BNPL) a dobírky: oficiální zdroj jsme nenašli.',
         'Zda lze platbu převodem stáhnout zpět: zdroje to nepotvrzují.',
-        'Čísla linek bank neuvádíme, vždy je ověř na oficiálním webu nebo na kartě.',
+        'Čísla linek bank neuvádíme, vždy je ověřte na oficiálním webu nebo na kartě.',
         'Právní posouzení případu (např. vznik podvodu a šance na stíhání) neprovádíme.',
       ],
     },
@@ -671,36 +697,36 @@ const PRVNI_POMOC = {
         id: 'prozradil',
         label: 'Už jsem někomu prozradil(a) údaje karty, přihlášení do banky nebo kód z SMS, nebo jsem schválil(a) platbu v aplikaci.',
         krok: {
-          text: 'Zavolej hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo z inzerátu ani ze zprávy). Nech zablokovat kartu a případně přístup do bankovnictví.',
-          proc: 'Podle Air Bank může banka zablokovat kartu, omezit přístup do bankovnictví a pokusit se platbu zastavit; čím dřív zavoláš, tím větší je šance omezit škody.',
+          text: 'Zavolejte hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo z inzerátu ani ze zprávy). Nechte zablokovat kartu a případně přístup do bankovnictví.',
+          proc: 'Podle Air Bank může banka zablokovat kartu, omezit přístup do bankovnictví a pokusit se platbu zastavit; čím dřív zavoláte, tím větší je šance omezit škody.',
           zdroje: ['air_kam', 'kb_podvod'],
         },
       }],
       kroky: [
-        { kdy: 'hned', obecna: true, text: 'Prodejci už nic neposílej a nereaguj na žádosti o další „poplatek“ nebo „odblokování“.', proc: 'Takové žádosti bývají pokračováním podvodu.' },
-        { kdy: 'hned', text: 'Zavolej do své banky.', proc: 'Banka může podle Air Bank zablokovat kartu, omezit přístup a pokusit se platbu zastavit. U už odeslaného převodu banka vrácení peněz zaručit nemůže.', zdroje: ['air_kam', 'csas_spatny_ucet', 'cnb_triky'] },
-        { kdy: 'hned', text: 'Zajisti důkazy dřív, než inzerát nebo profil zmizí: screenshoty inzerátu, profilu, konverzace a potvrzení o platbě.', proc: 'Banka i policie chtějí doložit komunikaci a platbu; prodejce může inzerát i profil smazat.', zdroje: ['air_kam', 'air_stornovat', 'bazos_dotazy'] },
-        { kdy: 'hned', text: 'Kupoval(a) jsi na Vinted tlačítkem „Koupit“? Nepotvrzuj objednávku a použij „Mám problém“.', proc: 'Vinted uvádí, že takový nákup je chráněný a stížnost se podává ve dvoudenní lhůtě po oznámení o doručení. Platba mimo Vinted chráněná není.', zdroje: ['vinted_bezpecne', 'vinted_prodavajici'] },
-        { kdy: 'dny', text: 'Podej oznámení na Policii ČR.', proc: 'Jde to na kterémkoli oddělení, ústně nebo písemně, bez formuláře. Uveď kdo, co, kdy, kde, jak a jakou škodu jsi utrpěl(a); chceš-li znát výsledek, napiš to výslovně. Webový formulář „Hlášení kyberkriminality“ podle policie standardní oznámení nenahrazuje.', zdroje: ['policie_postup', 'policie_hlaseni'] },
-        { kdy: 'dny', text: 'Nahlas inzerát nebo profil platformě.', proc: 'Sbazar: „Nahlásit inzerát“, Vinted: „Nahlásit“, Bazoš: „Označit špatný inzerát“. Platforma může nabídku odstranit a varovat další.', zdroje: ['vinted_nahlasit', 'bazos_dotazy', 'sbazar_bezpecne'] },
-        { kdy: 'dny', text: 'Platil(a) jsi kartou? Požádej banku o reklamaci.', proc: 'Air Bank radí počkat do slíbeného termínu dodání (když žádný nebyl, aspoň 30 dní) a pak podat formulář s doklady. ESC uvádí, že řada lidí peníze od vydavatele karty dostala zpět, ale spoléhat se na to nelze.', zdroje: ['air_stornovat', 'esc_podvody'] },
-        { kdy: 'dny', text: 'Zjisti, jestli se na tvůj nákup nevztahuje ochrana platformy.', proc: 'Vinted při nákupu tlačítkem „Koupit“ a Aukro při platbě přes Aukro mají vlastní pravidla. Podmínky Aukra a Marketplace jsme nemohli plně ověřit, podívej se na stránky platformy.', zdroje: ['vinted_bezpecne', 'aukro'] },
-        { kdy: 'pozdeji', text: 'Banka reklamaci zamítla? ČNB spory o vrácení peněz nerozhoduje, příslušný je finanční arbitr nebo soud.', proc: 'Zda je to tvůj případ (platbu jsi schválil(a) sám), ověř u odborníka.', zdroje: ['cnb_faq'] },
+        { kdy: 'hned', obecna: true, text: 'Prodejci už nic neposílejte a nereagujte na žádosti o další „poplatek“ nebo „odblokování“.', proc: 'Takové žádosti bývají pokračováním podvodu.' },
+        { kdy: 'hned', text: 'Zavolejte do své banky.', proc: 'Banka může podle Air Bank zablokovat kartu, omezit přístup a pokusit se platbu zastavit. U už odeslaného převodu banka vrácení peněz zaručit nemůže.', zdroje: ['air_kam', 'csas_spatny_ucet', 'cnb_triky'] },
+        { kdy: 'hned', text: 'Zajistěte důkazy dřív, než inzerát nebo profil zmizí: screenshoty inzerátu, profilu, konverzace a potvrzení o platbě.', proc: 'Banka i policie chtějí doložit komunikaci a platbu; prodejce může inzerát i profil smazat.', zdroje: ['air_kam', 'air_stornovat', 'bazos_dotazy'] },
+        { kdy: 'hned', text: 'Kupoval(a) jste na Vinted tlačítkem „Koupit“? Nepotvrzujte objednávku a použijte „Mám problém“.', proc: 'Vinted uvádí, že takový nákup je chráněný a stížnost se podává ve dvoudenní lhůtě po oznámení o doručení. Platba mimo Vinted chráněná není.', zdroje: ['vinted_bezpecne', 'vinted_prodavajici'] },
+        { kdy: 'dny', text: 'Podejte oznámení na Policii ČR.', proc: 'Jde to na kterémkoli oddělení, ústně nebo písemně, bez formuláře. Uveďte kdo, co, kdy, kde, jak a jakou škodu jste utrpěl(a); chcete-li znát výsledek, napište to výslovně. Webový formulář „Hlášení kyberkriminality“ podle policie standardní oznámení nenahrazuje.', zdroje: ['policie_postup', 'policie_hlaseni'] },
+        { kdy: 'dny', text: 'Nahlaste inzerát nebo profil provozovateli webu.', proc: 'Sbazar: „Nahlásit inzerát“, Vinted: „Nahlásit“, Bazoš: „Označit špatný inzerát“. Provozovatel webu může nabídku odstranit a varovat další.', zdroje: ['vinted_nahlasit', 'bazos_dotazy', 'sbazar_bezpecne'] },
+        { kdy: 'dny', text: 'Platil(a) jste kartou? Požádejte banku o reklamaci.', proc: 'Air Bank radí počkat do slíbeného termínu dodání (když žádný nebyl, aspoň 30 dní) a pak podat formulář s doklady. Evropské spotřebitelské centrum (ESC) uvádí, že řada lidí peníze od vydavatele karty dostala zpět, ale spoléhat se na to nelze.', zdroje: ['air_stornovat', 'esc_podvody'] },
+        { kdy: 'dny', text: 'Zjistěte, jestli se na váš nákup nevztahuje ochrana, kterou nabízí web, kde jste nakupovali.', proc: 'Vinted při nákupu tlačítkem „Koupit“ a Aukro při platbě přes Aukro mají vlastní pravidla. Podmínky Aukra a Marketplace jsme nemohli plně ověřit, podívejte se na stránky webu, kde jste nakupovali.', zdroje: ['vinted_bezpecne', 'aukro'] },
+        { kdy: 'pozdeji', text: 'Banka reklamaci zamítla? Česká národní banka (ČNB) spory o vrácení peněz nerozhoduje, příslušný je finanční arbitr nebo soud.', proc: 'Zda je to váš případ (platbu jste schválil(a)), ověřte u odborníka.', zdroje: ['cnb_faq'] },
       ],
       podklady: [
-        { nazev: 'Screenshot inzerátu (text, cena, fotky, datum)', proc: 'Dokládá, co bylo slíbeno; inzerát bývá po podvodu smazán a policie k oznámení doporučuje kopii inzerátu.', jak: 'Screenshot celé stránky nebo „Uložit stránku“; zkopíruj odkaz.', nemam: 'Hledej v historii prohlížeče nebo v e-mailové notifikaci platformy; poznamenej si datum a název.' },
-        { nazev: 'Profil prodejce (jméno, odkaz, hodnocení)', proc: 'Platforma a policie podle něj prodejce identifikují.', jak: 'Screenshot profilu a zkopírovaný odkaz.', nemam: 'Odkaz bývá v e-mailu nebo v historii konverzace; aspoň napiš přezdívku a platformu.' },
-        { nazev: 'Konverzace s prodejcem (chat, SMS, e-mail)', proc: 'Dokládá dohodu o koupi, cenu a to, že přestal odpovídat; banka i policie ji chtějí.', jak: 'Screenshoty celého vlákna s daty; e-maily přepošli.', nemam: 'Využij notifikace v e-mailu nebo telefonu a popiš, co si pamatuješ.' },
-        { nazev: 'Potvrzení o platbě (datum, částka, číslo účtu příjemce)', proc: 'Prokazuje, že platba proběhla a kam šla; banka a policie to potřebují.', jak: 'Internetové bankovnictví: potvrzení o transakci nebo výpis.', nemam: 'Vyžádej si výpis nebo potvrzení v bance.' },
+        { nazev: 'Screenshot inzerátu (text, cena, fotky, datum)', proc: 'Dokládá, co bylo slíbeno; inzerát bývá po podvodu smazán a policie k oznámení doporučuje kopii inzerátu.', jak: 'Screenshot celé stránky nebo „Uložit stránku“; zkopírujte odkaz.', nemam: 'Hledejte v historii prohlížeče nebo v e-mailové notifikaci od webu; poznamenejte si datum a název.' },
+        { nazev: 'Profil prodejce (jméno, odkaz, hodnocení)', proc: 'Provozovatel webu a policie podle něj prodejce identifikují.', jak: 'Screenshot profilu a zkopírovaný odkaz.', nemam: 'Odkaz bývá v e-mailu nebo v historii konverzace; aspoň napište přezdívku a platformu.' },
+        { nazev: 'Konverzace s prodejcem (chat, SMS, e-mail)', proc: 'Dokládá dohodu o koupi, cenu a to, že přestal odpovídat; banka i policie ji chtějí.', jak: 'Screenshoty celého vlákna s daty; e-maily přepošlete.', nemam: 'Využijte notifikace v e-mailu nebo telefonu a popište, co si pamatujete.' },
+        { nazev: 'Potvrzení o platbě (datum, částka, číslo účtu příjemce)', proc: 'Prokazuje, že platba proběhla a kam šla; banka a policie to potřebují.', jak: 'Internetové bankovnictví: potvrzení o transakci nebo výpis.', nemam: 'Vyžádejte si výpis nebo potvrzení v bance.' },
         { nazev: 'Kontakty prodejce (telefon, e-mail, číslo účtu)', proc: 'Policie je potřebuje k dohledání osoby.', jak: 'Z inzerátu, konverzace a potvrzení o platbě.', nemam: 'Číslo účtu je vždy v potvrzení o platbě.' },
-        { nazev: 'Zápis časové osy', proc: 'Policie se ptá, kdy a jaká škoda vznikla.', jak: 'Poznamenej si pár vět: kdy jsi platil(a) a kdy ti prodejce naposledy odpověděl.', nemam: 'Doplň podle konverzace a výpisu.' },
+        { nazev: 'Zápis časové osy', proc: 'Policie se ptá, kdy a jaká škoda vznikla.', jak: 'Poznamenejte si pár vět: kdy jste platil(a) a kdy vám prodejce naposledy odpověděl.', nemam: 'Doplňte podle konverzace a výpisu.' },
       ],
       neoverene: [
         'Zda a jak může banka zastavit už odeslaný převod nebo požádat banku příjemce o součinnost: žádný oficiální zdroj to nepopisuje.',
-        'Aukro (Garance, Ochrana kupujících) a Facebook Marketplace: jejich stránky se nepodařilo plně ověřit, podmínky si zkontroluj u platformy.',
-        'Zda je čistě soukromý prodej mimo působnost ČOI a ESC: ověř u nich.',
+        'Aukro (Garance, Ochrana kupujících) a Facebook Marketplace: jejich stránky se nepodařilo plně ověřit, podmínky si zkontrolujte u provozovatele webu.',
+        'Zda je čistě soukromý prodej mimo působnost ČOI a ESC: ověřte u nich.',
         'Postup oznámení na policii jsme ověřili jen na archivní stránce policie.',
-        'Čísla linek bank neuvádíme, vždy je ověř na oficiálním webu nebo na kartě.',
+        'Čísla linek bank neuvádíme, vždy je ověřte na oficiálním webu nebo na kartě.',
       ],
     },
     {
@@ -711,37 +737,37 @@ const PRVNI_POMOC = {
         id: 'prozradil',
         label: 'Už jsem zadal(a) údaje karty nebo přihlášení do banky, nadiktoval(a) kód z SMS, nebo jsem schválil(a) požadavek v aplikaci banky.',
         krok: {
-          text: 'Zavolej hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo z odkazu od „kupujícího“). Nech zablokovat kartu a přístup do bankovnictví a nic dalšího nepotvrzuj.',
+          text: 'Zavolejte hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo z odkazu od „kupujícího“). Nechte zablokovat kartu a přístup do bankovnictví a nic dalšího nepotvrzujte.',
           proc: 'Banky uvádějí, že platba kartou už zpětně nejde zrušit a záleží na minutách.',
           zdroje: ['kb_podvod', 'air_zadali', 'air_obet'],
         },
       }],
       kroky: [
-        { kdy: 'hned', text: 'Přeruš kontakt a nic dalšího nezadávej: neopakuj platbu, nevolej na čísla z podezřelého webu, neklikej na další odkazy a neinstaluj aplikace pro vzdálený přístup.', proc: 'Podvodník může zkoušet další pokusy.', zdroje: ['air_zadali'] },
-        { kdy: 'hned', text: 'Zablokuj kartu v aplikaci nebo na nonstop lince banky; když jsi zadal(a) přihlášení, nech zablokovat i přístup do bankovnictví.', proc: 'Číslo vždy ber z oficiálního webu banky, aplikace nebo ze zadní strany karty, ne z odkazu od „kupujícího“.', zdroje: ['kb_podvod', 'air_zadali', 'air_obet', 'csas_bezpecnost'] },
-        { kdy: 'hned', text: 'Změň přihlašovací údaje do bankovnictví.', proc: 'U Air Bank to jde jen v mobilní aplikaci, u České spořitelny v George.', zdroje: ['air_obet', 'csas_bezpecnost'] },
-        { kdy: 'hned', text: 'Nepotvrzuj žádné požadavky ani SMS kódy, které jsi sám nevyvolal(a).', proc: 'Policie radí při prodeji nikdy nezadávat hesla, PIN, CVC ani potvrzovací kódy.', zdroje: ['policie_kupujici', 'zasilkovna'] },
-        { kdy: 'hned', text: 'Ulož důkazy dřív, než zmizí (screenshoty, přesnou adresu stránky, SMS, chat), a nic nemaž.', proc: 'Budou potřeba pro banku i pro policii.', zdroje: ['air_zadali'] },
-        { kdy: 'dny', text: 'Několik dní kontroluj účet, včetně drobných částek a nezaúčtovaných blokací.', proc: 'Podvodná platba se může objevit s odstupem.', zdroje: ['air_zadali', 'kb_podvod'] },
-        { kdy: 'dny', text: 'Zkontroluj zařízení s bezpečnostním klíčem nebo aplikací banky a odeber cizí nebo nepoužívaná.', proc: 'Cizí zařízení by mohlo dál schvalovat platby.', zdroje: ['kb_podvod', 'air_obet'] },
-        { kdy: 'dny', text: 'Oznam věc Policii ČR.', proc: 'Jde to ústně nebo písemně na kterémkoli útvaru. Popiš, co se stalo, kdy a jak a jaká je škoda. O výsledku tě policie vyrozumí jen na výslovnou žádost.', zdroje: ['policie_postup', 'policie_kupujici'] },
-        { kdy: 'dny', text: 'Nahlas falešného kupujícího provozovateli bazaru a falešnou stránku Zásilkovně nebo CSIRT.CZ.', proc: 'Sbazar: tlačítko „Nahlásit“ nebo chat podpory; Bazoš: „Označit špatný inzerát“. Falešné stránky jde hlásit i CSIRT.CZ s adresou a snímkem obrazovky.', zdroje: ['sbazar_podvody', 'bazos_napoveda', 'zasilkovna', 'csirt_hlaseni'] },
-        { kdy: 'dny', text: 'Pokud vznikla škoda, podej u banky písemnou reklamaci neautorizovaných transakcí a vyžádej si potvrzení, že ji přijali.', proc: 'Banky často nabízejí i reklamaci přes kartové schéma (chargeback); výsledek nelze zaručit.', zdroje: ['zakon', 'finarbitr_faq', 'air_zadali'] },
-        { kdy: 'pozdeji', text: 'Banka reklamaci neuznala? Nejdřív pošli bance písemnou výzvu k nápravě, potom lze podat návrh finančnímu arbitrovi.', proc: 'Řízení u finančního arbitra je podle jeho stránek bezplatné a zastoupení není nutné.', zdroje: ['finarbitr_faq'] },
-        { kdy: 'pozdeji', text: 'U dalších prodejů nikomu neposílej údaje karty, SMS ani potvrzovací kódy.', proc: 'Sbazar uvádí, že nezajišťuje kurýrní služby ani nikdy nechce čísla platebních karet.', zdroje: ['sbazar_podvody'] },
+        { kdy: 'hned', text: 'Přerušte kontakt a nic dalšího nezadávejte: neopakujte platbu, nevolejte na čísla z podezřelého webu, neklikejte na další odkazy a neinstalujte aplikace pro vzdálený přístup.', proc: 'Podvodník může zkoušet další pokusy.', zdroje: ['air_zadali'] },
+        { kdy: 'hned', text: 'Zablokujte kartu v aplikaci nebo na nonstop lince banky; když jste zadal(a) přihlášení, nechte zablokovat i přístup do bankovnictví.', proc: 'Číslo vždy berte z oficiálního webu banky, aplikace nebo ze zadní strany karty, ne z odkazu od „kupujícího“.', zdroje: ['kb_podvod', 'air_zadali', 'air_obet', 'csas_bezpecnost'] },
+        { kdy: 'hned', text: 'Změňte přihlašovací údaje do bankovnictví.', proc: 'U Air Bank to jde jen v mobilní aplikaci, u České spořitelny v George.', zdroje: ['air_obet', 'csas_bezpecnost'] },
+        { kdy: 'hned', text: 'Nepotvrzujte žádné požadavky ani SMS kódy, které jste nevyvolal(a).', proc: 'Policie radí při prodeji nikdy nezadávat hesla, PIN, CVC (kód na zadní straně karty) ani potvrzovací kódy.', zdroje: ['policie_kupujici', 'zasilkovna'] },
+        { kdy: 'hned', text: 'Uložte důkazy dřív, než zmizí (screenshoty, přesnou adresu stránky, SMS, chat), a nic nemažte.', proc: 'Budou potřeba pro banku i pro policii.', zdroje: ['air_zadali'] },
+        { kdy: 'dny', text: 'Několik dní kontrolujte účet, včetně drobných částek a nezaúčtovaných blokací.', proc: 'Podvodná platba se může objevit s odstupem.', zdroje: ['air_zadali', 'kb_podvod'] },
+        { kdy: 'dny', text: 'Zkontrolujte zařízení s bezpečnostním klíčem nebo aplikací banky a odeberte cizí nebo nepoužívaná.', proc: 'Cizí zařízení by mohlo dál schvalovat platby.', zdroje: ['kb_podvod', 'air_obet'] },
+        { kdy: 'dny', text: 'Oznamte věc Policii ČR.', proc: 'Jde to ústně nebo písemně na kterémkoli útvaru. Popište, co se stalo, kdy a jak a jaká je škoda. O výsledku vás policie vyrozumí jen na výslovnou žádost.', zdroje: ['policie_postup', 'policie_kupujici'] },
+        { kdy: 'dny', text: 'Nahlaste falešného kupujícího provozovateli bazaru a falešnou stránku Zásilkovně nebo národnímu týmu pro kybernetickou bezpečnost (CSIRT.CZ).', proc: 'Sbazar: tlačítko „Nahlásit“ nebo chat podpory; Bazoš: „Označit špatný inzerát“. Falešné stránky jde hlásit i CSIRT.CZ s adresou a snímkem obrazovky.', zdroje: ['sbazar_podvody', 'bazos_napoveda', 'zasilkovna', 'csirt_hlaseni'] },
+        { kdy: 'dny', text: 'Pokud vznikla škoda, podejte u banky písemnou reklamaci neautorizovaných transakcí a vyžádejte si potvrzení, že ji přijali.', proc: 'Banky často nabízejí i reklamaci přes kartové schéma (chargeback); výsledek nelze zaručit.', zdroje: ['zakon', 'finarbitr_faq', 'air_zadali'] },
+        { kdy: 'pozdeji', text: 'Banka reklamaci neuznala? Nejdřív pošlete bance písemnou výzvu k nápravě, potom lze podat návrh finančnímu arbitrovi.', proc: 'Řízení u finančního arbitra je podle jeho stránek bezplatné a zastoupení není nutné.', zdroje: ['finarbitr_faq'] },
+        { kdy: 'pozdeji', text: 'U dalších prodejů nikomu neposílejte údaje karty, SMS ani potvrzovací kódy.', proc: 'Sbazar uvádí, že nezajišťuje kurýrní služby ani nikdy nechce čísla platebních karet.', zdroje: ['sbazar_podvody'] },
       ],
       podklady: [
-        { nazev: 'Přesná adresa falešné stránky', proc: 'Bez ní se stránka nedá nahlásit ani zablokovat.', jak: 'Zkopíruj ji z adresního řádku, z historie prohlížeče nebo z odkazu v chatu (pravé tlačítko, kopírovat adresu).', nemam: 'Najdeš ji ve zprávě od „kupujícího“; znovu ji neotvírej a nic nezadávej.' },
-        { nazev: 'Screenshoty stránky a formulářů', proc: 'Ukážou, co stránka chtěla a jak vypadala.', jak: 'Snímek obrazovky.', nemam: 'Popiš vlastními slovy, co jsi viděl(a) a zadal(a).' },
-        { nazev: 'Chat s „kupujícím“ (profil, číslo, e-mail)', proc: 'Policii i provozovateli bazaru ukáže, kdo a jak tě oslovil.', jak: 'Snímky celé konverzace, odkaz na inzerát a profil; nic nemaž.', nemam: 'Inzerát a své zprávy najdeš v účtu na bazaru; obrať se na podporu bazaru.' },
-        { nazev: 'Čas a údaje, které jsi zadal(a)', proc: 'Banka podle nich hledá transakce a rozhoduje o postupu.', jak: 'Zapiš čas a co přesně (karta, přihlášení, kód) jsi zadal(a) nebo potvrdil(a).', nemam: 'Odhadni a poznač, že jde o odhad.' },
+        { nazev: 'Přesná adresa falešné stránky', proc: 'Bez ní se stránka nedá nahlásit ani zablokovat.', jak: 'Zkopírujte ji z adresního řádku, z historie prohlížeče nebo z odkazu v chatu (pravé tlačítko, kopírovat adresu).', nemam: 'Najdete ji ve zprávě od „kupujícího“; znovu ji neotvírejte a nic nezadávejte.' },
+        { nazev: 'Screenshoty stránky a formulářů', proc: 'Ukážou, co stránka chtěla a jak vypadala.', jak: 'Snímek obrazovky.', nemam: 'Popište vlastními slovy, co jste viděl(a) a zadal(a).' },
+        { nazev: 'Chat s „kupujícím“ (profil, číslo, e-mail)', proc: 'Policii i provozovateli bazaru ukáže, kdo a jak vás oslovil.', jak: 'Snímky celé konverzace, odkaz na inzerát a profil; nic nemažte.', nemam: 'Inzerát a své zprávy najdete v účtu na bazaru; obraťte se na podporu bazaru.' },
+        { nazev: 'Čas a údaje, které jste zadal(a)', proc: 'Banka podle nich hledá transakce a rozhoduje o postupu.', jak: 'Zapište čas a co přesně (karta, přihlášení, kód) jste zadal(a) nebo potvrdil(a).', nemam: 'Odhadněte a poznačte, že jde o odhad.' },
         { nazev: 'Výpis z účtu a historie plateb', proc: 'Je to doklad o škodě; banka i policie s ním pracují.', jak: 'Internetové nebo mobilní bankovnictví, export PDF.', nemam: 'Banka výpis vystaví na žádost.' },
-        { nazev: 'Potvrzení o zablokování karty nebo přístupu', proc: 'Prokazuje, kdy jsi jednal(a).', jak: 'Poznamenej čas, jméno operátora a číslo případu; požádej o písemné potvrzení.', nemam: 'Zeptej se banky na písemné potvrzení hovoru.' },
+        { nazev: 'Potvrzení o zablokování karty nebo přístupu', proc: 'Prokazuje, kdy jste jednal(a).', jak: 'Poznamenejte čas, jméno operátora a číslo případu; požádejte o písemné potvrzení.', nemam: 'Zeptejte se banky na písemné potvrzení hovoru.' },
       ],
       neoverene: [
         'Bazoš „trik s ověřovacím kódem“: oficiální stránky Bazoše tento scénář výslovně neuvádějí.',
-        'Zda banka uhradí škodu, když jsi údaje nebo kód sám zadal(a): žádný zdroj to nepotvrzuje, rozhodují okolnosti, banka, finanční arbitr nebo soud.',
-        'Čísla linek bank neuvádíme, vždy je ověř na oficiálním webu nebo na kartě.',
+        'Zda banka uhradí škodu, když jste údaje nebo kód zadal(a): žádný zdroj to nepotvrzuje, rozhodují okolnosti, banka, finanční arbitr nebo soud.',
+        'Čísla linek bank neuvádíme, vždy je ověřte na oficiálním webu nebo na kartě.',
         'Pokrytí bank je neúplné (ověřeny Komerční banka, Air Bank a Česká spořitelna); policejní články jsou starší.',
         'Zda provozovatel bazaru po nahlášení zablokuje účet „kupujícího“: zdroje to neslibují.',
       ],
@@ -751,7 +777,7 @@ const PRVNI_POMOC = {
       nazev: 'Vylákali ze mě údaje',
       popis: 'Falešný bankéř nebo policista, phishing: přihlášení do banky, údaje karty, kód z SMS, schválená platba.',
       nalehave: {
-        text: 'Zavolej hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo, které ti dal volající nebo které je ve zprávě). Nech zablokovat platební prostředky a přístup do bankovnictví.',
+        text: 'Zavolejte hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo, které vám dal volající nebo které je ve zprávě). Nechte zablokovat platební prostředky a přístup do bankovnictví.',
         proc: 'Banka může zastavit platby, které ještě neodešly; první hodiny rozhodují o tom, kolik se dá zachránit.',
         zdroje: ['cnb_faq', 'cnb_online', 'kb_podvod', 'csas_podvody'],
       },
@@ -759,35 +785,35 @@ const PRVNI_POMOC = {
         id: 'vzdaleny',
         label: 'Nainstaloval(a) jsem na zařízení aplikaci pro vzdálený přístup (např. AnyDesk nebo TeamViewer).',
         krok: {
-          text: 'Přestaň s podvodníkem komunikovat a zavolej bance, aby zablokovala bankovnictví. Zařízení nech zkontrolovat odborníkem, aplikaci odinstaluj a zařízení vyčisti; hesla měň až potom.',
+          text: 'Přestaňte s podvodníkem komunikovat a zavolejte bance, aby zablokovala bankovnictví. Zařízení nechte zkontrolovat odborníkem, aplikaci odinstalujte a zařízení vyčistěte; hesla měňte až potom.',
           proc: 'Banky radí zavolání neodkládat a přihlašovací údaje měnit až po vyčištění zařízení.',
           zdroje: ['csas_vzdaleny', 'kb_vzdaleny'],
         },
       }],
       kroky: [
-        { kdy: 'hned', text: 'Přestaň komunikovat s podvodníkem a neposílej další peníze ani údaje.', proc: 'Podvodník tlačí na další kroky. Policie radí zachovat klid a jednat rychle.', zdroje: ['policie_pomoc'] },
-        { kdy: 'hned', text: 'Nejde se dovolat? Zablokuj kartu sám v aplikaci nebo v internetovém bankovnictví.', proc: 'Pozor: u Air Bank je blokace karty nevratná.', zdroje: ['policie_pomoc', 'kb_podvod', 'air_zadali'] },
-        { kdy: 'hned', text: 'Zjisti, jestli podvodné platby už odešly, a zkus je zastavit.', proc: 'Storno není vždy možné, rozhoduje o něm banka.', zdroje: ['cnb_faq', 'csas_podvody', 'csas_vzdaleny'] },
-        { kdy: 'hned', text: 'Ulož důkazy, než zmizí (zprávy, e-maily, SMS, adresu stránky, výpis plateb).', proc: 'Budou potřeba pro banku i pro policii.', zdroje: ['policie_pomoc', 'air_zadali'] },
-        { kdy: 'dny', text: 'Oznam věc Policii ČR.', proc: 'ČNB i policie to doporučují. Popiš, jak útok proběhl a jaká je škoda; jde to ústně do protokolu, písemně nebo u kteréhokoli policejního útvaru.', zdroje: ['policie_pomoc', 'cnb_faq', 'policie_oznameni'] },
-        { kdy: 'dny', text: 'Změň hesla k napadeným účtům, zapni vícefázové ověření a zkontroluj zařízení antivirem.', proc: 'Po vzdáleném přístupu hesla měň až po vyčištění zařízení.', zdroje: ['policie_pomoc', 'csas_vzdaleny'] },
-        { kdy: 'dny', text: 'Sleduj účet a kartu, i drobné zkušební částky a nezaúčtované transakce.', proc: 'Platby se mohou objevit s odstupem.', zdroje: ['air_zadali', 'kb_podvod'] },
-        { kdy: 'dny', text: 'Přepošli podvodné zprávy své bance, podvodnou SMS lze přeposlat operátorovi na 7726 a phishingovou stránku nahlásit CSIRT.CZ.', proc: 'Stránku nahlas s adresou a snímkem obrazovky.', zdroje: ['csas_podvody', 'csirt_sms', 'csirt_hlaseni'] },
-        { kdy: 'dny', text: 'Podej bance oznámení o neautorizované platbě a požádej o nápravu.', proc: 'Zákon o platebním styku počítá s oznámením bez zbytečného odkladu po zjištění. Zda banka škodu uhradí, když jsi údaje nebo kód sám sdělil(a), zdroje jednoznačně neuvádějí.', zdroje: ['zakon', 'air_zadali'] },
+        { kdy: 'hned', text: 'Přestaňte komunikovat s podvodníkem a neposílejte další peníze ani údaje.', proc: 'Podvodník tlačí na další kroky. Policie radí zachovat klid a jednat rychle.', zdroje: ['policie_pomoc'] },
+        { kdy: 'hned', text: 'Nejde se dovolat? Zablokujte kartu přímo v aplikaci nebo v internetovém bankovnictví.', proc: 'Pozor: u Air Bank je blokace karty nevratná.', zdroje: ['policie_pomoc', 'kb_podvod', 'air_zadali'] },
+        { kdy: 'hned', text: 'Zjistěte, jestli podvodné platby už odešly, a zkuste je zastavit.', proc: 'Storno není vždy možné, rozhoduje o něm banka.', zdroje: ['cnb_faq', 'csas_podvody', 'csas_vzdaleny'] },
+        { kdy: 'hned', text: 'Uložte důkazy, než zmizí (zprávy, e-maily, SMS, adresu stránky, výpis plateb).', proc: 'Budou potřeba pro banku i pro policii.', zdroje: ['policie_pomoc', 'air_zadali'] },
+        { kdy: 'dny', text: 'Oznamte věc Policii ČR.', proc: 'Česká národní banka (ČNB) i policie to doporučují. Popište, jak útok proběhl a jaká je škoda; jde to ústně do protokolu, písemně nebo u kteréhokoli policejního útvaru.', zdroje: ['policie_pomoc', 'cnb_faq', 'policie_oznameni'] },
+        { kdy: 'dny', text: 'Změňte hesla k napadeným účtům, zapněte vícefázové ověření a zkontrolujte zařízení antivirem.', proc: 'Po vzdáleném přístupu hesla měňte až po vyčištění zařízení.', zdroje: ['policie_pomoc', 'csas_vzdaleny'] },
+        { kdy: 'dny', text: 'Sledujte účet a kartu, i drobné zkušební částky a nezaúčtované transakce.', proc: 'Platby se mohou objevit s odstupem.', zdroje: ['air_zadali', 'kb_podvod'] },
+        { kdy: 'dny', text: 'Přepošlete podvodné zprávy své bance, podvodnou SMS lze přeposlat operátorovi na 7726 a phishingovou stránku nahlásit CSIRT.CZ.', proc: 'Stránku nahlaste s adresou a snímkem obrazovky.', zdroje: ['csas_podvody', 'csirt_sms', 'csirt_hlaseni'] },
+        { kdy: 'dny', text: 'Podejte bance oznámení o neautorizované platbě a požádejte o nápravu.', proc: 'Zákon o platebním styku počítá s oznámením bez zbytečného odkladu po zjištění. Zda banka škodu uhradí, když jste údaje nebo kód sdělil(a), zdroje jednoznačně neuvádějí.', zdroje: ['zakon', 'air_zadali'] },
         { kdy: 'pozdeji', text: 'Banka reklamaci neuznala? ČNB spory o vrácení peněz neřeší; příslušný je finanční arbitr nebo soud.', proc: 'Nejdřív je třeba písemně požádat banku o nápravu.', zdroje: ['cnb_faq', 'finarbitr_platebni', 'finarbitr_uvod'] },
-        { kdy: 'pozdeji', text: 'Hlídej zneužití osobních údajů, například úvěr sjednaný na tvé jméno.', proc: 'ČNB varuje, že zneužití identifikačních údajů je věc pro orgány činné v trestním řízení a peníze se těžko vymáhají.', zdroje: ['cnb_udaje'] },
-        { kdy: 'pozdeji', obecna: true, text: 'Nevěř „vymahačům“ ani „pomocníkům“, kteří nabízejí vrácení peněz, a neposílej jim další peníze.', proc: 'Je to naše obecná opatrnost, oficiální zdroj k tomu nemáme.' },
+        { kdy: 'pozdeji', text: 'Hlídejte zneužití osobních údajů, například úvěr sjednaný na vaše jméno.', proc: 'ČNB varuje, že zneužití identifikačních údajů je věc pro orgány činné v trestním řízení a peníze se těžko vymáhají.', zdroje: ['cnb_udaje'] },
+        { kdy: 'pozdeji', obecna: true, text: 'Nevěřte „vymahačům“ ani „pomocníkům“, kteří nabízejí vrácení peněz, a neposílejte jim další peníze.', proc: 'Je to naše obecná opatrnost, oficiální zdroj k tomu nemáme.' },
       ],
       podklady: [
-        { nazev: 'Screenshoty zpráv, e-mailů, SMS a chatu', proc: 'Dokládají, jak tě podvodník oslovil.', jak: 'Screenshot; e-maily nemaž, případně je přepošli.', nemam: 'Hledej zálohu u operátora nebo v e-mailové schránce; popiš obsah z paměti.' },
+        { nazev: 'Screenshoty zpráv, e-mailů, SMS a chatu', proc: 'Dokládají, jak vás podvodník oslovil.', jak: 'Screenshot; e-maily nemažte, případně je přepošlete.', nemam: 'Hledejte zálohu u operátora nebo v e-mailové schránce; popište obsah z paměti.' },
         { nazev: 'Číslo volajícího, datum a čas hovoru', proc: 'Banka a policie podle nich mohou případ dohledávat.', jak: 'Výpis hovorů v telefonu nebo u operátora.', nemam: 'Aspoň přibližný čas a obsah hovoru.' },
-        { nazev: 'Adresa podvodné stránky', proc: 'Dá se nahlásit k odstranění.', jak: 'Historie prohlížeče nebo odkaz ze zprávy.', nemam: 'Popiš, kde jsi stránku našel(a).' },
-        { nazev: 'Výpis plateb (čas, částka, příjemce)', proc: 'Určuje, co a kdy odešlo; je to základ pro oznámení bance i policii.', jak: 'Internetové bankovnictví nebo PDF výpis.', nemam: 'Zavolej bance a požádej o přehled.' },
-        { nazev: 'Potvrzení komunikace s bankou', proc: 'Je to doklad, kdy jsi banku informoval(a).', jak: 'Číslo hovoru, e-mail nebo chat v aplikaci.', nemam: 'Poznamenej čas a jméno operátora.' },
-        { nazev: 'Čas, kdy jsi údaje zadal(a) nebo platbu schválil(a)', proc: 'Pomůže spárovat tvůj postup s transakcemi.', jak: 'Z paměti nebo z historie SMS.', nemam: 'Stačí odhad v rozmezí.' },
+        { nazev: 'Adresa podvodné stránky', proc: 'Dá se nahlásit k odstranění.', jak: 'Historie prohlížeče nebo odkaz ze zprávy.', nemam: 'Popište, kde jste stránku našel(a).' },
+        { nazev: 'Výpis plateb (čas, částka, příjemce)', proc: 'Určuje, co a kdy odešlo; je to základ pro oznámení bance i policii.', jak: 'Internetové bankovnictví nebo PDF výpis.', nemam: 'Zavolejte bance a požádejte o přehled.' },
+        { nazev: 'Potvrzení komunikace s bankou', proc: 'Je to doklad, kdy jste banku informoval(a).', jak: 'Číslo hovoru, e-mail nebo chat v aplikaci.', nemam: 'Poznamenejte čas a jméno operátora.' },
+        { nazev: 'Čas, kdy jste údaje zadal(a) nebo platbu schválil(a)', proc: 'Pomůže spárovat váš postup s transakcemi.', jak: 'Z paměti nebo z historie SMS.', nemam: 'Stačí odhad v rozmezí.' },
       ],
       neoverene: [
-        'Zda banka vrátí peníze, když jsi sám sdělil(a) SMS kód nebo schválil(a) platbu: posuzuje to banka, případně finanční arbitr nebo soud, zdroje to jednoznačně neuvádějí.',
+        'Zda banka vrátí peníze, když jste sdělil(a) SMS kód nebo schválil(a) platbu: posuzuje to banka, případně finanční arbitr nebo soud, zdroje to jednoznačně neuvádějí.',
         'Postup u konkrétní banky (např. ČSOB, MONETA, Raiffeisenbank) a čísla jejich linek: neověřeno, čísla proto neuvádíme.',
         'Kroky při zneužití dokladů (například neplatnost občanského průkazu): oficiální postup jsme nenašli.',
         'Aktuální znění zákona o platebním styku jsme neověřili v e-Sbírce.',
@@ -799,37 +825,37 @@ const PRVNI_POMOC = {
   jina: {
     id: 'jina-situace',
     nazev: 'Jiná situace',
-    popis: 'Obecné první kroky, když se tvůj případ nehodí k žádnému z předchozích. Postup pro tvou konkrétní situaci jsme nezpracovali.',
+    popis: 'Obecné první kroky, když se váš případ nehodí k žádnému z předchozích. Postup pro vaši konkrétní situaci jsme nezpracovali.',
     otazky: [{
       id: 'prozradil',
       label: 'Už jsem někomu prozradil(a) údaje karty, přihlášení do banky nebo kód z SMS, nebo jsem schválil(a) platbu v aplikaci.',
       krok: {
-        text: 'Zavolej hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo ze zprávy ani od volajícího). Nech zablokovat kartu a případně přístup do bankovnictví.',
-        proc: 'Banka může zastavit platby, které ještě neodešly; čím dřív se ozveš, tím víc se dá omezit.',
+        text: 'Zavolejte hned do své banky na číslo z oficiálního webu, aplikace nebo ze zadní strany karty (ne na číslo ze zprávy ani od volajícího). Nechte zablokovat kartu a případně přístup do bankovnictví.',
+        proc: 'Banka může zastavit platby, které ještě neodešly; čím dřív se ozvete, tím víc se dá omezit.',
         zdroje: ['kb_podvod', 'air_zadali', 'cnb_faq'],
       },
     }],
     kroky: [
-      { kdy: 'hned', obecna: true, text: 'Nic dalšího neplať a nesděluj žádné další údaje.', proc: 'Na výzvy k „doplatku“ nebo „odblokování“ nereaguj.' },
-      { kdy: 'hned', text: 'Přestaň komunikovat s druhou stranou a nic dalšího nezadávej ani neinstaluj.', proc: 'Podvodník může zkoušet další pokusy. Policie radí zachovat klid a jednat rychle.', zdroje: ['policie_pomoc', 'air_zadali'] },
-      { kdy: 'hned', text: 'Ulož důkazy, než zmizí (zprávy, e-maily, výpisy hovorů, screenshoty, adresu stránky, výpis plateb).', proc: 'Budou potřeba pro banku i pro policii.', zdroje: ['policie_pomoc', 'air_kam'] },
-      { kdy: 'hned', text: 'Platil(a) jsi? Zavolej do své banky a zeptej se, co se s platbou dá dělat.', proc: 'Podle Air Bank čím dřív zavoláš, tím větší je šance omezit škody. U už odeslaného převodu banka vrácení peněz zaručit nemůže.', zdroje: ['air_kam', 'csas_spatny_ucet'] },
-      { kdy: 'dny', text: 'Oznam věc Policii ČR.', proc: 'Jde to ústně na kterémkoli oddělení nebo písemně. Popiš, co se stalo, kdy, kde a jak, přilož důkazy a uveď výši škody.', zdroje: ['policie_oznameni', 'policie_pomoc'] },
-      { kdy: 'dny', text: 'Platil(a) jsi kartou? Požádej banku o reklamaci platby.', proc: 'Banka může peníze vyžádat zpět (chargeback), ale nárok na to nemáš a výsledek nelze zaručit. Zeptej se své banky, jaké má podmínky.', zdroje: ['esc_podvody', 'air_stornovat', 'kb_reklamace'] },
-      { kdy: 'dny', text: 'Sleduj účet a kartu, i drobné zkušební částky a nezaúčtované transakce.', proc: 'Platby se mohou objevit s odstupem.', zdroje: ['air_zadali', 'kb_podvod'] },
-      { kdy: 'pozdeji', text: 'Banka reklamaci neuznala? ČNB spory o vrácení peněz neřeší; příslušný je finanční arbitr nebo soud.', proc: 'Nejdřív je třeba písemně požádat banku o nápravu.', zdroje: ['cnb_faq', 'finarbitr_uvod'] },
+      { kdy: 'hned', obecna: true, text: 'Nic dalšího neplaťte a nesdělujte žádné další údaje.', proc: 'Na výzvy k „doplatku“ nebo „odblokování“ nereagujte.' },
+      { kdy: 'hned', text: 'Přestaňte komunikovat s druhou stranou a nic dalšího nezadávejte ani neinstalujte.', proc: 'Podvodník může zkoušet další pokusy. Policie radí zachovat klid a jednat rychle.', zdroje: ['policie_pomoc', 'air_zadali'] },
+      { kdy: 'hned', text: 'Uložte důkazy, než zmizí (zprávy, e-maily, výpisy hovorů, screenshoty, adresu stránky, výpis plateb).', proc: 'Budou potřeba pro banku i pro policii.', zdroje: ['policie_pomoc', 'air_kam'] },
+      { kdy: 'hned', text: 'Platil(a) jste? Zavolejte do své banky a zeptejte se, co se s platbou dá dělat.', proc: 'Podle Air Bank čím dřív zavoláte, tím větší je šance omezit škody. U už odeslaného převodu banka vrácení peněz zaručit nemůže.', zdroje: ['air_kam', 'csas_spatny_ucet'] },
+      { kdy: 'dny', text: 'Oznamte věc Policii ČR.', proc: 'Jde to ústně na kterémkoli oddělení nebo písemně. Popište, co se stalo, kdy, kde a jak, přiložte důkazy a uveďte výši škody.', zdroje: ['policie_oznameni', 'policie_pomoc'] },
+      { kdy: 'dny', text: 'Platil(a) jste kartou? Požádejte banku o reklamaci platby.', proc: 'Banka může peníze vyžádat zpět (chargeback), ale nárok na to nemáte a výsledek nelze zaručit. Zeptejte se své banky, jaké má podmínky.', zdroje: ['esc_podvody', 'air_stornovat', 'kb_reklamace'] },
+      { kdy: 'dny', text: 'Sledujte účet a kartu, i drobné zkušební částky a nezaúčtované transakce.', proc: 'Platby se mohou objevit s odstupem.', zdroje: ['air_zadali', 'kb_podvod'] },
+      { kdy: 'pozdeji', text: 'Banka reklamaci neuznala? Česká národní banka (ČNB) spory o vrácení peněz neřeší; příslušný je finanční arbitr nebo soud.', proc: 'Nejdřív je třeba písemně požádat banku o nápravu.', zdroje: ['cnb_faq', 'finarbitr_uvod'] },
     ],
     podklady: [
-      { nazev: 'Komunikace s druhou stranou (zprávy, e-maily, chat)', proc: 'Dokládá, co ti bylo slíbeno a kdy; banka i policie ji chtějí.', jak: 'Screenshoty celého vlákna s daty, e-maily nemaž.', nemam: 'Využij notifikace v e-mailu nebo telefonu a popiš, co si pamatuješ.' },
-      { nazev: 'Doklad o platbě (datum, částka, příjemce)', proc: 'Prokazuje, že platba proběhla a kam šla.', jak: 'Internetové bankovnictví: potvrzení o transakci nebo výpis.', nemam: 'Vyžádej si výpis nebo potvrzení v bance.' },
-      { nazev: 'Identifikace druhé strany (adresa webu, profil, telefon, číslo účtu)', proc: 'Policie i platforma podle toho mohou případ dohledávat.', jak: 'Screenshot webu nebo profilu, zkopírovaný odkaz, číslo z potvrzení o platbě.', nemam: 'Ulož aspoň to, co víš, a datum; stránky se mohou smazat.' },
-      { nazev: 'Screenshoty toho, co jsi viděl(a) a zadal(a)', proc: 'Ukážou, jak všechno vypadalo.', jak: 'Snímek obrazovky.', nemam: 'Popiš vlastními slovy, co jsi viděl(a) a zadal(a).' },
-      { nazev: 'Zápis časové osy', proc: 'Policie a banka se ptají, kdy co proběhlo a jaká vznikla škoda.', jak: 'Poznamenej si pár vět: kdy to začalo, kdy jsi platil(a) a kdy jsi to zjistil(a).', nemam: 'Doplň podle konverzace a výpisu.' },
+      { nazev: 'Komunikace s druhou stranou (zprávy, e-maily, chat)', proc: 'Dokládá, co vám bylo slíbeno a kdy; banka i policie ji chtějí.', jak: 'Screenshoty celého vlákna s daty, e-maily nemažte.', nemam: 'Využijte notifikace v e-mailu nebo telefonu a popište, co si pamatujete.' },
+      { nazev: 'Doklad o platbě (datum, částka, příjemce)', proc: 'Prokazuje, že platba proběhla a kam šla.', jak: 'Internetové bankovnictví: potvrzení o transakci nebo výpis.', nemam: 'Vyžádejte si výpis nebo potvrzení v bance.' },
+      { nazev: 'Identifikace druhé strany (adresa webu, profil, telefon, číslo účtu)', proc: 'Policie i provozovatel webu podle toho mohou případ dohledávat.', jak: 'Screenshot webu nebo profilu, zkopírovaný odkaz, číslo z potvrzení o platbě.', nemam: 'Uložte aspoň to, co víte, a datum; stránky se mohou smazat.' },
+      { nazev: 'Screenshoty toho, co jste viděl(a) a zadal(a)', proc: 'Ukážou, jak všechno vypadalo.', jak: 'Snímek obrazovky.', nemam: 'Popište vlastními slovy, co jste viděl(a) a zadal(a).' },
+      { nazev: 'Zápis časové osy', proc: 'Policie a banka se ptají, kdy co proběhlo a jaká vznikla škoda.', jak: 'Poznamenejte si pár vět: kdy to začalo, kdy jste platil(a) a kdy jste to zjistil(a).', nemam: 'Doplňte podle konverzace a výpisu.' },
     ],
     neoverene: [
-      'Jde o obecný postup složený z kroků ostatních případů; pro tvou situaci nemusí sedět všechno.',
-      'Postup specifický pro tvůj případ jsme nezpracovali ani neověřili.',
-      'Čísla linek bank neuvádíme, vždy je ověř na oficiálním webu nebo na kartě.',
+      'Jde o obecný postup složený z kroků ostatních případů; pro vaši situaci nemusí sedět všechno.',
+      'Postup specifický pro váš případ jsme nezpracovali ani neověřili.',
+      'Čísla linek bank neuvádíme, vždy je ověřte na oficiálním webu nebo na kartě.',
     ],
   },
 };
@@ -896,33 +922,33 @@ function ppUvod() {
   const c = el('div', null, 'card');
   c.append(el('h2', 'Tohle se dá často řešit.'));
   const ul = el('ul');
-  ['Zachovej klid a postupuj krok za krokem.',
-    'Nic neplať, ani když ti volá „banka“ nebo „policie“.',
-    'Nemaž zprávy, e-maily, výpisy hovorů ani screenshoty.'].forEach((t) => ul.append(el('li', t)));
+  ['Zachovejte klid a postupujte krok za krokem.',
+    'Nic neplaťte, ani když vám volá „banka“ nebo „policie“.',
+    'Nemažte zprávy, e-maily, výpisy hovorů ani screenshoty.'].forEach((t) => ul.append(el('li', t)));
   c.append(ul);
   return c;
 }
 
 function ppVyber() {
   const c = el('div', null, 'card');
-  c.append(el('h2', 'Co se stalo?'), el('p', 'Vyber, co se nejvíc podobá tvé situaci:'));
+  c.append(el('h2', 'Co se stalo?'), el('p', 'Vyberte, co se nejvíc podobá vaší situaci:'));
   const karty = el('div', null, 'karty');
   PRVNI_POMOC.pripady.forEach((p) => karty.append(ppPripadKarta(p)));
   c.append(karty);
   // Záloha, když nic nesedí: vlastní popis a obecné první kroky.
-  const popisLabel = el('label', 'Nic z toho nesedí? Popiš, co se stalo (nepovinné)');
+  const popisLabel = el('label', 'Nic z toho nesedí? Popište, co se stalo (nepovinné)');
   popisLabel.setAttribute('for', 'popis-situace');
   const pole = el('textarea', null, 'pole-popis');
   pole.setAttribute('id', 'popis-situace');
   pole.setAttribute('rows', '3');
   pole.setAttribute('autocomplete', 'off');
-  pole.setAttribute('placeholder', 'Např. co ti kdo napsal, kolik a čím jsi platil(a), kdy to bylo…');
+  pole.setAttribute('placeholder', 'Např. co vám kdo napsal, kolik a čím jste platil(a), kdy to bylo…');
   pole.value = ppPopis;
   pole.addEventListener('input', () => { ppPopis = pole.value; });
   const obecne = el('button', 'Zobrazit obecné první kroky', 'sekundarni');
   obecne.setAttribute('type', 'button');
   obecne.addEventListener('click', () => vykreslitPomoc(PRVNI_POMOC.jina.id));
-  c.append(popisLabel, pole, el('p', 'Je to tvoje poznámka, nikam se neodesílá. V dalším kroku se ti zobrazí a půjde zkopírovat.', 'hint'), obecne);
+  c.append(popisLabel, pole, el('p', 'Je to vaše poznámka, nikam se neodesílá. V dalším kroku se vám zobrazí a půjde zkopírovat.', 'hint'), obecne);
   const zpet = el('button', 'Zkontrolovat nabídku, než zaplatíte', 'sekundarni');
   zpet.setAttribute('type', 'button');
   zpet.addEventListener('click', () => prepnoutZalozku(false));
@@ -967,7 +993,7 @@ function ppDetail(p) {
   wrap.append(zpet);
   if (ppPopis.trim()) {
     const pk = el('div', null, 'card');
-    pk.append(el('h3', 'Tvůj popis'), el('p', ppPopis, 'popis-text'), kopirovat(ppPopis));
+    pk.append(el('h3', 'Váš popis'), el('p', ppPopis, 'popis-text'), kopirovat(ppPopis));
     wrap.append(pk);
   }
   wrap.append(karta);
@@ -987,7 +1013,7 @@ function ppDetail(p) {
 
   const pod = el('div', null, 'card podklady');
   pod.append(el('h3', 'Podklady, které se vám budou hodit'));
-  pod.append(el('p', 'Odškrtávej si, co už máš. Nic se nenahrává ani neodesílá, je to jen tvoje pomůcka.', 'hint'));
+  pod.append(el('p', 'Odškrtávejte si, co už máte. Nic se nenahrává ani neodesílá, je to jen vaše pomůcka.', 'hint'));
   const pocitadlo = el('p', 'Máte 0 z ' + p.podklady.length + '.', 'hint');
   pocitadlo.setAttribute('id', 'pocitadlo');
   pocitadlo.setAttribute('aria-live', 'polite');
@@ -1012,7 +1038,7 @@ function ppDetail(p) {
     });
     pocitadlo.textContent = zbyva.length
       ? 'Máte ' + (p.podklady.length - zbyva.length) + ' z ' + p.podklady.length + '. Zbývá: ' + zbyva.join(', ') + '.'
-      : 'Máte všech ' + p.podklady.length + '. Podklady jsou pohromadě, můžeš postupovat podle kroků výše.';
+      : 'Máte všech ' + p.podklady.length + '. Podklady jsou pohromadě, můžete postupovat podle kroků výše.';
     souhrnText.textContent = sestavitSouhrn();
   };
   pod.append(pocitadlo);
@@ -1025,7 +1051,7 @@ function ppDetail(p) {
     radky.push(l);
     l.append(cb, el('span', d.nazev));
     const det = el('div', null, 'podklad-detail');
-    det.append(el('b', 'Proč na tom záleží'), el('p', d.proc), el('b', 'Jak to získat'), el('p', d.jak), el('b', 'Když to nemáš'), el('p', d.nemam));
+    det.append(el('b', 'Proč na tom záleží'), el('p', d.proc), el('b', 'Jak to získat'), el('p', d.jak), el('b', 'Když to nemáte'), el('p', d.nemam));
     detaily.push(det);
     pod.append(l, det);
   });
@@ -1033,13 +1059,13 @@ function ppDetail(p) {
   pocitadlo.textContent = 'Máte 0 z ' + p.podklady.length + '. Zbývá: ' + p.podklady.map((d) => d.nazev).join(', ') + '.';
   wrap.append(pod);
   const souhrn = el('div', null, 'card souhrn');
-  souhrn.append(el('h3', 'Souhrn ke zkopírování'), el('p', 'Hodí se do zprávy bance nebo do oznámení na policii. Mění se podle toho, co odškrtneš.', 'hint'), souhrnText, kopirovat(sestavitSouhrn));
+  souhrn.append(el('h3', 'Souhrn ke zkopírování'), el('p', 'Hodí se do zprávy bance nebo do oznámení na policii. Mění se podle toho, co odškrtnete.', 'hint'), souhrnText, kopirovat(sestavitSouhrn));
   wrap.append(souhrn);
 
   const ids = [];
   p.kroky.concat(p.otazky.map((o) => o.krok), p.nalehave ? [p.nalehave] : []).forEach((k) => (k.zdroje || []).forEach((id) => { if (!ids.includes(id)) ids.push(id); }));
   const zd = el('div', null, 'card zdroje');
-  zd.append(el('h3', 'Zdroje'), el('p', 'Ověřeno ' + ppDatum(PRVNI_POMOC.overeno) + '. Stránky se mění, před důležitým krokem si údaje ověř.', 'hint'));
+  zd.append(el('h3', 'Zdroje'), el('p', 'Ověřeno ' + ppDatum(PRVNI_POMOC.overeno) + '. Stránky se mění, před důležitým krokem si údaje ověřte.', 'hint'));
   const ul = el('ul');
   ids.forEach((id) => { const a = ppOdkaz(id); if (a) { const li = el('li'); li.append(a); ul.append(li); } });
   zd.append(ul);

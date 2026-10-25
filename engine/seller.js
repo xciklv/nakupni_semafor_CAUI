@@ -199,7 +199,7 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs, uplny =
       if (aresRes.ok && (body === null || (typeof body === 'object' && !Array.isArray(body)))) {
         checks++;
         answered = true;
-        if (body === null) { contradicted = true; add('ico_neexistuje', 'low', 'IČO nenalezeno v českém registru ARES', 'IČO nebylo nalezeno v českém registru ARES; u zahraničních (např. slovenských) firem je to běžné.', 'ARES'); }
+        if (body === null) { contradicted = true; add('ico_neexistuje', 'low', 'IČO jsme v českém rejstříku firem (ARES) nenašli', 'IČO jsme v českém rejstříku firem (ARES) nenašli; u zahraničních (např. slovenských) firem je to běžné.', 'ARES'); }
         else if (typeof body.datumZaniku === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.datumZaniku)) { contradicted = true; add('subjekt_zanikl', 'high', 'Uvedený subjekt zanikl', (body.obchodniJmeno || s.ico) + ' zanikl dne ' + body.datumZaniku + '.', 'ARES'); }
         else {
           const age = sellerCompanyAgeDays(body.datumVzniku, nowMs);
@@ -250,9 +250,9 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs, uplny =
   // složený signál (mimo EU + chybí kontakt/provozovatel) nahrazuje jednotlivé kontakt_chybi/provozovatel_chybi: bez dvojího počítání
   const missingContact = s.kontakt_uveden === false || s.provozovatel_uveden === false;
   const outsideEu = !!s.zeme_odeslani && !SELLER_EU.includes(s.zeme_odeslani) && missingContact;
-  if (known(s.provozovatel_uveden)) { absenceCheck(s.provozovatel_uveden); if (s.provozovatel_uveden === false && !outsideEu) addAbsence('provozovatel_chybi', 'medium', 'Chybí provozovatel', 'Na webu není uvedeno, kdo ho provozuje.'); }
-  if (known(s.kontakt_uveden)) { absenceCheck(s.kontakt_uveden); if (s.kontakt_uveden === false && !outsideEu) addAbsence('kontakt_chybi', 'medium', 'Chybí kontakt', 'Prodejce neuvádí kontaktní údaje.'); }
-  if (known(s.podminky_uvedeny)) { absenceCheck(s.podminky_uvedeny); if (s.podminky_uvedeny === false) addAbsence('podminky_chybi', 'low', 'Chybí obchodní podmínky', 'Nejsou dostupné obchodní podmínky.'); }
+  if (known(s.provozovatel_uveden)) { absenceCheck(s.provozovatel_uveden); if (s.provozovatel_uveden === false && !outsideEu) addAbsence('provozovatel_chybi', 'medium', 'Nenašli jsme provozovatele', 'Na stránce jsme nenašli, kdo ji provozuje.'); }
+  if (known(s.kontakt_uveden)) { absenceCheck(s.kontakt_uveden); if (s.kontakt_uveden === false && !outsideEu) addAbsence('kontakt_chybi', 'medium', 'Nenašli jsme kontakt', 'Na stránce jsme nenašli kontaktní údaje prodejce.'); }
+  if (known(s.podminky_uvedeny)) { absenceCheck(s.podminky_uvedeny); if (s.podminky_uvedeny === false) addAbsence('podminky_chybi', 'low', 'Nenašli jsme obchodní podmínky', 'Na stránce jsme nenašli obchodní podmínky.'); }
   // hodnocení 0 = bez hodnocení (ne špatné hodnocení): nevyhodnocuje se
   // Stupně: pod 3,5 je střední signál (samo o sobě stačí na oranžovou), 3,5 až 4,0 jen nízký (průměrné hodnocení není důvod k varování).
   if (known(s.hodnoceni) && s.hodnoceni > 0) {
@@ -263,7 +263,7 @@ async function sellerSignals({ x, rezim, host, fetchers, coiList, nowMs, uplny =
   if (known(s.pocet_prodeju)) { checks++; if (s.pocet_prodeju < 50) add('malo_prodeju', 'low', 'Prodejce má málo prodejů', 'Počet prodejů: ' + s.pocet_prodeju + '.', 'analýza nabídky'); }
   if (known(s.stari_obchodu_dny)) { checks++; if (s.stari_obchodu_dny < 90) add('obchod_novy', 'medium', 'Obchod je nový', 'Obchod je starý ' + sellerDays(s.stari_obchodu_dny) + '.', 'analýza nabídky'); }
   if (outsideEu) {
-    addAbsence('mimo_eu_bez_kontaktu', 'medium', 'Odeslání mimo EU bez kontaktu', 'Zboží se odesílá ze země ' + s.zeme_odeslani + ' a chybí kontakt nebo provozovatel.');
+    addAbsence('mimo_eu_bez_kontaktu', 'medium', 'Zboží jde ze země mimo EU a nenašli jsme kontakt', 'Zboží se odesílá ze země ' + s.zeme_odeslani + ' a na stránce jsme nenašli kontakt ani provozovatele.');
   }
   // Bez externí kontroly (RDAP, ČOI, ARES) stojí verdikt jen na tom, co model vyčetl z nabídky. Marketplace a screenshoty externí zdroj nemají,
   // proto modul prodejce platí za zkontrolovaný (a verdikt smí být zelený) až při aspoň SELLER_MIN_CHECKS údajích o prodejci; s jedním údajem je nezkontrolovaný.
