@@ -185,6 +185,7 @@ Ze spec [kontrola na důkazech](docs/superpowers/specs/2026-10-20-kontrola-na-du
 - modul recenzí v čase (data recenzí proti stáří nabídky a počtu prodejů; potřebuje víc recenzí, než statický sběr dává),
 - polský KRS pro prodejce na Allegru,
 - agentní krok pro doplnění mezer v dossieru, databáze viděných fotek,
+- přeprodej z AliExpressu: deterministické upozornění na číslo `1005…` v poli Kód už je hotové (jen info); dohledání téhož zboží podle názvu a fotky a srovnání ceny je další krok a vyžaduje agenta (výsledky hledání se mění a nabídky mizí, proto jen jako neutrální rada, nikdy verdikt). Ověřeno ručně na jedné nabídce, bez měření ([koncepce](docs/superpowers/research/2026-10-23-koncepce-nasazeni-a-rozvoje.md), §6),
 - kontrola odkazů v patičce e-shopu (obchodní podmínky, reklamační řád, odstoupení, ADR; vyžaduje, aby čtečka vracela i odkazy, ne jen text) a odborná revize první pomoci ([katalog](docs/superpowers/research/2026-10-24-pravni-katalog-pozadavku.md)).
 
 ## Struktura repa
