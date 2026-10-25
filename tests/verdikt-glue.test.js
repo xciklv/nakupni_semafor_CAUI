@@ -219,3 +219,15 @@ test('glue 03: nenačtená stránka e-shopu se zapíše mezi přeskočené zdroj
   const b = await runModuly({}, ctx(false));
   assert.ok(!b.out.verdict.skipped.includes('čtení stránky'));
 });
+
+test('glue 03: číslo z AliExpressu se hlásí jen u e-shopu s odkazem, ne na tržišti ani z textu bez odkazu', async () => {
+  const text = 'Dětský batoh Kód 1005007138908110 814 Kč';
+  const ctx = (rezim, host, extra = {}) => ({ zkratka: false, input: { text: '', screenshoty: [], url: host ? { ok: true, url: 'https://' + host + '/x', host, rezim } : null }, pageText: '', rezim, host, obsah: true, ...extra });
+  const ids = (r) => r.out.signals.map((s) => s.id);
+  assert.ok(ids(await runModuly({}, ctx('eshop', 'bartis.cz', { pageText: text }))).includes('kod_z_aliexpressu'));
+  const vlozeny = ctx('eshop', 'bartis.cz');
+  vlozeny.input.text = text;
+  assert.ok(ids(await runModuly({}, vlozeny)).includes('kod_z_aliexpressu'));
+  assert.ok(!ids(await runModuly({}, ctx('marketplace', 'aliexpress.com', { pageText: text }))).includes('kod_z_aliexpressu'));
+  assert.ok(!ids(await runModuly({}, ctx('neznámé', null, { pageText: text }))).includes('kod_z_aliexpressu'));
+});

@@ -101,7 +101,9 @@ try {
     identitySignals({ dossier, fetchers }).catch(() => ({ status: 'unchecked', signals: [], skipped: [] })),
   ]);
 
-  const signals = [...offer.signals, ...seller.signals, ...identity.signals, ...safety.signals, ...gate];
+  // Přeprodej z AliExpressu: jen u e-shopu s odkazem (na tržišti nebo z vloženého textu bez odkazu je takové číslo očekávané).
+  const reseller = ctx.rezim === 'eshop' ? resellerSignals({ text: [ctx.pageText, ctx.input && ctx.input.text].filter(Boolean).join('\n'), x }) : [];
+  const signals = [...offer.signals, ...reseller, ...seller.signals, ...identity.signals, ...safety.signals, ...gate];
   const moduly = { offer: offer.status, seller: seller.status, safety: safety.status };
   // Odkaz bez čtitelné stránky a bez vloženého obsahu: kontrolovala se jen adresa prodejce, nabídku nikdo nečetl (výsledek to musí říct).
   const skipped = (coiStale ? seller.skipped.concat(['seznam ČOI (neaktuální)']) : seller.skipped).concat(identity.skipped).concat(ctx.strankaNenactena === true ? ['čtení stránky'] : []);

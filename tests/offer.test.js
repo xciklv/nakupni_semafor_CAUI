@@ -163,3 +163,28 @@ test('nižší hodnocení: hranice 4,0 a 3 hodnocení; neznámý počet se bere,
   assert.deepEqual(at({ pocet: null, prumer: 3.5 }), ['recenze_nizke_hodnoceni']);
   assert.deepEqual(at({ pocet: 10, prumer: null }), []);
 });
+
+const { resellerSignals } = require('../engine/offer');
+
+test('číslo z AliExpressu v poli Kód jiného e-shopu (dětský e-shop) dá info nález s odkazem, barvu nemění', () => {
+  const text = 'Dětský plyšový batoh 27 cm Kód 1005007138908110 814 Kč včetně DPH';
+  const r = resellerSignals({ text, x: X({}) });
+  assert.equal(r.length, 1);
+  assert.equal(r[0].id, 'kod_z_aliexpressu');
+  assert.equal(r[0].severity, 'info');
+  assert.match(r[0].evidence, /1005007138908110/);
+  assert.equal(r[0].citace, 'Kód 1005007138908110');
+  assert.deepEqual(r[0].odkazy.map((o) => o.url), ['https://www.aliexpress.com/item/1005007138908110.html']);
+  assert.equal(computeVerdict(r, ALL_OK).semafor, 'zelená');
+  assert.equal(computeVerdict(r, ALL_OK).score, 0);
+});
+
+test('číslo z AliExpressu: i z extrahovaného kódu výrobce, jen jeden nález; EAN, jiné prefixy a jiné délky nic nedají', () => {
+  assert.equal(resellerSignals({ text: '', x: X({ produkt: { kod_vyrobce: '1005 0071 3890 8110' } }) }).length, 1);
+  assert.equal(resellerSignals({ text: 'Kód 1005007138908110, SKU: 1005009702937921', x: X({}) }).length, 1);
+  for (const text of [
+    'EAN 8590000000001', 'Kód 2005007138908110', 'Kód 100500713890811', 'Kód 10050071389081100', 'Kód 1005007138908110123',
+    'Objednávka 1005007138908110 vyřízena', 'Váha 1005007138908110 g', '',
+  ]) assert.deepEqual(resellerSignals({ text, x: X({}) }), [], text);
+  assert.deepEqual(resellerSignals(), []);
+});

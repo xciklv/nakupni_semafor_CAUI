@@ -42,4 +42,25 @@ function offerSignals(x) {
   return { status: 'ok', signals: out };
 }
 
-if (typeof module !== 'undefined') module.exports = { offerSignals };
+// Číslo nabídky z AliExpressu (od roku 2024 šestnáct číslic začínajících 1005) v poli „Kód“ jiného e-shopu: zboží může být přeprodávané z Číny.
+// Čte přímo text stránky nebo vloženého textu (ne odpověď modelu), takže nekolísá. Jen info: přeprodej je legální, jen mění doručení, vrácení i záruku.
+const RESELLER_ALI_LABELED = /(?:kód|kod|code|sku|id|číslo|cislo|artikl)[^\d\n]{0,25}(?<!\d)(1005\d{12})(?!\d)/gi;
+const RESELLER_ALI_ID = /^1005\d{12}$/;
+function resellerSignals({ text, x } = {}) {
+  const ids = [];
+  const src = typeof text === 'string' ? text : '';
+  for (const m of src.matchAll(RESELLER_ALI_LABELED)) ids.push([m[1], m[0].trim()]);
+  const p = (x && x.produkt) || {};
+  [p.kod_vyrobce, p.ean].forEach((v) => { const t = typeof v === 'string' ? v.replace(/\s+/g, '') : ''; if (RESELLER_ALI_ID.test(t)) ids.push([t, 'Kód ' + t]); });
+  if (!ids.length) return [];
+  const [id, citace] = ids[0];
+  return [signal({
+    id: 'kod_z_aliexpressu', module: 'offer', severity: 'info', druh: 'riziko',
+    title: 'Kód zboží vypadá jako číslo z AliExpressu',
+    evidence: 'Kód ' + id + ' má tvar čísla nabídky z AliExpressu. Zboží může být přeprodávané z Číny: počítejte s delším doručením a ověřte si podmínky vrácení a záruky. Zkuste porovnat cenu.',
+    citace, source: 'analýza nabídky',
+    odkazy: [{ text: 'Nabídka na AliExpressu (může už neexistovat)', url: 'https://www.aliexpress.com/item/' + id + '.html' }],
+  })];
+}
+
+if (typeof module !== 'undefined') module.exports = { offerSignals, resellerSignals };
