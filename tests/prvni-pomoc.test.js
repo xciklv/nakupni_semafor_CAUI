@@ -68,7 +68,7 @@ function loadPage(opts = {}) {
 }
 
 const PRIPADY = ['eshop-nedoruceno', 'bazar-zmizel-prodejce', 'falesny-kupujici', 'vylakane-udaje'];
-// Hostitelé oficiálních zdrojů z obsahových podkladů (docs/superpowers/specs/prvni-pomoc/obsah-*.md).
+// Hostitelé oficiálních zdrojů z obsahových podkladů první pomoci (oficiální zdroje).
 const POVOLENE_HOSTY = new Set([
   'evropskyspotrebitel.cz', 'coi.gov.cz', 'policie.gov.cz', 'archiv.policie.gov.cz', 'cnb.cz', 'www.cnb.cz', 'csirt.cz', 'www.stoponline.cz',
   'finarbitr.gov.cz', 'portal.gov.cz', 'www.zakonyprolidi.cz', 'www.kb.cz', 'www.airbank.cz', 'www.csas.cz', 'www.moneta.cz', 'platbakartou.csob.cz',

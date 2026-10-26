@@ -4,7 +4,7 @@ if (typeof require !== 'undefined' && typeof parseLlmJson === 'undefined') { var
 
 // Analýza obrázků nabídky: model obrázky čte (3 opakování), tvrzení uživateli ukážeme jen při shodě aspoň ve 2 ze 3 běhů a po strojové kontrole,
 // kterou model sám neovlivní. Kontrola nikdy netvrdí nic o AI generování, o převzaté fotce ani o skutečných parametrech výrobku
-// (viz docs/superpowers/research/2026-10-20-obrazky-spike.md). Prompt a schéma jsou verze v2 ze spiku (tools/image-check/prompt.js).
+// (rozhodnuto podle měření ve spiku). Prompt a schéma jsou verze v2 ze spiku (tools/image-check/prompt.js).
 const LLM_MODEL_IMAGES_DEFAULT = 'claude-haiku-5-5';
 const IMG_RUNS = 3;
 const IMG_MIN_VOTES = 2;

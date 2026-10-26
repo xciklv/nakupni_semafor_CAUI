@@ -1,6 +1,6 @@
 # browser-capture: rozšíření do Chrome (hlavní cesta sběru dat)
 
-Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, kterou už uživatel otevřel a prošel, **ukáže celý text, který odejde**, a po potvrzení ho pošle do Nákupního semaforu (`POST http://127.0.0.1:5678/webhook/nakupni-kontrola`, tělo `{ odkaz, text, obrazky, jsonld }`). Jen čte: na stránce nic neklikne, nerozbalí ani nevyplní. Proč právě rozšíření: čte to, co člověk vidí, takže prochází i Allegro, které server blokuje (zpráva `docs/superpowers/research/2026-10-20-zalozka-spike.md`).
+Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, kterou už uživatel otevřel a prošel, **ukáže celý text, který odejde**, a po potvrzení ho pošle do Nákupního semaforu (`POST http://127.0.0.1:5678/webhook/nakupni-kontrola`, tělo `{ odkaz, text, obrazky, jsonld }`). Jen čte: na stránce nic neklikne, nerozbalí ani nevyplní. Proč právě rozšíření: čte to, co člověk vidí, takže prochází i Allegro, které server blokuje.
 
 ## Instalace (1 minuta)
 
