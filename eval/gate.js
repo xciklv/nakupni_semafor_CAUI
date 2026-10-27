@@ -1,4 +1,4 @@
-// Kritérium stability testovací sady (Spec §13 bod 7). Čisté funkce nad záznamy z eval/report.js,
+// Kritérium stability testovací sady. Čisté funkce nad záznamy z eval/report.js,
 // běží v plain Node, do n8n workflow se nebundluje. Model nejde nastavit na deterministický výstup,
 // proto jeden běh stabilitu neukáže: kritérium se vyhodnocuje nad opakovanými běhy (--repeat N).
 //

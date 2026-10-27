@@ -242,7 +242,7 @@ test('požadavek na extrakci: přesné klíče, model, max_tokens, output_config
   assert.equal(r.output_config.effort, 'low');
   assert.equal(r.output_config.format.type, 'json_schema');
   assert.equal(typeof r.output_config.format.schema, 'object');
-  assert.equal(JSON.stringify(r).includes('openai'), false);
+  assert.equal(JSON.stringify(r).includes('anthropicReply'), false);
 });
 
 test('požadavek na extrakci: model je parametr (jinak výchozí konstanta)', () => {

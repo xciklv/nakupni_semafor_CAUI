@@ -8,7 +8,7 @@ const { runInRealisticSandbox, runCodeNode, createRealisticContext } = require('
 
 const root = path.join(__dirname, '..');
 // Odpověď Anthropic Messages API s textovým blokem (objekt se serializuje na JSON).
-const openai = (obj) => ({ type: 'message', role: 'assistant', content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj) }], stop_reason: 'end_turn' });
+const anthropicReply = (obj) => ({ type: 'message', role: 'assistant', content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj) }], stop_reason: 'end_turn' });
 const GLUE_FILES = ['01-vstup.js', '02-extrakce-req.js', '03-moduly.js', '04-odpoved.js', '05-verohodnost.js', '06-obrazky.js', '07-souhrn.js'];
 const glueSrc = (f) => fs.readFileSync(path.join(root, 'build', 'glue', f), 'utf8');
 
@@ -113,7 +113,7 @@ test('workflow: Je obsah? true -> Sestavit extrakci, false -> Moduly (bez LLM ex
 
 const to = (node, index = 0) => ({ node, type: 'main', index });
 
-test('workflow: topologie Webhook → … → Respond přesně podle plánu (Task 8)', () => {
+test('workflow: topologie Webhook → … → Respond přesně podle plánu', () => {
   const wf = buildWorkflow({ credId: 'C', credName: 'N' });
   assert.deepEqual(wf.connections, {
     Webhook: { main: [[to('Vstup a načtení')]] },
@@ -583,7 +583,7 @@ test('glue 02: výjimka -> llmRequest null (LLM node selže a tok degraduje), ni
 
 // --- glue 03 ---
 const CTX_NEZNAME = { zkratka: false, input: { text: 'Powerbanka 199 Kč', screenshoty: [], url: null }, pageText: '', rezim: 'neznámé', host: null };
-const EXTRACT_OK = openai('{"produkt":{"nazev":"Powerbanka","kategorie":"elektronika","cena":199,"mena":"CZK","referencni_cena_odhad":{"min":800,"max":1200,"mena":"CZK"}},"prodejce":{},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}');
+const EXTRACT_OK = anthropicReply('{"produkt":{"nazev":"Powerbanka","kategorie":"elektronika","cena":199,"mena":"CZK","referencni_cena_odhad":{"min":800,"max":1200,"mena":"CZK"}},"prodejce":{},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}');
 
 test('glue 03: chyba LLM (error) -> šedá, vše nezkontrolováno, prázdný dossier z extrakce; vysvětlení sestavuje až Souhrn', async () => {
   const { out, calls } = await runGlue('03-moduly.js', { json: { error: { message: '401' } }, nodes: { 'Vstup a načtení': CTX_NEZNAME } });
@@ -622,7 +622,7 @@ test('glue 03: eshop na seznamu ČOI -> červená; seznam se cachuje do static d
     if (o.url.startsWith('https://ares.gov.cz/')) return { statusCode: 404, body: {} };
     throw new Error('neočekávaný požadavek ' + o.url);
   };
-  const extract = openai('{"produkt":{"nazev":"Mikina","kategorie":"oblečení","cena":500,"mena":"CZK"},"prodejce":{"ico":"27082440"},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}');
+  const extract = anthropicReply('{"produkt":{"nazev":"Mikina","kategorie":"oblečení","cena":500,"mena":"CZK"},"prodejce":{"ico":"27082440"},"recenze":{},"obrazky":{},"nerealne_parametry":[],"nesoulady":[]}');
   const ctx = { zkratka: false, input: { text: '', screenshoty: [], url: {} }, pageText: 'x', rezim: 'eshop', host: 'clarkscz.cz' };
   const coiCalls = (calls) => calls.filter((c) => c.url.startsWith('https://coi.gov.cz/')).length;
   const r1 = await runGlue('03-moduly.js', { json: extract, nodes: { 'Vstup a načtení': ctx }, state, httpStub: stub });
@@ -648,7 +648,7 @@ test('glue 03: výjimka uvnitř -> degraduje na šedou, nic neuniká', async () 
 
 // --- glue 03: Safety Gate (slabý signál gated značkou; selhání = bez signálu) ---
 const SG_URL = 'https://ec.europa.eu/safety-gate-alerts/public/api/search';
-const extractBrand = (znacka, model) => openai({ produkt: { nazev: 'Powerbanka', kategorie: 'elektronika', znacka, model, cena: 900, mena: 'CZK', tvrzeni_certifikace: ['CE'] }, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [] });
+const extractBrand = (znacka, model) => anthropicReply({ produkt: { nazev: 'Powerbanka', kategorie: 'elektronika', znacka, model, cena: 900, mena: 'CZK', tvrzeni_certifikace: ['CE'] }, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [] });
 const SG_ALERT = { reference: 'SR/00232/25', publicationDate: '2025-01-13T00:00:00.000+00:00', product: { name: 'Power bank', nameSpecific: 'STB-200', brands: [{ brand: 'Forever STB-200' }] }, risk: { riskType: [{ name: 'ENVIRONMENT' }] } };
 const sgCalls = (calls) => calls.filter((c) => c.url === SG_URL);
 const runSg = (extract, httpStub, o = {}) => runGlue('03-moduly.js', { json: extract, nodes: { 'Vstup a načtení': CTX_NEZNAME }, httpStub, ...o });
@@ -787,7 +787,7 @@ test('glue 04: chyba vysvětlení -> status 200, stav ok a záložní text', asy
 
 test('glue 04: validní vysvětlení se použije', async () => {
   const text = JSON.stringify({ shrnuti: 'Nabídka má několik signálů, které stojí za pozornost.', co_delat: ['Porovnejte cenu u jiných prodejců.'] });
-  const { out } = await runGlue('04-odpoved.js', { json: openai(text), nodes: { Souhrn: MOD_OK } });
+  const { out } = await runGlue('04-odpoved.js', { json: anthropicReply(text), nodes: { Souhrn: MOD_OK } });
   assert.equal(out.status, 200);
   assert.equal(out.odpoved.shrnuti, 'Nabídka má několik signálů, které stojí za pozornost.');
   assert.deepEqual(out.odpoved.co_delat, ['Porovnejte cenu u jiných prodejců.']);
@@ -800,17 +800,17 @@ test('glue 04: výjimka -> 500 s obecnou hláškou bez úniku detailů', async (
 
 // --- end-to-end: všechny Code nody po sobě, LLM HTTP nody simulované stubem ---
 const ERR_LLM = { error: { message: 'no credential' } };
-const EXTRACT_POWERBANKA = openai({
+const EXTRACT_POWERBANKA = anthropicReply({
   produkt: { nazev: 'Powerbanka', kategorie: 'elektronika', cena: 199, mena: 'CZK', referencni_cena_odhad: { min: 800, max: 1200, mena: 'CZK' } },
   prodejce: { zeme_odeslani: 'CN', kontakt_uveden: false }, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [],
 });
-const EXPLAIN_OK = openai({ shrnuti: 'Cena je mnohem nižší než obvyklá a chybí kontakt na prodejce, proto je nabídka riziková.', co_delat: ['Porovnejte cenu u jiných prodejců.', 'Neplaťte předem.'] });
+const EXPLAIN_OK = anthropicReply({ shrnuti: 'Cena je mnohem nižší než obvyklá a chybí kontakt na prodejce, proto je nabídka riziková.', co_delat: ['Porovnejte cenu u jiných prodejců.', 'Neplaťte předem.'] });
 
 // Tok se prochází podle buildWorkflow().connections: IF nody se vyhodnotí z jejich podmínky ($json.pole, !!$json.pole nebo $('Uzel').first().json.pole, operace true/false),
 // LLM HTTP nody jsou simulované stubem (extract/plausibility/images/explain; odpověď příslušného nodu, pro images smí být pole = víc položek) a zaznamenají se do llmCalls
 // (jednou za uzel, skutečné n8n by `LLM – obrázky` zavolalo pro každou položku zvlášť).
 // Vrací final (výstup posledního nodu), výstupy Code nodů r1..r7 (nevolané = undefined) a visited (pořadí nodů).
-const PLAUS_OK = openai({ tvrzeni: [], verdikt: 'v_poradku', jistota: 'vysoka', vysvetleni_pro_laika: '', otazka_pro_prodejce: '' });
+const PLAUS_OK = anthropicReply({ tvrzeni: [], verdikt: 'v_poradku', jistota: 'vysoka', vysvetleni_pro_laika: '', otazka_pro_prodejce: '' });
 const itemsOf = (v) => (Array.isArray(v) ? v : [v]);
 function evalIfExpr(expr, input, nodes) {
   let m = /^=\{\{ (!!)?\$json\.(\w+) \}\}$/.exec(expr);
@@ -870,10 +870,10 @@ test('e2e (b): validní extrakce a vysvětlení -> signály, není zelená, vysv
 
 test('e2e (b): vysvětlení, které neprojde guardy (podvodník, tvrzení o bezpečnosti, nevalidní tvar), se nepoužije', async () => {
   const bad = [
-    openai({ shrnuti: 'Prodejce je podvodník.', co_delat: ['Nekupujte.'] }),
-    openai({ shrnuti: 'Nabídka je bezpečná, můžete koupit.', co_delat: ['Kupte to.'] }),
-    openai('to není JSON'),
-    openai({ shrnuti: 'Jen shrnutí bez rad.' }),
+    anthropicReply({ shrnuti: 'Prodejce je podvodník.', co_delat: ['Nekupujte.'] }),
+    anthropicReply({ shrnuti: 'Nabídka je bezpečná, můžete koupit.', co_delat: ['Kupte to.'] }),
+    anthropicReply('to není JSON'),
+    anthropicReply({ shrnuti: 'Jen shrnutí bez rad.' }),
   ];
   for (const explain of bad) {
     const f = await runFlow({ text: 'Powerbanka 30000 mAh jen 199 Kč!' }, { extract: EXTRACT_POWERBANKA, explain });
@@ -999,7 +999,7 @@ test('e2e (d): Code node, který vyhodí výjimku, nikdy nevyhodí chybu ven, al
 });
 
 // --- fix wave A: kalibrace verdiktu, viditelnost nedostupných zdrojů ---
-const ext = (o) => openai({ produkt: {}, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [], ...o });
+const ext = (o) => anthropicReply({ produkt: {}, prodejce: {}, recenze: {}, obrazky: {}, nerealne_parametry: [], nesoulady: [], ...o });
 const rdapIso = (y) => ({ events: [{ eventAction: 'registration', eventDate: y + '-01-01T00:00:00Z' }] });
 const sigIds = (o) => o.signaly.map((s) => s.id);
 const callsTo = (r, prefix) => r.r3.calls.filter((c) => c.url.startsWith(prefix)).length;
@@ -2489,7 +2489,7 @@ const WF_FULL = buildWorkflow({ credId: 'C', credName: 'N' }); // čtečka zapnu
 const COLLECT_URL = 'http://127.0.0.1:5687/collect';
 const IMAGES_URL = 'http://127.0.0.1:5687/images';
 const CYKLO_URL = 'https://www.aliexpress.com/item/1005011759581041.html';
-const EXPLAIN_VERIHODNY = openai({
+const EXPLAIN_VERIHODNY = anthropicReply({
   shrnuti: 'Prodejce působí věrohodně, ale text nabídky obsahuje rozpor v parametrech svítilny. Zeptejte se prodejce, které údaje platí.',
   co_delat: ['Požádejte prodejce o vysvětlení údajů o svítivosti a baterii.', 'Plaťte kartou nebo způsobem s ochranou kupujícího.'],
 });
@@ -2505,8 +2505,8 @@ const dossierStub = ({ collect = () => ({ ok: true, dossier: DOSSIER_CYKLO }), i
 const rawDossier = (mut) => { const r = JSON.parse(JSON.stringify(DOSSIER_CYKLO)); mut(r); return r; };
 const idsOf = (o) => o.nalezy.map((n) => n.id);
 
-test('e2e Task 8: dossier cyklosvítilny -> oranžová, nález nesmysl s otázkou, věta o věrohodném prodejci z vysvětlení, nálezy z obrázků', async () => {
-  const f = await runFlow({ odkaz: CYKLO_URL }, { wf: WF_FULL, httpStub: dossierStub(), plausibility: PLAUS_CYKLO, images: IMG_RUNS_CYKLO.map(openai), explain: EXPLAIN_VERIHODNY });
+test('e2e: dossier cyklosvítilny -> oranžová, nález nesmysl s otázkou, věta o věrohodném prodejci z vysvětlení, nálezy z obrázků', async () => {
+  const f = await runFlow({ odkaz: CYKLO_URL }, { wf: WF_FULL, httpStub: dossierStub(), plausibility: PLAUS_CYKLO, images: IMG_RUNS_CYKLO.map(anthropicReply), explain: EXPLAIN_VERIHODNY });
   assert.deepEqual(f.visited, ['Vstup a načtení', 'Stačí vstup?', 'Máme dossier?', 'Moduly', 'Sestavit věrohodnost', 'LLM – věrohodnost', 'Jsou obrázky?', 'Obrázky – příprava', 'LLM – obrázky', 'Souhrn', 'LLM – vysvětlení', 'Odpověď', 'Respond']);
   assert.equal(f.final.status, 200);
   const o = f.final.odpoved;
@@ -2525,10 +2525,10 @@ test('e2e Task 8: dossier cyklosvítilny -> oranžová, nález nesmysl s otázko
   assert.ok(o.signaly.length === o.nalezy.length);
 });
 
-test('e2e Task 8: čtečka dostane /images s adresami z dossieru (nejvýše 8, https), model věrohodnosti i obrázků je výchozí', async () => {
+test('e2e: čtečka dostane /images s adresami z dossieru (nejvýše 8, https), model věrohodnosti i obrázků je výchozí', async () => {
   const stub = dossierStub();
   const calls = [];
-  const f = await runFlow({ odkaz: CYKLO_URL }, { wf: WF_FULL, httpStub: (o) => { calls.push(o); return stub(o); }, plausibility: PLAUS_CYKLO, images: IMG_RUNS_CYKLO.map(openai), explain: EXPLAIN_VERIHODNY });
+  const f = await runFlow({ odkaz: CYKLO_URL }, { wf: WF_FULL, httpStub: (o) => { calls.push(o); return stub(o); }, plausibility: PLAUS_CYKLO, images: IMG_RUNS_CYKLO.map(anthropicReply), explain: EXPLAIN_VERIHODNY });
   const img = calls.filter((c) => c.url === IMAGES_URL);
   assert.equal(img.length, 1);
   assert.deepEqual(bodyOf(img[0]).urls, DOSSIER_CYKLO_NORM.obrazky.map((i) => i.url));
@@ -2538,8 +2538,8 @@ test('e2e Task 8: čtečka dostane /images s adresami z dossieru (nejvýše 8, h
   assert.equal(Object.hasOwn(f.r5.out.llmRequest, 'temperature'), false);
 });
 
-test('e2e Task 8: LLM – věrohodnost vrací chybu -> odpověď ok, věrohodnost v nezkontrolovano, zbytek (obrázky) běží', async () => {
-  const f = await runFlow({ odkaz: CYKLO_URL }, { wf: WF_FULL, httpStub: dossierStub(), plausibility: ERR_LLM, images: IMG_RUNS_CYKLO.map(openai), explain: EXPLAIN_VERIHODNY });
+test('e2e: LLM – věrohodnost vrací chybu -> odpověď ok, věrohodnost v nezkontrolovano, zbytek (obrázky) běží', async () => {
+  const f = await runFlow({ odkaz: CYKLO_URL }, { wf: WF_FULL, httpStub: dossierStub(), plausibility: ERR_LLM, images: IMG_RUNS_CYKLO.map(anthropicReply), explain: EXPLAIN_VERIHODNY });
   assert.equal(f.final.status, 200);
   const o = f.final.odpoved;
   assert.equal(o.stav, 'ok');
@@ -2551,8 +2551,8 @@ test('e2e Task 8: LLM – věrohodnost vrací chybu -> odpověď ok, věrohodnos
   assert.notEqual(f.r7.out.verdict.confidence, 'vysoká');
 });
 
-test('e2e Task 8: LLM – obrázky selže (chyba, nebo čtečka obrázky nevrátí) -> analýza obrázků v nezkontrolovano, nesmysl z věrohodnosti zůstane', async () => {
-  for (const o of [{ images: ERR_LLM }, { images: ERR_LLM, httpStub: dossierStub({ images: () => ({ ok: false, duvod: 'x' }) }) }, { images: [openai('to není JSON'), ERR_LLM, ERR_LLM] }]) {
+test('e2e: LLM – obrázky selže (chyba, nebo čtečka obrázky nevrátí) -> analýza obrázků v nezkontrolovano, nesmysl z věrohodnosti zůstane', async () => {
+  for (const o of [{ images: ERR_LLM }, { images: ERR_LLM, httpStub: dossierStub({ images: () => ({ ok: false, duvod: 'x' }) }) }, { images: [anthropicReply('to není JSON'), ERR_LLM, ERR_LLM] }]) {
     const f = await runFlow({ odkaz: CYKLO_URL }, { wf: WF_FULL, httpStub: dossierStub(), plausibility: PLAUS_CYKLO, explain: EXPLAIN_VERIHODNY, ...o });
     assert.equal(f.final.status, 200);
     assert.equal(f.final.odpoved.stav, 'ok');
@@ -2562,7 +2562,7 @@ test('e2e Task 8: LLM – obrázky selže (chyba, nebo čtečka obrázky nevrát
   }
 });
 
-test('e2e Task 8: dossier bez obrázků -> LLM – obrázky se nevolá a čtečka /images také ne', async () => {
+test('e2e: dossier bez obrázků -> LLM – obrázky se nevolá a čtečka /images také ne', async () => {
   const raw = rawDossier((r) => { delete r.images; r.structuredData.jsonLd.image = undefined; });
   assert.equal(nd8(raw).dossier.obrazky.length, 0);
   const calls = [];
@@ -2577,7 +2577,7 @@ test('e2e Task 8: dossier bez obrázků -> LLM – obrázky se nevolá a čtečk
   assert.ok(idsOf(f.final.odpoved).includes('nesmysl_v_nabidce'));
 });
 
-test('e2e Task 8: dossier s blokací a bez textu -> potrebuji_vice (čtečka hlásí blokaci, stažení stránky selže)', async () => {
+test('e2e: dossier s blokací a bez textu -> potrebuji_vice (čtečka hlásí blokaci, stažení stránky selže)', async () => {
   const blokace = { druh: 'captcha', dodavatel: 'DataDome' };
   const f = await runFlow({ odkaz: 'https://www.allegro.pl/oferta/x' }, { wf: WF_FULL, httpStub: dossierStub({ collect: () => ({ ok: false, duvod: 'ověření', blokace }), other: () => ({ statusCode: 403, body: '' }) }) });
   assert.equal(f.final.status, 200);
@@ -2585,7 +2585,7 @@ test('e2e Task 8: dossier s blokací a bez textu -> potrebuji_vice (čtečka hl�
   assert.deepEqual(f.visited, ['Vstup a načtení', 'Stačí vstup?', 'Respond – více vstupu']);
 });
 
-test('e2e Task 8: blokovaný dossier, který projde do toku (ok:true s blokací) -> nikdy zelená ani 500, nic se neposuzuje modelem', async () => {
+test('e2e: blokovaný dossier, který projde do toku (ok:true s blokací) -> nikdy zelená ani 500, nic se neposuzuje modelem', async () => {
   const blocked = { schema: 'nakupni-semafor/dossier@0-spike', platform: 'allegro', ok: false, blocked: { kind: 'captcha', vendor: 'DataDome' }, gaps: [] };
   const f = await runFlow({ odkaz: 'https://www.allegro.pl/oferta/x' }, { wf: WF_FULL, httpStub: dossierStub({ collect: () => ({ ok: true, dossier: blocked }) }), explain: EXPLAIN_OK });
   assert.equal(f.final.status, 200);
@@ -2596,7 +2596,7 @@ test('e2e Task 8: blokovaný dossier, který projde do toku (ok:true s blokací)
   assert.equal(f.visited.includes('Obrázky – příprava'), false);
 });
 
-test('e2e Task 8: vložený text bez dossieru projde extrakcí a věrohodnost běží nad extractionToDossier', async () => {
+test('e2e: vložený text bez dossieru projde extrakcí a věrohodnost běží nad extractionToDossier', async () => {
   const f = await runFlow({ text: 'Powerbanka 30000 mAh jen 199 Kč! Odesíláme z Číny.' }, { extract: EXTRACT_POWERBANKA, plausibility: PLAUS_CYKLO, explain: EXPLAIN_OK });
   assert.deepEqual(f.visited.slice(0, 10), ['Vstup a načtení', 'Stačí vstup?', 'Máme dossier?', 'Je obsah?', 'Sestavit extrakci', 'LLM – extrakce', 'Moduly', 'Sestavit věrohodnost', 'LLM – věrohodnost', 'Jsou obrázky?']);
   assert.equal(f.r3.out.dossier.zdroj, 'extrakce');
@@ -2607,7 +2607,7 @@ test('e2e Task 8: vložený text bez dossieru projde extrakcí a věrohodnost b�
   assert.ok(idsOf(f.final.odpoved).includes('nesmysl_v_nabidce'));
 });
 
-test('e2e Task 8: odpověď nese nalezy ve všech stavech toku a `signaly` zůstávají', async () => {
+test('e2e: odpověď nese nalezy ve všech stavech toku a `signaly` zůstávají', async () => {
   const f = await runFlow({ text: 'Powerbanka 30000 mAh jen 199 Kč! Odesíláme z Číny.' }, { extract: EXTRACT_POWERBANKA, explain: EXPLAIN_OK });
   const o = f.final.odpoved;
   assert.ok(Array.isArray(o.nalezy) && o.nalezy.length > 0);
@@ -2807,7 +2807,7 @@ test('glue 07: uzel obrázků, který neběžel, se toleruje; $input (odpověď 
 });
 
 test('glue 07: tři běhy obrázků z $input.all() -> nálezy z obrázků s odkazy na vyhledání; hlavní fotka je první odeslaná', async () => {
-  const items = IMG_RUNS_CYKLO.map(openai);
+  const items = IMG_RUNS_CYKLO.map(anthropicReply);
   const obrazky = DOSSIER_CYKLO_NORM.obrazky;
   const { out } = await run7(NODES7({ 'Obrázky – příprava': { obrazky, llmRequest: {} } }), items);
   const a = out.signals.find((s) => s.id === 'obrazek_cislo_rozpor');
@@ -2818,14 +2818,14 @@ test('glue 07: tři běhy obrázků z $input.all() -> nálezy z obrázků s odka
 });
 
 test('glue 07: selhání modulů se zapíše do verdict.skipped; bez dat k posouzení se věrohodnost nepřeskakuje; dřívější skipped zůstávají', async () => {
-  const chyby = [openai('x'), { error: { message: 'e' } }, { error: { message: 'e' } }];
+  const chyby = [anthropicReply('x'), { error: { message: 'e' } }, { error: { message: 'e' } }];
   const a = await run7(NODES7({ 'LLM – věrohodnost': { error: { message: '401' } }, 'Obrázky – příprava': { obrazky: [] }, Moduly: MOD7({ verdict: { semafor: 'šedá', score: 0, confidence: 'střední', unchecked: [], skipped: ['seznam ČOI'] } }) }), chyby);
   assert.deepEqual(a.out.verdict.skipped, ['seznam ČOI', 'ověření věrohodnosti', 'analýza obrázků']);
   assert.equal(a.out.verdict.confidence, 'střední');
   const b = await run7(NODES7({ 'LLM – věrohodnost': { error: { message: '401' } }, 'Sestavit věrohodnost': { bezDat: true } }));
   assert.deepEqual(b.out.verdict.skipped, []);
   // jen jeden použitelný běh obrázků nestačí (většina ≥ 2 ze 3)
-  const c = await run7(NODES7({ 'Obrázky – příprava': { obrazky: DOSSIER_CYKLO_NORM.obrazky } }), [openai(IMG_RUNS_CYKLO[0]), { error: {} }, { error: {} }]);
+  const c = await run7(NODES7({ 'Obrázky – příprava': { obrazky: DOSSIER_CYKLO_NORM.obrazky } }), [anthropicReply(IMG_RUNS_CYKLO[0]), { error: {} }, { error: {} }]);
   assert.deepEqual(c.out.verdict.skipped, ['analýza obrázků']);
 });
 

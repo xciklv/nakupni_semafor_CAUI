@@ -8,7 +8,7 @@ const { runCodeNode } = require('./sandbox');
 // Glue kroky, které skládají verdikt (Moduly, Souhrn): nálezy z code review 5 až 7 (pravidla neúplného vstupu, věrohodný prodejce, přeskočené moduly).
 const WF = buildWorkflow({ credId: 'C', credName: 'N' });
 const codeOf = (name) => WF.nodes.find((n) => n.name === name).parameters.jsCode;
-const openai = (obj) => ({ type: 'message', role: 'assistant', content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj) }], stop_reason: 'end_turn' });
+const anthropicReply = (obj) => ({ type: 'message', role: 'assistant', content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj) }], stop_reason: 'end_turn' });
 const fixtureJson = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', n), 'utf8'));
 
 const runModuly = (json, ctx, o = {}) => runCodeNode(codeOf('Moduly'), { json, nodes: { 'Vstup a načtení': ctx }, httpStub: () => ({ statusCode: 404, body: '' }), ...o });
@@ -16,7 +16,7 @@ const runModuly = (json, ctx, o = {}) => runCodeNode(codeOf('Moduly'), { json, n
 // --- nález 5 (D2): chybějící údaje u neúplného vstupu jen info ---
 test('glue 03: vložený text bez CE a s GPSR „ne“ dá info (nepočítá se do skóre), úplné čtení stránky low', async () => {
   const textCtx = { zkratka: false, input: { text: 'Nabíječka 65 W za 199 Kč', screenshoty: [], url: null }, pageText: '', rezim: 'neznámé', host: null, obsah: true };
-  const x = openai({ produkt: { nazev: 'Nabíječka 65 W', kategorie: 'elektronika', cena: 199, mena: 'CZK' }, prodejce: {}, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ne', adresa_vyrobce: 'neuvedeno', odpovedna_osoba_eu: 'neuvedeno' }, nerealne_parametry: [], nesoulady: [] });
+  const x = anthropicReply({ produkt: { nazev: 'Nabíječka 65 W', kategorie: 'elektronika', cena: 199, mena: 'CZK' }, prodejce: {}, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ne', adresa_vyrobce: 'neuvedeno', odpovedna_osoba_eu: 'neuvedeno' }, nerealne_parametry: [], nesoulady: [] });
   const text = await runModuly(x, textCtx);
   const sev = (out, id) => (out.signals.find((s) => s.id === id) || {}).severity;
   assert.equal(sev(text.out, 'ce_chybi'), 'info');
@@ -32,7 +32,7 @@ test('glue 03: vložený text bez CE a s GPSR „ne“ dá info (nepočítá se 
 // --- Souhrn (glue 07): nálezy 6 a 7 ---
 const { normalizeDossier } = require('../engine/dossier');
 const DOSSIER = normalizeDossier(fixtureJson('dossier-cyklosvitilna.json')).dossier;
-const PLAUS_V_PORADKU = openai({ tvrzeni: [], verdikt: 'v_poradku', jistota: 'vysoka', vysvetleni_pro_laika: 'Čísla sedí.', otazka_pro_prodejce: '' });
+const PLAUS_V_PORADKU = anthropicReply({ tvrzeni: [], verdikt: 'v_poradku', jistota: 'vysoka', vysvetleni_pro_laika: 'Čísla sedí.', otazka_pro_prodejce: '' });
 const OK3 = { offer: 'ok', seller: 'ok', safety: 'ok' };
 const mod = (o = {}) => ({ verdict: { semafor: 'zelená', score: 0, confidence: 'střední', unchecked: [], skipped: [] }, signals: [], moduly: OK3, external: true, mameObrazky: false, dossier: DOSSIER, ...o });
 const runSouhrn = (nodes, o = {}) => runCodeNode(codeOf('Souhrn'), { json: PLAUS_V_PORADKU, nodes: { Moduly: mod(), 'LLM – věrohodnost': PLAUS_V_PORADKU, 'Sestavit věrohodnost': { bezDat: false }, ...nodes }, ...o });
@@ -82,7 +82,7 @@ test('glue 07 (D3): věrohodnost bez dat k posouzení (bezDat) zelenou nebrání
 
 // --- marketplace: zelená jen s externím ověřením prodejce ---
 test('glue 03: marketplace + prodejce ok z textových údajů bez externího zdroje: šedá; e-shop beze změny', async () => {
-  const x = openai({ produkt: { nazev: 'Powerbanka', kategorie: 'jiné', cena: 500, mena: 'CZK' }, prodejce: { nazev: 'Shop', hodnoceni: 4.8, pocet_prodeju: 1200 }, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' }, nerealne_parametry: [], nesoulady: [] });
+  const x = anthropicReply({ produkt: { nazev: 'Powerbanka', kategorie: 'jiné', cena: 500, mena: 'CZK' }, prodejce: { nazev: 'Shop', hodnoceni: 4.8, pocet_prodeju: 1200 }, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' }, nerealne_parametry: [], nesoulady: [] });
   const ctx = (rezim, host) => ({ zkratka: false, input: { text: 'Powerbanka za 500 Kč, prodejce Shop 4,8 hvězdy, 1200 prodejů', screenshoty: [], url: null }, pageText: '', rezim, host, obsah: true });
   const mp = await runModuly(x, ctx('marketplace', null));
   assert.equal(mp.out.moduly.seller, 'ok');
@@ -119,7 +119,7 @@ test('glue 07: low nález ze zdroje ARES, VIES, RDAP nebo ČOI zakazuje větu o 
 });
 
 test('glue 03: marketplace s IČO, které ARES nenajde, nebo s neplatným DIČ: external false, šedá, žádná věrohodnost prodejce', async () => {
-  const x = (prodejce) => openai({ produkt: { nazev: 'Powerbanka', kategorie: 'jiné', cena: 500, mena: 'CZK' }, prodejce, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' }, nerealne_parametry: [], nesoulady: [] });
+  const x = (prodejce) => anthropicReply({ produkt: { nazev: 'Powerbanka', kategorie: 'jiné', cena: 500, mena: 'CZK' }, prodejce, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' }, nerealne_parametry: [], nesoulady: [] });
   const ctx = { zkratka: false, input: { text: 'Powerbanka za 500 Kč', screenshoty: [], url: null }, pageText: '', rezim: 'marketplace', host: 'temu.com', obsah: true };
   const stub = (o) => (o.url.startsWith('https://ares.gov.cz/') ? { statusCode: 404, body: '' } : { statusCode: 200, body: { isValid: false, userError: 'INVALID' } });
   const ares = await runModuly(x({ nazev: 'Shop', hodnoceni: 4.8, pocet_prodeju: 1200, ico: '27082440' }), ctx, { httpStub: stub });
@@ -148,7 +148,7 @@ test('glue 03: čtečkový dossier s mezerou ve specifikaci nebo popisu: ce_chyb
 });
 
 // --- marketplace bez odkazu: text nebo screenshot s tržištěm ---
-const extrakce = (produkt = {}, prodejce = {}) => openai({ produkt: { nazev: 'Powerbanka', kategorie: 'jiné', cena: 500, mena: 'CZK', ...produkt }, prodejce: { nazev: 'Shop', hodnoceni: 4.7, pocet_prodeju: 1200, ...prodejce }, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' }, nerealne_parametry: [], nesoulady: [] });
+const extrakce = (produkt = {}, prodejce = {}) => anthropicReply({ produkt: { nazev: 'Powerbanka', kategorie: 'jiné', cena: 500, mena: 'CZK', ...produkt }, prodejce: { nazev: 'Shop', hodnoceni: 4.7, pocet_prodeju: 1200, ...prodejce }, recenze: {}, obrazky: {}, gpsr: { vyrobce_uveden: 'ano', adresa_vyrobce: 'ano', odpovedna_osoba_eu: 'ano' }, nerealne_parametry: [], nesoulady: [] });
 const vstup = (text, screenshoty = []) => ({ zkratka: false, input: { text, screenshoty, url: null }, pageText: '', rezim: 'neznámé', host: null, obsah: true });
 const ALLEGRO_TEXT = fs.readFileSync(path.join(__dirname, '..', 'eval', 'fixtures', 'allegro-oneblade.txt'), 'utf8');
 

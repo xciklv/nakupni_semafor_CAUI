@@ -41,7 +41,7 @@ Moduly jsou čisté funkce v [engine/](engine/) bez závislostí. Semafor počí
 
 ## Požadavky
 
-- Node.js (vývoj běžel na v24.12.0)
+- Node.js 24
 - lokální **n8n 2.17.x**
 - v n8n credential typu *Anthropic API* (klíč do repa nepatří; credential vytvoříte v n8n sami a jeho id vidíte v adrese při jeho otevření)
 - volitelně Playwright a Chromium pro čtečku stránek

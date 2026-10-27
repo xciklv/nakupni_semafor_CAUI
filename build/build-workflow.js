@@ -156,7 +156,7 @@ function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, mode
   };
   return { id: WORKFLOW_API.id, name: WORKFLOW_API.name, nodes, connections, settings: {
     executionOrder: 'v1',
-    // Ukládání exekucí řídí SAVE_EXECUTIONS: 'all' (výchozí, ladění; rozhodnutí 2026-10-17) ukládá nabídky, screenshoty i výsledky lokálně v n8n,
+    // Ukládání exekucí řídí SAVE_EXECUTIONS: 'all' (výchozí, ladění) ukládá nabídky, screenshoty i výsledky lokálně v n8n,
     // 'none' nic neukládá (soukromí). Průběh se neukládá ani v jednom režimu.
     saveDataSuccessExecution: save, saveDataErrorExecution: save, saveManualExecutions: save === 'all', saveExecutionProgress: false,
   } };

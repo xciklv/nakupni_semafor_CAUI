@@ -5,7 +5,7 @@ const { computeVerdict } = require('../engine/scoring');
 const { buildExplainRequest, parseExplanation, fallbackAdvice, buildResponse, needMoreInput, LLM_MODEL_EXPLAIN_DEFAULT } = require('../engine/explain');
 
 const sg = (id, severity, extra = {}) => signal({ id, module: 'seller', severity, title: 'T ' + id, evidence: 'E ' + id, source: 'RDAP', ...extra });
-const oaiWrap = (text) => ({ type: 'message', role: 'assistant', content: [{ type: 'text', text }], stop_reason: 'end_turn' });
+const anthropicWrap = (text) => ({ type: 'message', role: 'assistant', content: [{ type: 'text', text }], stop_reason: 'end_turn' });
 const OK3 = { offer: 'ok', seller: 'ok', safety: 'ok' };
 
 test('požadavek na vysvětlení obsahuje jen signály, ne uživatelská data', () => {
@@ -16,9 +16,9 @@ test('požadavek na vysvětlení obsahuje jen signály, ne uživatelská data', 
 });
 
 test('parseExplanation přijme platný výstup a odmítne chybějící pole', () => {
-  const good = oaiWrap('{"shrnuti":"Pozor.","co_delat":["Nekupuj."]}');
+  const good = anthropicWrap('{"shrnuti":"Pozor.","co_delat":["Nekupuj."]}');
   assert.deepEqual(parseExplanation(good), { ok: true, shrnuti: 'Pozor.', co_delat: ['Nekupuj.'] });
-  assert.equal(parseExplanation(oaiWrap('{"x":1}')).ok, false);
+  assert.equal(parseExplanation(anthropicWrap('{"x":1}')).ok, false);
   assert.equal(parseExplanation({ error: {} }).ok, false);
 });
 
@@ -62,7 +62,7 @@ test('needMoreInput', () => {
 
 // --- controller guards ---
 
-const apiWith = (obj) => oaiWrap(JSON.stringify(obj));
+const apiWith = (obj) => anthropicWrap(JSON.stringify(obj));
 
 test('wording guard: vysvětlení nazývající prodejce podvodníkem se odmítne', () => {
   assert.equal(parseExplanation(apiWith({ shrnuti: 'Prodejce je podvodník.', co_delat: ['Nekupuj.'] })).ok, false);
@@ -282,7 +282,7 @@ test('požadavek na vysvětlení: přesné klíče, model, max_tokens 4000, outp
   assert.equal(r.output_config.effort, 'low');
   assert.equal(r.output_config.format.type, 'json_schema');
   assert.deepEqual(r.output_config.format.schema, { type: 'object', properties: { shrnuti: { type: 'string' }, co_delat: { type: 'array', items: { type: 'string' } } }, required: ['shrnuti', 'co_delat'], additionalProperties: false });
-  assert.equal(JSON.stringify(r).includes('openai'), false);
+  assert.equal(JSON.stringify(r).includes('anthropicReply'), false);
 });
 
 test('požadavek na vysvětlení: model je parametr; system jako pole, jediná user zpráva s JSON payloadem', () => {
