@@ -1,15 +1,15 @@
 # Nákupní semafor
 
-Pomůcka, která před nákupem zkontroluje online nabídku a ukáže, co na ní nesedí a co se nepodařilo ověřit. Výsledkem je semafor (zelená, oranžová, červená, šedá), krátké vysvětlení pro laika a seznam nálezů.
+Pomůcka, která před nákupem produktu ověří produkt a prodejce. Výsledkem je semafor s doporučením, seznam nálezů a vysvětlení, proč je dobré je ověřit.
 
 ## K čemu to je
 
-Při nákupu na neznámém e-shopu nebo marketplace člověk neví, čemu věřit. Kontrola se dívá na dvě věci, které se dají poznat z dat už v nabídce:
+Tento nástroj je doplněk pro ověření údajů uvedených u produktu, jeho recenzí a spolehlivosti prodejce. Záměrně se na tyto entity díváme zvlášť a doporučení je kombinací obou faktorů.
 
 - **Prodejce:** je firma v seznamu rizikových e-shopů ČOI, existuje v ARES, platí DIČ ve VIES, jak je stará doména.
-- **Nabídka sama:** rozpory v textu, nesmyslné parametry (například fyzikálně nemožné), chybějící údaje o shodě (CE, GPSR), text na fotkách proti textu nabídky, cizí EAN.
+- **Produkt a jeho recenze:** rozpory v textu, nesmyslné parametry (například fyzikálně nemožné), chybějící údaje o shodě (CE, GPSR), text na fotkách proti textu nabídky, cizí EAN, nízké hodnocení nebo podezřele podobné recenze.
 
-U každého nálezu ukáže, **co nabídka tvrdí, proč to nesedí a jak si je kontrola jistá**, a u nesmyslu v textu i hotovou otázku pro prodejce.
+U každého nálezu ukáže, **co nabídka tvrdí, proč to nesedí a jak si je kontrola jistá**. V případě nesouladu v textu generujeme volitelnou otázku k ověření u prodejce.
 
 Příklad (AliExpress, svítilna s „25 500 lm“ v titulku, variantou 2 000–3 000 lm a fotkou „MAX 12000 LM“): semafor **oranžová**, nález „tvrzení v nabídce nedává smysl“ s výpočtem („pro takový světelný výkon by bylo potřeba kolem 250 W, což malá svítilna nezvládne uchladit ani napájet“) a otázkou pro prodejce, kterou lze jedním kliknutím zkopírovat.
 
