@@ -28,8 +28,8 @@ nebo `PLAYWRIGHT_PATH=<cesta k modulu playwright>` (jinak se zkusí `playwright`
 
 | Požadavek | Odpověď |
 |---|---|
-| `POST /read` s hlavičkou `X-Nakupni-Kontrola: 1` a tělem `{"url":"https://…"}` | `{ok:true, text, title, finalUrl, status, ms}` nebo `{ok:false, duvod}` |
-| `POST /collect`, tělo `{"url":"https://…"}` (stejná hlavička) | `{ok:true, dossier}` (tvar `nakupni-kontrola/dossier@0-spike` ze sběrače `tools/page-collector`, přijme ho `normalizeDossier`) nebo `{ok:false, duvod, blokace?:{druh, dodavatel}}`; `blokace` je vyplněna, když stránka vyžaduje ověření (CAPTCHA) nebo přihlášení |
+| `POST /read` s hlavičkou `X-Nakupni-Semafor: 1` a tělem `{"url":"https://…"}` | `{ok:true, text, title, finalUrl, status, ms}` nebo `{ok:false, duvod}` |
+| `POST /collect`, tělo `{"url":"https://…"}` (stejná hlavička) | `{ok:true, dossier}` (tvar `nakupni-semafor/dossier@0-spike` ze sběrače `tools/page-collector`, přijme ho `normalizeDossier`) nebo `{ok:false, duvod, blokace?:{druh, dodavatel}}`; `blokace` je vyplněna, když stránka vyžaduje ověření (CAPTCHA) nebo přihlášení |
 | `POST /images`, tělo `{"urls":["https://…", …]}` (1 až 8 adres, jen `https:`) | `{ok:true, obrazky:[{url, mime:'image/jpeg', data /* base64, delší strana nejvýše 768 px */, dhash /* 16 hex */}], vynechano?:[{url, duvod}]}`; nestažitelný obrázek se vynechá a vypíše do `vynechano` |
 | `GET /health` | `{ok:true}` |
 

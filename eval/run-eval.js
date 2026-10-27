@@ -12,7 +12,7 @@
 //                                                       a při FAIL skončí s kódem 1
 //
 // Proměnné prostředí:
-//   API         adresa webhooku (výchozí http://127.0.0.1:5678/webhook/nakupni-kontrola)
+//   API         adresa webhooku (výchozí http://127.0.0.1:5678/webhook/nakupni-semafor)
 //   DELAY_MS    pauza mezi požadavky v ms (výchozí 1500; případy se posílají postupně)
 //   TIMEOUT_MS  limit jednoho požadavku v ms (výchozí 60000)
 //
@@ -42,7 +42,7 @@ const { computeMetrics } = require('./metrics');
 const { evaluateGate, formatGate, isMarketplaceCase } = require('./gate');
 const { buildRequestBody, toResultRecord, errorRecord, readNumberEnv, parseArgs, selectCases, renderReport, stabilityLines } = require('./report');
 
-const API = process.env.API || 'http://127.0.0.1:5678/webhook/nakupni-kontrola';
+const API = process.env.API || 'http://127.0.0.1:5678/webhook/nakupni-semafor';
 // Neplatná hodnota (nečíslo, záporná; u TIMEOUT_MS i 0) = výchozí.
 const DELAY_MS = readNumberEnv(process.env.DELAY_MS, 1500);
 const TIMEOUT_MS = readNumberEnv(process.env.TIMEOUT_MS, 60000, false);

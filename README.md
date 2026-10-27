@@ -56,13 +56,14 @@ ANTHROPIC_CRED_ID=<id credentialu> ANTHROPIC_CRED_NAME=Anthropic node build/buil
 
 V PowerShellu nejdřív `$env:ANTHROPIC_CRED_ID = '<id>'; $env:ANTHROPIC_CRED_NAME = 'Anthropic'` a pak `node build/build-workflow.js`.
 
-**2. Import do n8n.** `n8n import:workflow` u nového workflow vyžaduje pole `id`. Použijte tato id, protože na ně míří i `npm run purge`:
+**2. Import do n8n.** Build zapsal do obou souborů pevné ID workflow, takže se dají importovat přímo (na stejná ID míří i `npm run purge`):
 
 ```bash
-node -e "const fs=require('fs'),os=require('os'),p=require('path');for(const [f,id] of [['workflow.json','mHufaoyMTJDT3vQG'],['workflow-web.json','nkWebStrankaV1x7q']]){const w=JSON.parse(fs.readFileSync(f,'utf8'));w.id=id;const o=p.join(os.tmpdir(),id+'.json');fs.writeFileSync(o,JSON.stringify(w));console.log(o)}"
+n8n import:workflow --input=workflow.json
+n8n import:workflow --input=workflow-web.json
 ```
 
-Příkaz vypíše dvě cesty k dočasným souborům. Každý importujte (`n8n import:workflow --input=<cesta>`) a oba workflow pak v editoru n8n **zapněte (Active)**. Technické identifikátory (cesty webhooků, názvy workflow, hlavička `X-Nakupni-Kontrola`, schéma dossieru) nesou název `nakupni-kontrola`; mají zůstat, jak jsou.
+Pak oba workflow v editoru n8n **zapněte (Active)**.
 
 **3. Čtečka stránek** (volitelná; bez ní se u marketplace použije jednoduché stažení nebo výzva vložit text):
 
@@ -74,12 +75,12 @@ Poslouchá jen na `127.0.0.1:5687`. Potřebuje Playwright a Chromium (`npm i pla
 
 ## Použití
 
-**Webovka:** otevřete `http://127.0.0.1:5678/webhook/nakupni-kontrola-web`, vložte odkaz na nabídku (případně až čtyři screenshoty) a klikněte na „Zkontrolovat“. Kontrola trvá asi 5 až 45 sekund. Výsledek ukáže semafor, shrnutí, co dělat a nálezy ve skupinách *Tvrzení, která nesedí*, *Rizika* a *Nepodařilo se ověřit*. Druhá záložka, **První pomoc při podvodu**, je statický návod pro čtyři situace (nedoručený e-shop, zmizelý prodejce, falešný kupující, vylákané údaje); nic neposílá modelu a obsah **není odborně zrevidovaný**.
+**Webovka:** otevřete `http://127.0.0.1:5678/webhook/nakupni-semafor-web`, vložte odkaz na nabídku (případně až čtyři screenshoty) a klikněte na „Zkontrolovat“. Kontrola trvá asi 5 až 45 sekund. Výsledek ukáže semafor, shrnutí, co dělat a nálezy ve skupinách *Tvrzení, která nesedí*, *Rizika* a *Nepodařilo se ověřit*. Druhá záložka, **První pomoc při podvodu**, je statický návod pro čtyři situace (nedoručený e-shop, zmizelý prodejce, falešný kupující, vylákané údaje); nic neposílá modelu a obsah **není odborně zrevidovaný**.
 
 **API:**
 
 ```bash
-curl -s -X POST -H "Content-Type: application/json" -d '{"odkaz":"https://www.aliexpress.com/item/1005011759581041.html"}' http://127.0.0.1:5678/webhook/nakupni-kontrola
+curl -s -X POST -H "Content-Type: application/json" -d '{"odkaz":"https://www.aliexpress.com/item/1005011759581041.html"}' http://127.0.0.1:5678/webhook/nakupni-semafor
 ```
 
 Tělo může nést `odkaz`, vložený `text` nebo `screenshoty`. Jedna kontrola zavolá model a stojí asi 0,01–0,03 USD.

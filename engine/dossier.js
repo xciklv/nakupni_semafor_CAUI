@@ -1,8 +1,8 @@
 if (typeof require !== 'undefined' && typeof normalizeExtraction === 'undefined') { var { normalizeExtraction } = require('./llm'); }
 
-// Dossier = jediná kanonická evidence o nabídce. Vzniká ze čtečky stránek (tvar nakupni-kontrola/dossier@0-spike)
+// Dossier = jediná kanonická evidence o nabídce. Vzniká ze čtečky stránek (tvar nakupni-semafor/dossier@0-spike)
 // nebo se skládá z extrakce vloženého textu a screenshotů; všechny moduly kontroly čtou jen jeho.
-const DOS_SCHEMA_PREFIX = 'nakupni-kontrola/dossier@';
+const DOS_SCHEMA_PREFIX = 'nakupni-semafor/dossier@';
 const DOS_PROMPT_MAX_DEFAULT = 12000;
 const DOS_PROMPT_MIN = 200;
 const DOS_MEZERY_SHARE = 0.15; // část rozpory vyhrazená mezerám, které se do promptu vejdou vždy
@@ -95,7 +95,7 @@ function dosDescription(raw) {
   return parts.length ? parts.filter((t, i) => parts.indexOf(t) === i).join('\n') : null;
 }
 
-// Přijímá tvar nakupni-kontrola/dossier@0-spike z čtečky stránek. Blokovaná stránka je platný dossier s vyplněným `blokace` a bez dat.
+// Přijímá tvar nakupni-semafor/dossier@0-spike z čtečky stránek. Blokovaná stránka je platný dossier s vyplněným `blokace` a bez dat.
 function normalizeDossier(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, dossier: null, duvod: 'dossier není objekt' };
   if (raw.schema !== undefined && !(typeof raw.schema === 'string' && raw.schema.startsWith(DOS_SCHEMA_PREFIX))) return { ok: false, dossier: null, duvod: 'neznámý tvar dossieru' };

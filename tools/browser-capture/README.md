@@ -1,10 +1,10 @@
 # browser-capture: rozšíření do Chrome (další cesta sběru dat, ověření konceptu)
 
-Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, kterou už uživatel otevřel a prošel, **ukáže celý text, který odejde**, a po potvrzení ho pošle do Nákupního semaforu (`POST http://127.0.0.1:5678/webhook/nakupni-kontrola`, tělo `{ odkaz, text, obrazky, jsonld }`). Jen čte: na stránce nic neklikne, nerozbalí ani nevyplní. Proč právě rozšíření: čte to, co člověk vidí, takže prochází i Allegro, které server blokuje.
+Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, kterou už uživatel otevřel a prošel, **ukáže celý text, který odejde**, a po potvrzení ho pošle do Nákupního semaforu (`POST http://127.0.0.1:5678/webhook/nakupni-semafor`, tělo `{ odkaz, text, obrazky, jsonld }`). Jen čte: na stránce nic neklikne, nerozbalí ani nevyplní. Proč právě rozšíření: čte to, co člověk vidí, takže prochází i Allegro, které server blokuje.
 
 ## Instalace (1 minuta)
 
-1. Spusťte n8n lokálně (`127.0.0.1:5678`) a ověřte, že workflow „Nákupní kontrola“ je aktivní a nasazené s aktuálním `build/glue/01-vstup.js`.
+1. Spusťte n8n lokálně (`127.0.0.1:5678`) a ověřte, že workflow „Nákupní semafor“ je aktivní a nasazené s aktuálním `build/glue/01-vstup.js`.
 2. V Chrome otevřete `chrome://extensions` a vpravo nahoře zapněte „Režim pro vývojáře“.
 3. Klikněte na „Načíst rozbalené“ a vyberte složku `tools/browser-capture` (ta, kde leží `manifest.json`).
 4. V seznamu se objeví „Nákupní semafor – sběr stránky“ (verze 0.2.0). Bez chybové hlášky u karty rozšíření je instalace v pořádku. Přišpendlete ikonu (puzzle na liště, špendlík u rozšíření).

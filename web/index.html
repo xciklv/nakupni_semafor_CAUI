@@ -206,13 +206,13 @@
   <p>Nákupní semafor je jen pomůcka, ne právní posudek ani tvrzení o prodejci. Nad výsledkem je vždy potřeba přemýšlet kriticky.</p>
 </footer>
 <script>
-// Adresa API z adresy stránky: bez query a hashe a bez koncových lomítek se poslední segment (nakupni-kontrola-web) nahradí
-// segmentem nakupni-kontrola; funguje pro /webhook/ i /webhook-test/ a pro adresu s lomítkem na konci.
+// Adresa API z adresy stránky: bez query a hashe a bez koncových lomítek se poslední segment (nakupni-semafor-web) nahradí
+// segmentem nakupni-semafor; funguje pro /webhook/ i /webhook-test/ a pro adresu s lomítkem na konci.
 function apiUrl(href) {
   const m = /^([a-z][a-z0-9+.-]*:\/\/[^\/?#]*)([^?#]*)/i.exec(String(href));
-  if (!m) return 'nakupni-kontrola';
+  if (!m) return 'nakupni-semafor';
   const segmenty = m[2].split('/').filter((x) => x !== '');
-  segmenty[segmenty.length > 0 ? segmenty.length - 1 : 0] = 'nakupni-kontrola';
+  segmenty[segmenty.length > 0 ? segmenty.length - 1 : 0] = 'nakupni-semafor';
   return m[1] + '/' + segmenty.join('/');
 }
 const API = apiUrl(location.href);

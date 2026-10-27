@@ -42,7 +42,7 @@ function overlayRows(text) {
 async function collectDossier(url, { store = true, rawDir = null, chromium } = {}) {
   const started = Date.now();
   const trail = createTrail(rawDir);
-  const dossier = { schema: 'nakupni-kontrola/dossier@0-spike', collectedAt: new Date().toISOString(), url, finalUrl: null, platform: null, ok: false, blocked: null };
+  const dossier = { schema: 'nakupni-semafor/dossier@0-spike', collectedAt: new Date().toISOString(), url, finalUrl: null, platform: null, ok: false, blocked: null };
   let platform;
   try { platform = platformOf(url); } catch (e) { dossier.error = 'neplatná adresa'; return dossier; }
   dossier.platform = platform;

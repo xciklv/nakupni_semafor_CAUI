@@ -11,7 +11,7 @@ try {
   const dossier = $('Moduly').first().json.dossier;
   const urls = (Array.isArray(dossier.obrazky) ? dossier.obrazky : []).map((i) => i && i.url).filter((u) => typeof u === 'string' && u.startsWith('https://')).slice(0, IMAGES_FETCH_MAX);
   if (!PAGE_READER_URL || !urls.length) return [{ json: { llmRequest: null } }];
-  const req = Promise.resolve(this.helpers.httpRequest({ method: 'POST', url: PAGE_IMAGES_URL, headers: { 'X-Nakupni-Kontrola': '1' }, body: { urls }, json: true,
+  const req = Promise.resolve(this.helpers.httpRequest({ method: 'POST', url: PAGE_IMAGES_URL, headers: { 'X-Nakupni-Semafor': '1' }, body: { urls }, json: true,
     timeout: IMAGES_DEADLINE_MS, ignoreHttpStatusErrors: true, returnFullResponse: true }));
   req.catch(() => {});
   let timer;

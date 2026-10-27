@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // Lokální služba čtečky stránek pro Nákupní semafor. Poslouchá jen na 127.0.0.1 (výchozí port 5687). Všechny POST cesty vyžadují
-// hlavičku X-Nakupni-Kontrola: 1 a Content-Type: application/json; požadavky se zpracovávají po jednom (jeden prohlížeč).
+// hlavičku X-Nakupni-Semafor: 1 a Content-Type: application/json; požadavky se zpracovávají po jednom (jeden prohlížeč).
 //   POST /read     {"url":"https://..."}        ->  {ok:true,text,title,finalUrl,status,ms} | {ok:false,duvod}
 //   POST /collect  {"url":"https://..."}        ->  {ok:true,dossier} | {ok:false,duvod,blokace?:{druh,dodavatel}}   (dossier@0-spike, viz tools/page-collector)
 //   POST /images   {"urls":["https://...",...]} ->  {ok:true,obrazky:[{url,mime,data,dhash}],vynechano?:[{url,duvod}]} | {ok:false,duvod}   (nejvýše 8, jen https)
@@ -66,7 +66,7 @@ function createHandler({ read, collect, images, check = checkUrl, queueMax = QUE
     const route = req.method === 'POST' && Object.prototype.hasOwnProperty.call(routes, req.url) ? routes[req.url] : null;
     if (!route) return send(res, 404, { ok: false, duvod: 'neznámá cesta' });
     // Vlastní hlavička vynutí CORS preflight, takže požadavek nemůže poslat cizí webová stránka z prohlížeče.
-    if (req.headers['x-nakupni-kontrola'] !== '1') return send(res, 403, { ok: false, duvod: 'chybí povinná hlavička' });
+    if (req.headers['x-nakupni-semafor'] !== '1') return send(res, 403, { ok: false, duvod: 'chybí povinná hlavička' });
     if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return send(res, 415, { ok: false, duvod: 'očekává se application/json' });
     let raw = '';
     let tooBig = false;

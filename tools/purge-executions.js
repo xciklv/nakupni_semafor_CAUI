@@ -20,9 +20,11 @@
 // Při --older-than-hours se průběh bez čitelného času startu nemaže.
 // ID workflow platí, jen když se workflow importovala podle README. Skript proto nejdřív ověří, že existují; když žádné z nich ne, najde workflow
 // podle názvu, a když ani to nevyjde, řekne to nahlas (jinak by „smazáno 0“ vypadalo jako úspěch).
-const WORKFLOW_IDS = ['mHufaoyMTJDT3vQG', 'nkWebStrankaV1x7q']; // „Nákupní kontrola“ (API), „Nákupní kontrola – web“
-const WORKFLOW_NAMES = ['Nákupní kontrola', 'Nákupní kontrola – web']; // názvy z build/build-workflow.js
-const WORKFLOWS = WORKFLOW_IDS.map((id, i) => ({ id, name: WORKFLOW_NAMES[i] }));
+// ID a názvy zapisuje do workflow build, odtud je čteme, aby se nerozešly.
+const { WORKFLOW_API, WORKFLOW_WEB } = require('../build/build-workflow');
+const WORKFLOWS = [WORKFLOW_API, WORKFLOW_WEB].map(({ id, name }) => ({ id, name }));
+const WORKFLOW_IDS = WORKFLOWS.map((w) => w.id);
+const WORKFLOW_NAMES = WORKFLOWS.map((w) => w.name);
 const DEFAULT_BASE_URL = 'http://127.0.0.1:5678';
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 1000;
@@ -118,7 +120,7 @@ async function resolveWorkflowIds({ baseUrl = DEFAULT_BASE_URL, apiKey, workflow
     }
   }
   if (!ids.length) {
-    throw new Error(`workflow Nákupní kontroly v n8n (${origin}) nenalezena: ID ${workflows.map((w) => w.id).join(', ')} neexistují a podle názvu (${workflows.map((w) => `„${w.name}“`).join(', ')}) se také nic nenašlo. Nic se nesmazalo. Je to ta správná instance n8n a jsou workflow naimportovaná?`);
+    throw new Error(`workflow Nákupního semaforu v n8n (${origin}) nenalezena: ID ${workflows.map((w) => w.id).join(', ')} neexistují a podle názvu (${workflows.map((w) => `„${w.name}“`).join(', ')}) se také nic nenašlo. Nic se nesmazalo. Je to ta správná instance n8n a jsou workflow naimportovaná?`);
   }
   return { ids, nenalezena, podleNazvu };
 }

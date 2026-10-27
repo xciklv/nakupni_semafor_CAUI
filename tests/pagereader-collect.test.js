@@ -9,7 +9,7 @@ const ALI = require('./fixtures/dossier-cyklosvitilna.json');
 const ALLEGRO = require('./fixtures/dossier-allegro-blokace.json');
 
 const allow = async () => ({ ok: true });
-const OK_HEADERS = { 'X-Nakupni-Kontrola': '1', 'Content-Type': 'application/json' };
+const OK_HEADERS = { 'X-Nakupni-Semafor': '1', 'Content-Type': 'application/json' };
 
 async function withServer(deps, fn) {
   const server = http.createServer(createHandler({ read: async () => ({ ok: true, text: 'abc' }), check: allow, ...deps }));
@@ -28,17 +28,17 @@ test('/collect: platná žádost vrátí 200 a výsledek sběru; collect dostane
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.ok, true);
-    assert.equal(body.dossier.schema, 'nakupni-kontrola/dossier@0-spike');
+    assert.equal(body.dossier.schema, 'nakupni-semafor/dossier@0-spike');
   });
   assert.deepEqual(seen, ['https://www.aliexpress.com/item/1.html']);
 });
 
-test('/collect: bez hlavičky X-Nakupni-Kontrola 403, špatný content-type 415, neplatné tělo 400; collect se nevolá', async () => {
+test('/collect: bez hlavičky X-Nakupni-Semafor 403, špatný content-type 415, neplatné tělo 400; collect se nevolá', async () => {
   let calls = 0;
   const collect = async () => { calls += 1; return { ok: true, dossier: {} }; };
   await withServer({ collect }, async (post) => {
     assert.equal((await post('/collect', { url: 'https://x.cz/' }, { 'Content-Type': 'application/json' })).status, 403);
-    assert.equal((await post('/collect', '{"url":"https://x.cz/"}', { 'X-Nakupni-Kontrola': '1', 'Content-Type': 'text/plain' })).status, 415);
+    assert.equal((await post('/collect', '{"url":"https://x.cz/"}', { 'X-Nakupni-Semafor': '1', 'Content-Type': 'text/plain' })).status, 415);
     assert.equal((await post('/collect', '{nejson')).status, 400);
     assert.equal((await post('/collect', {})).status, 400);
     assert.equal((await post('/collect', { url: 'https://x.cz/', pad: 'x'.repeat(5000) })).status, 413);
@@ -157,7 +157,7 @@ test('/images: jen https; http, jiné protokoly, prázdné pole a špatné typy 
 test('/images: bez hlavičky 403, špatný content-type 415', async () => {
   await withServer({ images: fakeImages() }, async (post) => {
     assert.equal((await post('/images', { urls: [PNG_URL] }, { 'Content-Type': 'application/json' })).status, 403);
-    assert.equal((await post('/images', JSON.stringify({ urls: [PNG_URL] }), { 'X-Nakupni-Kontrola': '1', 'Content-Type': 'text/plain' })).status, 415);
+    assert.equal((await post('/images', JSON.stringify({ urls: [PNG_URL] }), { 'X-Nakupni-Semafor': '1', 'Content-Type': 'text/plain' })).status, 415);
   });
 });
 

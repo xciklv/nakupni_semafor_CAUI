@@ -79,7 +79,7 @@ test('workflow má všechny nody a propojení', () => {
   for (const n of ['Webhook', 'Vstup a načtení', 'Stačí vstup?', 'Máme dossier?', 'Je obsah?', 'Sestavit extrakci', 'LLM – extrakce', 'Moduly', 'Sestavit věrohodnost', 'LLM – věrohodnost', 'Jsou obrázky?', 'Obrázky – příprava', 'LLM – obrázky', 'Souhrn', 'LLM – vysvětlení', 'Odpověď', 'Respond', 'Respond – více vstupu']) {
     assert.ok(names.includes(n), 'chybí node ' + n);
   }
-  assert.equal(wf.nodes.find((n) => n.name === 'Webhook').parameters.path, 'nakupni-kontrola');
+  assert.equal(wf.nodes.find((n) => n.name === 'Webhook').parameters.path, 'nakupni-semafor');
   assert.ok(wf.connections['Webhook']);
   assert.equal(wf.nodes.find((n) => n.name === 'LLM – extrakce').credentials.anthropicApi.id, 'CRED1');
 });
@@ -1247,7 +1247,7 @@ test('web workflow servíruje webovou stránku na GET webhooku', () => {
   const wf = buildWebWorkflow();
   const get = wf.nodes.find((n) => n.name === 'Webhook – stránka');
   assert.equal(get.parameters.httpMethod, 'GET');
-  assert.equal(get.parameters.path, 'nakupni-kontrola-web');
+  assert.equal(get.parameters.path, 'nakupni-semafor-web');
   const resp = wf.nodes.find((n) => n.name === 'Respond – stránka');
   assert.match(resp.parameters.responseBody, /<!doctype html>/i);
   assert.ok(wf.connections['Webhook – stránka']);
@@ -1277,17 +1277,17 @@ const triggers = (wf) => wf.nodes.filter((n) => n.type === 'n8n-nodes-base.webho
 
 test('rozdělení: API workflow má jediný webhook (POST) a žádné nody stránky', () => {
   const api = buildWorkflow({ credId: 'C', credName: 'N' });
-  assert.equal(api.name, 'Nákupní kontrola');
-  assert.deepEqual(triggers(api).map((n) => [n.name, n.parameters.httpMethod, n.parameters.path]), [['Webhook', 'POST', 'nakupni-kontrola']]);
+  assert.equal(api.name, 'Nákupní semafor');
+  assert.deepEqual(triggers(api).map((n) => [n.name, n.parameters.httpMethod, n.parameters.path]), [['Webhook', 'POST', 'nakupni-semafor']]);
   assert.equal(api.nodes.some((n) => /stránk/.test(n.name)), false);
   assert.equal(JSON.stringify(api).includes('<!doctype html>'), false);
-  assert.equal(JSON.stringify(api).includes('nakupni-kontrola-web'), false);
+  assert.equal(JSON.stringify(api).includes('nakupni-semafor-web'), false);
   assert.equal(api.nodes.some((n) => n.type === 'n8n-nodes-base.respondToWebhook' && n.parameters.respondWith === 'text'), false);
 });
 
 test('rozdělení: web workflow má jediný webhook a jen Respond, žádné LLM, kód ani credentials', () => {
   const web = buildWebWorkflow();
-  assert.equal(web.name, 'Nákupní kontrola – web');
+  assert.equal(web.name, 'Nákupní semafor – web');
   assert.deepEqual(web.nodes.map((n) => n.type).sort(), ['n8n-nodes-base.respondToWebhook', 'n8n-nodes-base.webhook']);
   assert.equal(triggers(web).length, 1);
   assert.equal(web.nodes.some((n) => 'credentials' in n), false);
@@ -1310,7 +1310,7 @@ test('web workflow: úspěšná načtení se neukládají, chyby ano; průběh n
 test('stránka nepoužívá innerHTML a volá relativní API', () => {
   const html = pageHtml();
   assert.equal(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|setAttribute\(\s*['"]on/.test(html), false);
-  assert.match(html, /nakupni-kontrola/);
+  assert.match(html, /nakupni-semafor/);
 });
 
 test('stránka nemá žádnou externí adresu (http/https) ani zdroje mimo volání API', () => {
@@ -1390,7 +1390,7 @@ function loadPage(opts = {}) {
     static revokeObjectURL(u) { log.push('revoke:' + u); }
   }
   const ctx = vm.createContext({
-    document: dom.document, navigator: opts.navigator, location: { href: opts.href || 'http://x/webhook/nakupni-kontrola-web' }, URL: FakeURL, Image: FakeImage, console,
+    document: dom.document, navigator: opts.navigator, location: { href: opts.href || 'http://x/webhook/nakupni-semafor-web' }, URL: FakeURL, Image: FakeImage, console,
     fetch: async (...args) => { fetchCalls.push(args); if (opts.gate) await opts.gate; if (opts.fetchFail) throw new Error('síť'); return { json: async () => (opts.response || {}) }; },
   });
   vm.runInContext(m[1] + '\n;this.__render = render; this.__toJpegBase64 = toJpegBase64; this.__apiUrl = apiUrl; this.__API = API;', ctx);
@@ -1637,34 +1637,34 @@ test('CSS: color-scheme light dark na :root a overflow-wrap:anywhere pro .card, 
 });
 
 // --- fix wave B: adresa API (M1), soukromí a zdroje (M2), srozumitelné štítky verdiktu a nápověda (M3) ---
-test('apiUrl: poslední segment nakupni-kontrola-web se nahradí; query, hash i koncová lomítka se zahodí', () => {
+test('apiUrl: poslední segment nakupni-semafor-web se nahradí; query, hash i koncová lomítka se zahodí', () => {
   const { apiUrl } = loadPage();
   const cases = [
-    ['http://x/webhook/nakupni-kontrola-web', 'http://x/webhook/nakupni-kontrola'],
-    ['http://x/webhook/nakupni-kontrola-web/', 'http://x/webhook/nakupni-kontrola'],
-    ['http://x/webhook/nakupni-kontrola-web///', 'http://x/webhook/nakupni-kontrola'],
-    ['http://x/webhook/nakupni-kontrola-web?a=1#b', 'http://x/webhook/nakupni-kontrola'],
-    ['http://x/webhook/nakupni-kontrola-web/?a=1#b', 'http://x/webhook/nakupni-kontrola'],
-    ['http://x/webhook/nakupni-kontrola-web#b', 'http://x/webhook/nakupni-kontrola'],
-    ['http://x/webhook-test/nakupni-kontrola-web', 'http://x/webhook-test/nakupni-kontrola'],
-    ['https://n8n.example.org:5678/webhook-test/nakupni-kontrola-web/?x=/y/z', 'https://n8n.example.org:5678/webhook-test/nakupni-kontrola'],
-    ['https://host/prefix/webhook/nakupni-kontrola-web', 'https://host/prefix/webhook/nakupni-kontrola'],
+    ['http://x/webhook/nakupni-semafor-web', 'http://x/webhook/nakupni-semafor'],
+    ['http://x/webhook/nakupni-semafor-web/', 'http://x/webhook/nakupni-semafor'],
+    ['http://x/webhook/nakupni-semafor-web///', 'http://x/webhook/nakupni-semafor'],
+    ['http://x/webhook/nakupni-semafor-web?a=1#b', 'http://x/webhook/nakupni-semafor'],
+    ['http://x/webhook/nakupni-semafor-web/?a=1#b', 'http://x/webhook/nakupni-semafor'],
+    ['http://x/webhook/nakupni-semafor-web#b', 'http://x/webhook/nakupni-semafor'],
+    ['http://x/webhook-test/nakupni-semafor-web', 'http://x/webhook-test/nakupni-semafor'],
+    ['https://n8n.example.org:5678/webhook-test/nakupni-semafor-web/?x=/y/z', 'https://n8n.example.org:5678/webhook-test/nakupni-semafor'],
+    ['https://host/prefix/webhook/nakupni-semafor-web', 'https://host/prefix/webhook/nakupni-semafor'],
   ];
   for (const [href, want] of cases) assert.equal(apiUrl(href), want, href);
 });
 
 test('apiUrl: adresa bez cesty nevyhodí výjimku a nepoškodí hostitele', () => {
   const { apiUrl } = loadPage();
-  assert.equal(apiUrl('http://x'), 'http://x/nakupni-kontrola');
-  assert.equal(apiUrl('http://x/'), 'http://x/nakupni-kontrola');
+  assert.equal(apiUrl('http://x'), 'http://x/nakupni-semafor');
+  assert.equal(apiUrl('http://x/'), 'http://x/nakupni-semafor');
   assert.doesNotThrow(() => apiUrl(undefined));
 });
 
 test('stránka volá API na adrese odvozené z location (včetně lomítka na konci) a posílá POST', async () => {
-  const p = await submitPage({ href: 'http://x/webhook-test/nakupni-kontrola-web/?a=1#b' }, []);
-  assert.equal(p.API, 'http://x/webhook-test/nakupni-kontrola');
+  const p = await submitPage({ href: 'http://x/webhook-test/nakupni-semafor-web/?a=1#b' }, []);
+  assert.equal(p.API, 'http://x/webhook-test/nakupni-semafor');
   assert.equal(p.fetchCalls.length, 1);
-  assert.equal(p.fetchCalls[0][0], 'http://x/webhook-test/nakupni-kontrola');
+  assert.equal(p.fetchCalls[0][0], 'http://x/webhook-test/nakupni-semafor');
   assert.equal(p.fetchCalls[0][1].method, 'POST');
 });
 
@@ -2330,13 +2330,13 @@ test('čtečka: když /collect nevrátí dossier ani blokaci, marketplace se čt
   assert.deepEqual(calls.map((c) => c.url), [COLLECT, READER]);
   for (const c of calls) {
     assert.equal(c.method, 'POST');
-    assert.equal(c.headers['X-Nakupni-Kontrola'], '1');
+    assert.equal(c.headers['X-Nakupni-Semafor'], '1');
     assert.equal(JSON.stringify(c.body), JSON.stringify({ url: ALI })); // objekt vznikl v sandboxu (jiný realm), proto porovnání přes JSON
     assert.equal(c.json, true);
   }
 });
 
-const DOSSIER_RAW = { schema: 'nakupni-kontrola/dossier@0-spike', platform: 'aliexpress', ok: true, blocked: null, title: { value: 'Cyklosvítilna 25500Lumen' } };
+const DOSSIER_RAW = { schema: 'nakupni-semafor/dossier@0-spike', platform: 'aliexpress', ok: true, blocked: null, title: { value: 'Cyklosvítilna 25500Lumen' } };
 
 test('čtečka: /collect uspěl -> položka nese dossier (surový objekt), pageText je prázdný, nic dalšího se nevolá', async () => {
   const { out, calls } = await runReader({ odkaz: ALI }, { httpStub: svc({ collect: () => ({ statusCode: 200, body: { ok: true, dossier: DOSSIER_RAW } }), other: () => ({ statusCode: 500, body: '' }), read: () => ({ statusCode: 500, body: '' }) }) });
@@ -2532,7 +2532,7 @@ test('e2e Task 8: čtečka dostane /images s adresami z dossieru (nejvýše 8, h
   const img = calls.filter((c) => c.url === IMAGES_URL);
   assert.equal(img.length, 1);
   assert.deepEqual(bodyOf(img[0]).urls, DOSSIER_CYKLO_NORM.obrazky.map((i) => i.url));
-  assert.equal(img[0].headers['X-Nakupni-Kontrola'], '1');
+  assert.equal(img[0].headers['X-Nakupni-Semafor'], '1');
   assert.equal(f.r5.out.llmRequest.model, MODEL_PLAUSIBILITY_DEFAULT);
   assert.equal(f.r6.out.llmRequest.model, MODEL_IMAGES_DEFAULT);
   assert.equal(Object.hasOwn(f.r5.out.llmRequest, 'temperature'), false);
@@ -2586,7 +2586,7 @@ test('e2e Task 8: dossier s blokací a bez textu -> potrebuji_vice (čtečka hl�
 });
 
 test('e2e Task 8: blokovaný dossier, který projde do toku (ok:true s blokací) -> nikdy zelená ani 500, nic se neposuzuje modelem', async () => {
-  const blocked = { schema: 'nakupni-kontrola/dossier@0-spike', platform: 'allegro', ok: false, blocked: { kind: 'captcha', vendor: 'DataDome' }, gaps: [] };
+  const blocked = { schema: 'nakupni-semafor/dossier@0-spike', platform: 'allegro', ok: false, blocked: { kind: 'captcha', vendor: 'DataDome' }, gaps: [] };
   const f = await runFlow({ odkaz: 'https://www.allegro.pl/oferta/x' }, { wf: WF_FULL, httpStub: dossierStub({ collect: () => ({ ok: true, dossier: blocked }) }), explain: EXPLAIN_OK });
   assert.equal(f.final.status, 200);
   assert.equal(f.final.odpoved.stav, 'ok');
@@ -2634,7 +2634,7 @@ test('glue 03: dossier bez obrázků -> mameObrazky false; blokovaný nebo nepla
   const bez = rawDossier((r) => { delete r.images; r.structuredData.jsonLd.image = undefined; });
   const a = await runGlue('03-moduly.js', { json: { ...VSTUP_DOSSIER, dossier: bez }, nodes: { 'Vstup a načtení': { ...VSTUP_DOSSIER, dossier: bez } }, httpStub: dossierStub() });
   assert.equal(a.out.mameObrazky, false);
-  for (const dossier of [{ schema: 'nakupni-kontrola/dossier@0-spike', ok: false, blocked: { kind: 'captcha' } }, { schema: 'cizi/format@1' }, 'x', []]) {
+  for (const dossier of [{ schema: 'nakupni-semafor/dossier@0-spike', ok: false, blocked: { kind: 'captcha' } }, { schema: 'cizi/format@1' }, 'x', []]) {
     const ctx = { ...VSTUP_DOSSIER, dossier };
     const r = await runGlue('03-moduly.js', { json: ctx, nodes: { 'Vstup a načtení': ctx }, httpStub: dossierStub() });
     assert.equal(r.out.verdict.semafor, 'šedá', JSON.stringify(dossier));
@@ -2758,7 +2758,7 @@ test('glue 06: IMG_RUNS položek se stejným požadavkem; čtečka dostane nejv�
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, IMAGES_URL);
   assert.equal(calls[0].method, 'POST');
-  assert.equal(calls[0].headers['X-Nakupni-Kontrola'], '1');
+  assert.equal(calls[0].headers['X-Nakupni-Semafor'], '1');
   assert.deepEqual(JSON.parse(JSON.stringify(calls[0].body)), { urls: urls8 });
 });
 

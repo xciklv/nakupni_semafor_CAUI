@@ -17,7 +17,7 @@ const { createTrail, clip, readOverlay, closeOverlay, clickByText, declineCookie
 const ali = require('./adapters/aliexpress');
 const generic = require('./adapters/generic');
 
-const BASE_DIR = path.join(process.env.LOCALAPPDATA || path.join(require('node:os').homedir(), 'AppData', 'Local'), 'nakupni-kontrola');
+const BASE_DIR = path.join(process.env.LOCALAPPDATA || path.join(require('node:os').homedir(), 'AppData', 'Local'), 'nakupni-semafor');
 const PROFILE_DIR = process.env.NK_PROFILE_DIR || path.join(BASE_DIR, 'browser-profile');
 const LEDGER = path.join(BASE_DIR, 'spike-visits.json'); // hlídá limit spiku: nejvýš 3 načtení téže adresy, odstup aspoň 30 s
 const MAX_VISITS = 3;
@@ -342,7 +342,7 @@ async function collectGeneric(ctx) {
 async function run(url, { out = null, raw = null, store = true, maxWaitMs = 600000, channel = process.env.NK_BROWSER_CHANNEL || null } = {}) {
   const started = Date.now();
   const chromium = loadPlaywright();
-  const result = { schema: 'nakupni-kontrola/interactive-spike@0', url, platform: null, startedAt: new Date().toISOString(), outcome: null, outcomeDetail: null, profileDir: PROFILE_DIR };
+  const result = { schema: 'nakupni-semafor/interactive-spike@0', url, platform: null, startedAt: new Date().toISOString(), outcome: null, outcomeDetail: null, profileDir: PROFILE_DIR };
   try { result.platform = platformOf(url); } catch (e) { result.outcome = 'error'; result.outcomeDetail = 'neplatná adresa'; return result; }
   const g = await checkUrl(url);
   if (!g.ok) { result.outcome = 'error'; result.outcomeDetail = 'adresa není povolená: ' + g.duvod; return result; }

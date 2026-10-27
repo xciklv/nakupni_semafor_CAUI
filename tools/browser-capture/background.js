@@ -2,7 +2,7 @@
 // a „Zkontrolovat“ pošle sebrané stránky najednou do kontroly. Po provedené kontrole se sbírka vyprázdní (při chybě serveru zůstane).
 // Odesílá z workeru (ne ze stránky), takže se na něj nevztahuje CSP stránky; stačí host_permissions.
 importScripts('extract.js'); // trimToSentences
-const API = 'http://127.0.0.1:5678/webhook/nakupni-kontrola';
+const API = 'http://127.0.0.1:5678/webhook/nakupni-semafor';
 const LIMIT = 20000;
 const HLAVNI = 12000; // první stránka (nabídka) dostane víc, ostatní si dělí zbytek
 const CEKANI_MS = 180000;

@@ -85,7 +85,7 @@ test('normalizeDossier: ne-objekty a cizí schéma → ok:false s důvodem', () 
 });
 
 test('normalizeDossier toleruje chybějící a špatně typovaná pole', () => {
-  const r = normalizeDossier({ schema: 'nakupni-kontrola/dossier@0-spike', ok: true, title: 5, price: { amount: 'abc', currency: 3 }, reviews: { count: -2, average: 9, items: 'x' }, variants: { properties: [null, { name: 'A' }] }, seller: [], specifications: { rows: [{ name: 'a' }, null] }, identifiers: [null, { value: '1234567890123', type: 'ean' }, { value: 5 }] });
+  const r = normalizeDossier({ schema: 'nakupni-semafor/dossier@0-spike', ok: true, title: 5, price: { amount: 'abc', currency: 3 }, reviews: { count: -2, average: 9, items: 'x' }, variants: { properties: [null, { name: 'A' }] }, seller: [], specifications: { rows: [{ name: 'a' }, null] }, identifiers: [null, { value: '1234567890123', type: 'ean' }, { value: 5 }] });
   assert.equal(r.ok, true);
   const d = r.dossier;
   assert.equal(d.nazev, null);

@@ -11,6 +11,10 @@ const MODEL_IMAGES_DEFAULT = require('../engine/images').LLM_MODEL_IMAGES_DEFAUL
 const CRED_NAME_DEFAULT = 'Anthropic account';
 // Čtečka stránek (tools/page-reader): lokální služba, kterou krok "Vstup a načtení" volá pro marketplace. Smí mířit jen na 127.0.0.1.
 const PAGE_READER_URL_DEFAULT = 'http://127.0.0.1:5687/read';
+// ID a názvy obou workflow v n8n. Build je zapíše do JSON, takže se importují přímo (n8n import:workflow u nového workflow vyžaduje id)
+// a na stejná ID míří i tools/purge-executions.js.
+const WORKFLOW_API = { id: 'mHufaoyMTJDT3vQG', name: 'Nákupní semafor' };
+const WORKFLOW_WEB = { id: 'nkWebStrankaV1x7q', name: 'Nákupní semafor – web' };
 
 // Spojí moduly enginu do jednoho scope; jednořádkové require/module.exports guardy odstraní.
 function buildBundle() {
@@ -105,7 +109,7 @@ function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, mode
     // allowedOrigins '*': HTML servírované z webhooku běží v CSP sandboxu bez allow-same-origin (n8n-core html-sandbox.js),
     // takže jeho origin je 'null' a fetch na tento webhook je cross-origin.
     { id: 'Webhook', name: 'Webhook', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [80, 0], webhookId: '2477b1ff-1caf-474d-9db3-1104c8e3ca48',
-      parameters: { httpMethod: 'POST', path: 'nakupni-kontrola', responseMode: 'responseNode', options: { allowedOrigins: '*' } } },
+      parameters: { httpMethod: 'POST', path: 'nakupni-semafor', responseMode: 'responseNode', options: { allowedOrigins: '*' } } },
     code('Vstup a načtení', '01-vstup.js', [224, 0], { quota, pageReaderUrl: reader }),
     boolIf('Stačí vstup?', [368, 0], 'c1', '={{ $json.zkratka }}', 'false'),
     // Čtečka vrátila hotový dossier: extrakce textu modelem se přeskočí.
@@ -150,7 +154,7 @@ function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, mode
     ...link('LLM – vysvětlení', 'Odpověď'),
     ...link('Odpověď', 'Respond'),
   };
-  return { name: 'Nákupní kontrola', nodes, connections, settings: {
+  return { id: WORKFLOW_API.id, name: WORKFLOW_API.name, nodes, connections, settings: {
     executionOrder: 'v1',
     // Ukládání exekucí řídí SAVE_EXECUTIONS: 'all' (výchozí, ladění; rozhodnutí 2026-10-17) ukládá nabídky, screenshoty i výsledky lokálně v n8n,
     // 'none' nic neukládá (soukromí). Průběh se neukládá ani v jednom režimu.
@@ -159,18 +163,18 @@ function buildWorkflow({ credId, credName = CRED_NAME_DEFAULT, quotaPerDay, mode
 }
 
 // Webová stránka je samostatný workflow (jeden webhook = jeden workflow): GET webhook vrací web/index.html a nic jiného. Nezávisí na API ani na credentialech,
-// importuje se a aktivuje zvlášť. Stránka si adresu API odvodí ze své adresy (nakupni-kontrola-web -> nakupni-kontrola), takže cesty obou webhooků musí zůstat.
+// importuje se a aktivuje zvlášť. Stránka si adresu API odvodí ze své adresy (nakupni-semafor-web -> nakupni-semafor), takže cesty obou webhooků musí zůstat.
 // Úspěšné načtení stránky se neukládá (nezaplevelí seznam exekucí API), chyby ano. responseBody je text bez výrazu (nezačíná '=', nemá '{{').
 function buildWebWorkflow() {
   const nodes = [
     { id: 'Webhook – stránka', name: 'Webhook – stránka', type: 'n8n-nodes-base.webhook', typeVersion: 2, position: [0, 0], webhookId: '6f1c3a52-9b7e-4d2a-8c41-3e5b7a9d0f26',
-      parameters: { httpMethod: 'GET', path: 'nakupni-kontrola-web', responseMode: 'responseNode', options: {} } },
+      parameters: { httpMethod: 'GET', path: 'nakupni-semafor-web', responseMode: 'responseNode', options: {} } },
     { id: 'Respond – stránka', name: 'Respond – stránka', type: 'n8n-nodes-base.respondToWebhook', typeVersion: 1.1, position: [220, 0],
       parameters: { respondWith: 'text', responseBody: fs.readFileSync(path.join(root, 'web', 'index.html'), 'utf8'),
         options: { responseHeaders: { entries: [{ name: 'Content-Type', value: 'text/html; charset=utf-8' }] } } } },
   ];
   const connections = { 'Webhook – stránka': { main: [[{ node: 'Respond – stránka', type: 'main', index: 0 }]] } };
-  return { name: 'Nákupní kontrola – web', nodes, connections, settings: {
+  return { id: WORKFLOW_WEB.id, name: WORKFLOW_WEB.name, nodes, connections, settings: {
     executionOrder: 'v1', saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all', saveManualExecutions: false, saveExecutionProgress: false,
   } };
 }
@@ -193,4 +197,4 @@ if (require.main === module) {
   console.log('workflow-web.json (stránka) zapsán, nodů:', web.nodes.length);
 }
 
-module.exports = { buildBundle, buildWorkflow, buildWebWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, resolvePageReaderUrl, cliOptions, PAGE_READER_URL_DEFAULT, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT, MODEL_PLAUSIBILITY_DEFAULT, MODEL_IMAGES_DEFAULT };
+module.exports = { WORKFLOW_API, WORKFLOW_WEB, buildBundle, buildWorkflow, buildWebWorkflow, resolveQuota, resolveModel, resolveSaveExecutions, resolvePageReaderUrl, cliOptions, PAGE_READER_URL_DEFAULT, MODEL_EXTRACT_DEFAULT, MODEL_EXPLAIN_DEFAULT, MODEL_PLAUSIBILITY_DEFAULT, MODEL_IMAGES_DEFAULT };

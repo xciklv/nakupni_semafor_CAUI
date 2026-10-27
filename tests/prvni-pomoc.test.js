@@ -60,7 +60,7 @@ function loadPage(opts = {}) {
   const dom = makeDom();
   const ctx = vm.createContext({
     document: dom.document, navigator: undefined, console,
-    location: { href: 'http://x/webhook/nakupni-kontrola-web' + (opts.hash || ''), hash: opts.hash || '' },
+    location: { href: 'http://x/webhook/nakupni-semafor-web' + (opts.hash || ''), hash: opts.hash || '' },
     URL, Image: class {}, fetch: async () => ({ json: async () => ({}) }),
   });
   vm.runInContext(m[1] + '\n;this.__PP = typeof PRVNI_POMOC !== "undefined" ? PRVNI_POMOC : null; this.__open = typeof otevritPrvniPomoc === "function" ? otevritPrvniPomoc : null; this.__render = render;', ctx);

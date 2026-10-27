@@ -5,11 +5,11 @@
 function nakupniKontrolaOverlay(stav) {
   // Skript se vkládá znovu před každým vykreslením, proto se kořen nedrží v closure, ale v globálu izolovaného světa (stránka ho nevidí).
   // U closed kořene nejde z hostitele kořen znovu získat; když ho svět ztratil, hostitel se zahodí a vytvoří se nový.
-  let host = document.getElementById('nakupni-kontrola-host');
+  let host = document.getElementById('nakupni-semafor-host');
   if (host && !globalThis.nakupniKontrolaKoren) { host.remove(); host = null; }
   if (!host) {
     host = document.createElement('div');
-    host.id = 'nakupni-kontrola-host';
+    host.id = 'nakupni-semafor-host';
     host.style.cssText = 'all:initial;position:fixed;top:12px;right:12px;z-index:2147483647;';
     document.documentElement.appendChild(host);
     globalThis.nakupniKontrolaKoren = host.attachShadow({ mode: 'closed' });

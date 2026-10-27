@@ -44,7 +44,7 @@ try {
     };
     // Marketplace nejdřív přes čtečku (skutečný prohlížeč). Adresa už prošla normalizeUrl; čtečka ji kontroluje znovu (SSRF) i u každého podpožadavku.
     const readerCall = async (url) => {
-      const r = await call({ method: 'POST', url, headers: { 'X-Nakupni-Kontrola': '1' }, body: { url: input.url.url }, json: true,
+      const r = await call({ method: 'POST', url, headers: { 'X-Nakupni-Semafor': '1' }, body: { url: input.url.url }, json: true,
         timeout: PAGE_READER_DEADLINE_MS, abortSignal: abortSignal(PAGE_READER_DEADLINE_MS), ignoreHttpStatusErrors: true, returnFullResponse: true }, PAGE_READER_DEADLINE_MS);
       const b = r && r.statusCode === 200 ? r.body : null;
       return b && typeof b === 'object' && !Array.isArray(b) ? b : null;

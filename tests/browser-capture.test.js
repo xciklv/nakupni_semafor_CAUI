@@ -276,7 +276,7 @@ test('background: odeslání pošle jen { odkaz, text, obrazky, jsonld }, shodn�
   await b.until(() => b.states.some((s) => s.faze === 'vysledek'));
   assert.equal(b.fetches.length, 1);
   const f = b.fetches[0];
-  assert.equal(f.url, 'http://127.0.0.1:5678/webhook/nakupni-kontrola');
+  assert.equal(f.url, 'http://127.0.0.1:5678/webhook/nakupni-semafor');
   assert.equal(f.init.method, 'POST');
   const body = JSON.parse(f.init.body);
   assert.deepEqual(Object.keys(body).sort(), ['jsonld', 'obrazky', 'odkaz', 'text']);
@@ -394,7 +394,7 @@ function overlayWorld() {
   const texts = (e, out = []) => { if (e.textContent) out.push(e.textContent); e.children.forEach((c) => texts(c, out)); return out; };
   return {
     document,
-    host: () => documentElement.children.find((c) => c.id === 'nakupni-kontrola-host' && !c.removed),
+    host: () => documentElement.children.find((c) => c.id === 'nakupni-semafor-host' && !c.removed),
     render(stav) {
       vm.runInContext(read('overlay.js'), ctx);
       vm.runInContext('nakupniKontrolaOverlay', ctx)(stav);

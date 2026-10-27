@@ -37,7 +37,7 @@ function fakeN8n({ executions, pageSize = 100, failDelete = [] }) {
 const makeExecs = (n, from = 1, ageH = 1) => Array.from({ length: n }, (_, i) => ({ id: from + i, startedAt: hoursAgo(ageH) }));
 const deleted = (calls) => calls.filter((c) => c.method === 'DELETE').map((c) => c.url.split('/').pop());
 
-test('konstanty: ID obou workflow Nákupní kontroly', () => {
+test('konstanty: ID obou workflow Nákupního semaforu', () => {
   assert.deepEqual(WORKFLOW_IDS, ['mHufaoyMTJDT3vQG', 'nkWebStrankaV1x7q']);
 });
 
@@ -198,32 +198,32 @@ function fakeWorkflows({ workflows, executions = {}, status = 200 }) {
 }
 
 test('konstanty: názvy workflow odpovídají sestavení', () => {
-  assert.deepEqual(WORKFLOW_NAMES, ['Nákupní kontrola', 'Nákupní kontrola – web']);
+  assert.deepEqual(WORKFLOW_NAMES, ['Nákupní semafor', 'Nákupní semafor – web']);
 });
 
-const W = [{ id: 'a', name: 'Nákupní kontrola' }, { id: 'b', name: 'Nákupní kontrola – web' }];
+const W = [{ id: 'a', name: 'Nákupní semafor' }, { id: 'b', name: 'Nákupní semafor – web' }];
 
 test('resolveWorkflowIds: existující ID zůstanou beze změny a seznam podle názvu se nevolá', async () => {
-  const { fetchImpl, calls } = fakeWorkflows({ workflows: { a: 'Nákupní kontrola', b: 'Nákupní kontrola – web' } });
+  const { fetchImpl, calls } = fakeWorkflows({ workflows: { a: 'Nákupní semafor', b: 'Nákupní semafor – web' } });
   const r = await resolveWorkflowIds({ apiKey: KEY, workflows: W, fetchImpl });
   assert.deepEqual(r, { ids: ['a', 'b'], nenalezena: [], podleNazvu: [] });
   assert.ok(calls.every((u) => new URL(u).pathname.split('/')[4]), 'jen dotazy na konkrétní ID');
 });
 
 test('resolveWorkflowIds: jedno ID chybí, druhé existuje; chybějící se dohledá podle názvu (i na druhé stránce seznamu)', async () => {
-  const { fetchImpl } = fakeWorkflows({ workflows: { b: 'Nákupní kontrola – web', x1: 'Jiné', x2: 'Jiné 2', x3: 'Nákupní kontrola', x5: 'Nákupní kontrola kopie' } });
+  const { fetchImpl } = fakeWorkflows({ workflows: { b: 'Nákupní semafor – web', x1: 'Jiné', x2: 'Jiné 2', x3: 'Nákupní semafor', x5: 'Nákupní semafor kopie' } });
   const r = await resolveWorkflowIds({ apiKey: KEY, workflows: W, fetchImpl });
   assert.deepEqual(r, { ids: ['b', 'x3'], nenalezena: [], podleNazvu: ['x3'] });
 });
 
 test('resolveWorkflowIds: žádné ID neexistuje, obě workflow se najdou podle názvu', async () => {
-  const { fetchImpl } = fakeWorkflows({ workflows: { x1: 'Jiné', x2: 'Jiné 2', x3: 'Nákupní kontrola', x4: 'Nákupní kontrola – web' } });
+  const { fetchImpl } = fakeWorkflows({ workflows: { x1: 'Jiné', x2: 'Jiné 2', x3: 'Nákupní semafor', x4: 'Nákupní semafor – web' } });
   const r = await resolveWorkflowIds({ apiKey: KEY, workflows: W, fetchImpl });
   assert.deepEqual(r, { ids: ['x3', 'x4'], nenalezena: [], podleNazvu: ['x3', 'x4'] });
 });
 
 test('resolveWorkflowIds: workflow, které není ani podle ID, ani podle názvu, se vrátí jako nenalezené', async () => {
-  const { fetchImpl } = fakeWorkflows({ workflows: { b: 'Nákupní kontrola – web', x1: 'Jiné' } });
+  const { fetchImpl } = fakeWorkflows({ workflows: { b: 'Nákupní semafor – web', x1: 'Jiné' } });
   const r = await resolveWorkflowIds({ apiKey: KEY, workflows: W, fetchImpl });
   assert.deepEqual(r, { ids: ['b'], nenalezena: [W[0]], podleNazvu: [] });
 });
@@ -232,7 +232,7 @@ test('resolveWorkflowIds: nic nenalezeno ani podle ID, ani podle názvu vyhodí 
   const { fetchImpl } = fakeWorkflows({ workflows: { x1: 'Jiné' } });
   await assert.rejects(resolveWorkflowIds({ apiKey: KEY, workflows: W, fetchImpl }), (e) => {
     assert.match(e.message, /nenalezen|neexistuj/i);
-    assert.ok(e.message.includes('a') && e.message.includes('Nákupní kontrola'));
+    assert.ok(e.message.includes('a') && e.message.includes('Nákupní semafor'));
     assert.ok(!e.message.includes(KEY));
     return true;
   });
@@ -266,7 +266,7 @@ test('main: když žádné workflow neexistuje, řekne to nahlas (ne „Nalezeno
 });
 
 test('main: ID neexistují, ale workflow jsou podle názvu; vypíše, že se použila nalezená, a smaže jejich průběhy', async () => {
-  const fw = fakeWorkflows({ workflows: { x3: 'Nákupní kontrola', x4: 'Nákupní kontrola – web' }, executions: { x3: makeExecs(2, 1), x4: makeExecs(1, 10) } });
+  const fw = fakeWorkflows({ workflows: { x3: 'Nákupní semafor', x4: 'Nákupní semafor – web' }, executions: { x3: makeExecs(2, 1), x4: makeExecs(1, 10) } });
   const r = await spustMain(['--yes'], fw);
   assert.equal(r.code, 0, r.err);
   assert.match(r.out + r.err, /podle názvu/);
@@ -275,7 +275,7 @@ test('main: ID neexistují, ale workflow jsou podle názvu; vypíše, že se pou
 });
 
 test('main: jedno z ID chybí, dohledá se podle názvu a průběhy obou workflow se smažou, kód 0', async () => {
-  const fw = fakeWorkflows({ workflows: { [WORKFLOW_IDS[1]]: 'Nákupní kontrola – web', x3: 'Nákupní kontrola' }, executions: { [WORKFLOW_IDS[1]]: makeExecs(2, 1), x3: makeExecs(3, 10) } });
+  const fw = fakeWorkflows({ workflows: { [WORKFLOW_IDS[1]]: 'Nákupní semafor – web', x3: 'Nákupní semafor' }, executions: { [WORKFLOW_IDS[1]]: makeExecs(2, 1), x3: makeExecs(3, 10) } });
   const r = await spustMain(['--yes'], fw);
   assert.equal(r.code, 0, r.err);
   assert.ok(r.out.includes('podle názvu (x3)'), r.out);
@@ -284,18 +284,32 @@ test('main: jedno z ID chybí, dohledá se podle názvu a průběhy obou workflo
 });
 
 test('main: jedno workflow chybí i po dohledání: smaže průběhy nalezených, ale skončí kódem 1 a jasnou hláškou', async () => {
-  const fw = fakeWorkflows({ workflows: { [WORKFLOW_IDS[1]]: 'Nákupní kontrola – web' }, executions: { [WORKFLOW_IDS[1]]: makeExecs(2) } });
+  const fw = fakeWorkflows({ workflows: { [WORKFLOW_IDS[1]]: 'Nákupní semafor – web' }, executions: { [WORKFLOW_IDS[1]]: makeExecs(2) } });
   const r = await spustMain(['--yes'], fw);
   assert.equal(r.code, 1);
   assert.match(r.out, /smazáno 2/);
-  assert.ok(r.err.includes(WORKFLOW_IDS[0]) && r.err.includes('Nákupní kontrola'), r.err);
+  assert.ok(r.err.includes(WORKFLOW_IDS[0]) && r.err.includes('Nákupní semafor'), r.err);
   assert.match(r.err, /není v n8n|nemazaly/);
   assert.ok(!(r.out + r.err).includes(KEY));
 });
 
 test('main: výpis (bez --yes) s chybějícím workflow také skončí kódem 1 a nic nemaže', async () => {
-  const fw = fakeWorkflows({ workflows: { [WORKFLOW_IDS[1]]: 'Nákupní kontrola – web' }, executions: { [WORKFLOW_IDS[1]]: makeExecs(2) } });
+  const fw = fakeWorkflows({ workflows: { [WORKFLOW_IDS[1]]: 'Nákupní semafor – web' }, executions: { [WORKFLOW_IDS[1]]: makeExecs(2) } });
   const r = await spustMain([], fw);
   assert.equal(r.code, 1);
   assert.equal(deleted(fw.execCalls).length, 0);
+});
+
+test('ID a názvy workflow zapisuje build a mazání je čte odtud (nerozejdou se)', () => {
+  const { WORKFLOW_API, WORKFLOW_WEB, buildWorkflow, buildWebWorkflow } = require('../build/build-workflow');
+  const api = buildWorkflow({ credId: 'C', credName: 'N' });
+  const web = buildWebWorkflow();
+  assert.equal(api.id, WORKFLOW_API.id);
+  assert.equal(web.id, WORKFLOW_WEB.id);
+  assert.equal(api.name, 'Nákupní semafor');
+  assert.equal(web.name, 'Nákupní semafor – web');
+  assert.deepEqual(WORKFLOW_IDS, [api.id, web.id]);
+  assert.deepEqual(WORKFLOW_NAMES, [api.name, web.name]);
+  assert.equal(api.nodes.find((n) => n.name === 'Webhook').parameters.path, 'nakupni-semafor');
+  assert.equal(web.nodes.find((n) => n.name === 'Webhook – stránka').parameters.path, 'nakupni-semafor-web');
 });

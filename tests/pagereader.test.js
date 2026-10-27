@@ -169,14 +169,14 @@ async function withServer(deps, fn) {
   const base = 'http://127.0.0.1:' + server.address().port;
   try { return await fn(base); } finally { await new Promise((r) => server.close(r)); }
 }
-const post = (base, body, headers = {}) => fetch(base + '/read', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nakupni-Kontrola': '1', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+const post = (base, body, headers = {}) => fetch(base + '/read', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Nakupni-Semafor': '1', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
 
 test('handler: health, neznámá cesta a metoda; povinná hlavička, content-type, JSON, adresa a velikost těla', async () => {
   await withServer({ read: async () => ({ ok: true }) }, async (base) => {
     assert.deepEqual(await (await fetch(base + '/health')).json(), { ok: true });
     assert.equal((await fetch(base + '/nic')).status, 404);
     assert.equal((await fetch(base + '/read')).status, 404);
-    assert.equal((await post(base, { url: 'https://x.cz/' }, { 'X-Nakupni-Kontrola': '0' })).status, 403);
+    assert.equal((await post(base, { url: 'https://x.cz/' }, { 'X-Nakupni-Semafor': '0' })).status, 403);
     assert.equal((await fetch(base + '/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"url":"https://x.cz/"}' })).status, 403);
     assert.equal((await post(base, '{"url":"https://x.cz/"}', { 'Content-Type': 'text/plain' })).status, 415);
     assert.equal((await post(base, '{nejson')).status, 400);
