@@ -145,7 +145,7 @@ Přepínače: `--only <label>`, `--ids a,b`, `--repeat N`, `--gate`. Proměnné 
 | `tools/page-reader/` | lokální čtečka stránek a obrázků |
 | `tools/browser-capture/` | rozšíření pro Chrome |
 | `tools/purge-executions.js` | mazání uložených průběhů |
-| `tools/page-collector/`, `tools/image-check/` | kód ze spiků, základ pro čtečku a obrázky |
+| `tools/page-collector/` | sběr dat z marketplace do dossieru (používá čtečka stránek) |
 | `eval/` | testovací sada, vyhodnocení a kritérium stability |
 | `tests/` | testy (`node --test`) |
 

@@ -3,7 +3,7 @@ if (typeof require !== 'undefined' && typeof dossierPromptText === 'undefined') 
 if (typeof require !== 'undefined' && typeof parseLlmJson === 'undefined') { var { llmAccuses, parseLlmJson } = require('./llm'); }
 
 // Věrohodnost tvrzení: model spočítá hrubou kontrolu čísel a fyziky z nabídky a řekne, co nesedí, jak to vysvětlit laikovi a na co se zeptat prodejce.
-// Prompt a schéma vycházejí ze spiku eval/plausibility (Sonnet 5.5: bez falešných poplachů na rozumných nabídkách); vzorový výpočet je záměrně jiný než kterýkoli případ sady.
+// Výchozí je Sonnet 5.5: na vlastních případech nedal falešný poplach u rozumných nabídek. Vzorový výpočet v promptu je záměrně jiný než kterýkoli případ testovací sady.
 const LLM_MODEL_PLAUSIBILITY_DEFAULT = 'claude-sonnet-5-5';
 const PLA_MAX_TOKENS = 3000;
 const PLA_CLAIMS_MAX = 6;

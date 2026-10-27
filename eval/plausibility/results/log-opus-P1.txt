@@ -1,2 +1,0 @@
-claude-opus-5-5 P1: 4 volání, dosud utraceno 0.5090 USD (strop 0.58)
-hotovo: ok 4, chyb 0, celkem utraceno 0.5803 USD

@@ -1,3 +1,0 @@
-claude-sonnet-5-5 P1: 16 volání, dosud utraceno 0.3837 USD (strop 0.52)
-  10/16  celkem 0.4600 USD
-hotovo: ok 16, chyb 0, celkem utraceno 0.5090 USD

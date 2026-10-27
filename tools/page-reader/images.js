@@ -1,7 +1,7 @@
 'use strict';
 // Obrázky nabídky pro analýzu: stažení (SSRF kontrola v každém kroku přesměrování), zmenšení na JPEG a perceptuální hash (dHash).
 // Bez nových závislostí: dekódování JPEG/PNG/WebP a zmenšení dělá Chromium, který čtečka stránek už má. Žádná síť v prohlížeči (about:blank).
-// Postup a rozměry vychází ze spiku tools/image-check (lib.js, select-images.js); dHash se počítá ze stejného vzorku 9×8, takže hashe jsou srovnatelné.
+// dHash se počítá ze vzorku 9×8, takže hashe jsou mezi nabídkami srovnatelné.
 const { checkUrl } = require('./guard');
 
 const MAX_IMAGES = 8;
