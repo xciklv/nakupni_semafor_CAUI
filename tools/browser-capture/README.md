@@ -1,4 +1,4 @@
-# browser-capture: rozšíření do Chrome (hlavní cesta sběru dat)
+# browser-capture: rozšíření do Chrome (další cesta sběru dat, ověření konceptu)
 
 Rozšíření pro Chrome (Manifest V3), které po kliknutí přečte stránku, kterou už uživatel otevřel a prošel, **ukáže celý text, který odejde**, a po potvrzení ho pošle do Nákupního semaforu (`POST http://127.0.0.1:5678/webhook/nakupni-kontrola`, tělo `{ odkaz, text, obrazky, jsonld }`). Jen čte: na stránce nic neklikne, nerozbalí ani nevyplní. Proč právě rozšíření: čte to, co člověk vidí, takže prochází i Allegro, které server blokuje.
 
