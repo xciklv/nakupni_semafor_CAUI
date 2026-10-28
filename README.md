@@ -41,12 +41,14 @@ Moduly jsou čisté funkce v [engine/](engine/) bez závislostí. Semafor počí
 
 ## Požadavky
 
-Nejrychlejší cesta je **Docker** (n8n se nemusí instalovat) a vlastní klíč k Anthropic API. Ruční spuštění bez Dockeru potřebuje:
+V obou případech potřebujete vlastní **klíč k Anthropic API** (do repa nepatří). Dál podle způsobu spuštění:
 
-- Node.js 24
-- lokální **n8n 2.17.x**
-- v n8n credential typu *Anthropic API* (klíč do repa nepatří; credential vytvoříte v n8n sami a jeho id vidíte v adrese při jeho otevření)
-- volitelně Playwright a Chromium pro čtečku stránek
+- **Docker (doporučeno):** Docker s Docker Compose. Nic dalšího se neinstaluje, n8n i Node.js jsou v kontejneru.
+- **Ruční spuštění:**
+  - Node.js 24
+  - lokální n8n 2.17.x
+  - v n8n credential typu *Anthropic API* (credential vytvoříte v n8n sami a jeho id vidíte v adrese při jeho otevření)
+  - volitelně Playwright a Chromium pro čtečku stránek
 
 ## Spuštění
 
