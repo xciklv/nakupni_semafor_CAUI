@@ -1,2 +1,5 @@
+# Jednotné konce řádků (LF) na všech systémech: Git for Windows jinak převádí na CRLF a testy porovnávající fixtures selžou
+* text=auto eol=lf
 *.sh text eol=lf
 Dockerfile text eol=lf
+*.mp4 binary
