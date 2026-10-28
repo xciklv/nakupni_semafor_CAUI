@@ -1,0 +1,10 @@
+node_modules
+.git
+.env
+*.mp4
+eval/images
+eval/screens
+eval/vysledky.*
+workflow.json
+workflow-web.json
+tests

@@ -1,0 +1,32 @@
+# Nákupní semafor v Dockeru: jedna služba (n8n s naimportovanými workflow). Spuštění: docker compose up --build
+# Webovka: http://127.0.0.1:${PORT:-5678}/webhook/nakupni-semafor-web
+services:
+  n8n:
+    build: .
+    image: nakupni-semafor:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PORT:-5678}:5678"   # jen lokálně; kontrola nemá přihlášení, nevystavujte ji do sítě
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Vyplňte ANTHROPIC_API_KEY v souboru .env}
+      # nastavení kontroly (prázdné = výchozí hodnota)
+      SAVE_EXECUTIONS: ${SAVE_EXECUTIONS:-none}
+      QUOTA_PER_DAY: ${QUOTA_PER_DAY:-}
+      LLM_MODEL_EXTRACT: ${LLM_MODEL_EXTRACT:-}
+      LLM_MODEL_EXPLAIN: ${LLM_MODEL_EXPLAIN:-}
+      LLM_MODEL_PLAUSIBILITY: ${LLM_MODEL_PLAUSIBILITY:-}
+      LLM_MODEL_IMAGES: ${LLM_MODEL_IMAGES:-}
+      PAGE_READER_URL: ${PAGE_READER_URL:-off}
+      # n8n bez telemetrie a bez zbytečností
+      WEBHOOK_URL: http://127.0.0.1:${PORT:-5678}/
+      GENERIC_TIMEZONE: Europe/Prague
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_TEMPLATES_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_HIRING_BANNER_ENABLED: "false"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

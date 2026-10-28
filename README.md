@@ -41,12 +41,30 @@ Moduly jsou čisté funkce v [engine/](engine/) bez závislostí. Semafor počí
 
 ## Požadavky
 
+Nejrychlejší cesta je **Docker** (n8n se nemusí instalovat) a vlastní klíč k Anthropic API. Ruční spuštění bez Dockeru potřebuje:
+
 - Node.js 24
 - lokální **n8n 2.17.x**
 - v n8n credential typu *Anthropic API* (klíč do repa nepatří; credential vytvoříte v n8n sami a jeho id vidíte v adrese při jeho otevření)
 - volitelně Playwright a Chromium pro čtečku stránek
 
 ## Spuštění
+
+### Docker (nejrychlejší)
+
+```bash
+cp .env.example .env     # vyplňte ANTHROPIC_API_KEY
+docker compose up --build
+```
+
+Při startu kontejner sestaví workflow, vytvoří z klíče credential, naimportuje a zapne obě workflow. Webovka pak běží na `http://127.0.0.1:5678/webhook/nakupni-semafor-web` a API na `POST http://127.0.0.1:5678/webhook/nakupni-semafor` (jiný port nastavíte `PORT` v `.env`). Další nastavení (limit kontrol, modely, ukládání průběhů) je v `.env.example`; po změně spusťte `docker compose up -d`.
+
+- Port je vystavený jen na `127.0.0.1` a kontrola nemá přihlášení: nevystavujte ji do sítě.
+- Průběhy kontrol se v Dockeru ve výchozím nastavení neukládají (`SAVE_EXECUTIONS=none`).
+- Čtečka stránek v Dockeru není: u marketplace vložte screenshot ve webovce, případně text přes API nebo rozšíření v prohlížeči (viz [Použití](#použití)).
+- `docker compose down` kontejner zastaví, `docker compose down -v` smaže i uložená data n8n.
+
+### Ruční spuštění (bez Dockeru)
 
 **1. Sestavení workflow.** Vznikne `workflow.json` (API) a `workflow-web.json` (stránka); oba jsou v `.gitignore`.
 
@@ -140,6 +158,7 @@ Přepínače: `--only <label>`, `--ids a,b`, `--repeat N`, `--gate`. Proměnné 
 | Cesta | Obsah |
 |---|---|
 | `engine/` | moduly kontroly (čisté funkce, plain Node bez závislostí) |
+| `Dockerfile`, `docker-compose.yml`, `docker/start.sh` | spuštění v Dockeru (n8n s naimportovanými workflow) |
 | `build/` | sestavení n8n workflow (`build-workflow.js`, kód uzlů v `build/glue/`) |
 | `web/index.html` | webovka (běží z n8n) |
 | `tools/page-reader/` | lokální čtečka stránek a obrázků |

@@ -8,3 +8,6 @@ eval/images/
 
 # demo video (na YouTube, do repa nepatří)
 *.mp4
+
+# Docker
+.env
